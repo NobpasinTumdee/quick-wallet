@@ -1,11 +1,14 @@
 # Quick Wallet
 
-A local, offline-first personal finance and investment tracker. React + TypeScript on the front,
-Express on the back, and a plain `database.xlsx` workbook as the database — so your data stays a
-file you can open in Excel whenever you like.
+A personal finance and investment tracker. React + TypeScript in the browser,
+**Google Apps Script** as the API, and a **Google Sheet** as the database — so your
+data stays a spreadsheet you can open and edit at any time.
 
-Nothing is deployed and nothing phones home, with one optional exception: if you configure a stock
-API key, the browser fetches live quotes for your positions.
+There is no server to run. The frontend talks straight to an Apps Script Web App.
+
+> **Migrating from the old local build?** The Node/Express backend in `backend/`
+> is no longer used. See [§7 Retiring the Node backend](#7-retiring-the-node-backend)
+> — in particular the password step, which is required before anyone can sign in.
 
 ---
 
@@ -13,151 +16,162 @@ API key, the browser fetches live quotes for your positions.
 
 ```
 quick-wallet/
-├── backend/
-│   ├── .env.example              # PORT, DB_PATH, token TTL, flush debounce
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── data/                     # created on first run (git-ignored)
-│   │   ├── database.xlsx         # ← the database
-│   │   └── .session-secret       # HMAC key for session tokens
-│   └── src/
-│       ├── server.ts             # Express app, health/flush routes, graceful shutdown
-│       ├── config.ts             # env parsing + resolved paths
-│       ├── types.ts              # domain interfaces (mirrored on the frontend)
-│       ├── db/
-│       │   ├── schema.ts         # declarative sheet + column definitions
-│       │   └── excelStore.ts     # workbook init, migration, cache, atomic writes
-│       ├── middleware/
-│       │   ├── auth.ts           # scrypt hashing, HMAC tokens, requireAuth
-│       │   └── errors.ts         # asyncHandler, 404, central error handler
-│       ├── services/
-│       │   └── finance.ts        # balances + budget progress calculations
-│       ├── routes/
-│       │   ├── auth.ts           # /api/auth  register, login, me, change-password
-│       │   ├── wallets.ts        # /api/wallets
-│       │   ├── transactions.ts   # /api/transactions
-│       │   ├── investments.ts    # /api/investments (+ /:id/sell, /symbols)
-│       │   ├── budgets.ts        # /api/budgets (+ /copy)
-│       │   ├── settings.ts       # /api/settings
-│       │   └── dashboard.ts      # /api/dashboard (+ /periods)
-│       └── utils/
-│           └── validate.ts       # input coercion & validation helpers
+├── google-apps-script/
+│   └── Code.gs                   # the entire API: routing, auth, validation,
+│                                 # balances, budget maths, dashboard aggregation
+│
+├── backend/                      # LEGACY — the old local Express + Excel server.
+│                                 # Nothing runs it any more; safe to delete.
 │
 └── frontend/
-    ├── .env.example              # VITE_STOCK_API_KEY and friends
+    ├── .env.example              # VITE_GAS_WEB_APP_URL + stock API key
     ├── index.html
-    ├── public/                   # served at the site root, not bundled
-    │   ├── logo.png              # 512, transparent — used in the UI
-    │   ├── logo-128.png          # small mark (sidebar / mobile topbar)
-    │   ├── favicon-32.png        # browser tab
-    │   ├── favicon-64.png
-    │   ├── apple-touch-icon.png  # 180, white background for iOS
-    │   └── logo-social.png       # 512, white background
-    ├── package.json
-    ├── tsconfig.json
-    ├── vite.config.ts            # proxies /api → localhost:4000
+    ├── public/                   # logo / favicons, served at the site root
+    ├── vite.config.ts            # no dev proxy — the app calls Apps Script directly
     └── src/
-        ├── main.tsx
         ├── App.tsx               # providers + auth gate
         ├── types.ts
         ├── api/
-        │   └── client.ts         # fetch wrapper, token storage, ApiError
+        │   └── client.ts         # GAS transport: path→action routing, CORS-safe
+        │                         # request shaping, token handling, ApiError
         ├── hooks/
         │   ├── useExcelDB.ts     # useExcelQuery + useExcelDB (CRUD)
+        │   ├── useGoogleSheet.ts # same hooks under Sheet-appropriate names
         │   └── useStockQuotes.ts # quotes → unrealised P&L
         ├── services/
         │   ├── stockApi.ts       # Finnhub / Twelve Data / simulated
         │   └── fxApi.ts          # optional exchange-rate lookup (USD → THB, …)
         ├── state/
         │   ├── AuthContext.tsx
-        │   └── SettingsContext.tsx   # loads settings, applies theme to <html>
-        ├── components/
-        │   ├── AppShell.tsx      # sidebar + mobile tab bar + period picker
-        │   ├── Logo.tsx          # the brand mark
-        │   ├── ui.tsx            # Card, Button, Field, Modal, DecimalInput, …
-        │   ├── WalletForm.tsx
-        │   ├── TransactionForm.tsx
-        │   ├── InvestmentForm.tsx
-        │   └── BudgetForm.tsx
-        ├── pages/
-        │   ├── LoginPage.tsx
-        │   ├── DashboardPage.tsx
-        │   ├── WalletsPage.tsx
-        │   ├── TransactionsPage.tsx
-        │   ├── InvestmentsPage.tsx
-        │   ├── BudgetsPage.tsx
-        │   └── SettingsPage.tsx
-        ├── lib/
-        │   ├── format.ts         # money/date/percent formatting
-        │   └── router.ts         # tiny hash router
+        │   └── SettingsContext.tsx
+        ├── components/           # AppShell, Logo, ui.tsx, the four forms
+        ├── pages/                # Login, Dashboard, Wallets, Transactions,
+        │                         # Investments, Budgets, Settings
+        ├── lib/                  # format.ts, router.ts
         └── styles/
-            ├── theme.css         # :root tokens — light / dark / custom
+            ├── theme.css         # design tokens — light / dark / custom
             └── app.css           # layout & components
 ```
 
 ---
 
-## 2. Running it
+## 2. Deploying the API
 
-You need Node 18 or newer. Open **two terminals**.
+1. Open your Google Sheet → **Extensions → Apps Script**. Paste in
+   `google-apps-script/Code.gs`.
+2. Run `generateSecrets()` from the editor, then **Project Settings → Script
+   Properties** and add both values it logged:
 
-**Terminal 1 — backend**
+   | Property | Purpose |
+   |---|---|
+   | `SESSION_SECRET` | signs session tokens |
+   | `ADMIN_SECRET` | guards the one-off password reset action |
 
-```bash
-cd backend
-npm install
-cp .env.example .env      # optional; every value has a default
-npm run dev               # http://localhost:4000
-```
+3. Run `setup()` once. It triggers the permission prompt and verifies every
+   sheet and column header exists. Fix anything it logs before continuing.
+4. **Deploy → New deployment → Web app**
 
-On first start it creates `backend/data/database.xlsx` with all six sheets
-(Users, Wallets, Transactions, Investments, Budgets, Settings) and prints the path.
+   | Setting | Value |
+   |---|---|
+   | Execute as | **Me** |
+   | Who has access | **Anyone** |
 
-**Terminal 2 — frontend**
+   "Anyone" is required — the app has no Google sign-in of its own.
+5. Copy the `/exec` URL.
+
+When you change `Code.gs`, use **Manage deployments → Edit → New version** to keep
+the same URL. A *new deployment* issues a different URL and you'd have to update
+the frontend.
+
+## 3. Running the frontend
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local   # optional; needed only for live stock prices
-npm run dev                  # http://localhost:5173
+cp .env.example .env.local     # paste your /exec URL into VITE_GAS_WEB_APP_URL
+npm run dev                    # http://localhost:5173
 ```
 
-Open http://localhost:5173. The workbook has no users yet, so the first screen asks you to create a
-profile; it seeds a starter "Cash" wallet and a default settings row for you.
-
-**Production-ish build** (still local): `npm run build` in each folder, then `npm start` in
-`backend/` and `npm run preview` in `frontend/`.
+`npm run build` produces a static `dist/` you can open from disk or host anywhere —
+there's no backend to deploy alongside it.
 
 ### Stock prices
 
-Live quotes are optional. Without a key the app generates deterministic simulated prices and labels
-them as such everywhere they appear. To go live, get a free key from
-[finnhub.io](https://finnhub.io/register) or [twelvedata.com](https://twelvedata.com/pricing) and put
-it in `frontend/.env.local`:
-
-```
-VITE_STOCK_API_PROVIDER=finnhub
-VITE_STOCK_API_KEY=your_key_here
-```
-
-Both providers send permissive CORS headers, so the browser calls them directly. Quotes are cached in
-`sessionStorage` for 60s (configurable) to stay inside free-tier rate limits.
+Optional. Without a key the app generates deterministic simulated prices and labels
+them as such. For live quotes get a free key from
+[finnhub.io](https://finnhub.io/register) or [twelvedata.com](https://twelvedata.com/pricing)
+and set `VITE_STOCK_API_PROVIDER` / `VITE_STOCK_API_KEY`. Both send permissive CORS
+headers, so the browser calls them directly; quotes are cached in `sessionStorage`.
 
 ---
 
-## 3. How the data model works
+## 4. How the request shape works (and why it's odd)
+
+A browser sends a CORS preflight (`OPTIONS`) for anything that isn't a "simple"
+request, and **Apps Script cannot answer `OPTIONS`**. So every call is shaped to
+stay simple:
+
+| | |
+|---|---|
+| POST bodies | `Content-Type: text/plain;charset=utf-8` holding a JSON string. `application/json` would preflight. `doPost` runs `JSON.parse(e.postData.contents)`. |
+| Headers | none beyond that Content-Type. The session token rides in the **query string** (GET) or the **JSON body** (POST) — an `Authorization` header would preflight. |
+| PATCH / PUT / DELETE | tunnelled through POST with a `method` field the script dispatches on. |
+| Status codes | Apps Script always returns HTTP 200, so the real status is in the body. |
+
+Envelope:
+
+```jsonc
+{ "ok": true,  "data": … }
+{ "ok": false, "status": 409, "code": "WALLET_NOT_EMPTY", "error": "…" }
+```
+
+`client.ts` turns `ok:false` back into a thrown `ApiError`, so the rest of the app
+catches errors exactly as it did against Express.
+
+The REST-shaped paths are kept as the public surface and translated to script
+actions, which is why no page, form or hook changed during the migration:
+
+```
+GET  /api/wallets?includeArchived=true   ->  ?action=wallets.list&includeArchived=true
+POST /api/wallets                        ->  { action: "wallets.create", method: "POST", … }
+PATCH /api/budgets/:id                   ->  { action: "budgets.update", query: { id }, … }
+POST /api/investments/:id/sell           ->  { action: "investments.sell", query: { id }, … }
+```
+
+### Actions
+
+```
+health                    flush
+auth.users                auth.register        auth.login
+auth.me                   auth.changePassword  auth.resetPassword
+wallets.list              wallets.get          wallets.create       wallets.update      wallets.delete
+transactions.list         transactions.get     transactions.create  transactions.update transactions.delete
+investments.list          investments.get      investments.symbols  investments.create
+investments.update        investments.sell     investments.delete
+budgets.list              budgets.get          budgets.create       budgets.update
+budgets.delete            budgets.copy
+settings.get              settings.save
+dashboard.get             dashboard.periods
+```
+
+Everything except `health`, `flush`, `auth.users`, `auth.login`, `auth.register`
+and `auth.resetPassword` requires a valid token, and every query is scoped to the
+user that token resolves to.
+
+---
+
+## 5. Data model
 
 | Sheet | Key | Notes |
 |---|---|---|
-| `Users` | `id` | `salt` + scrypt `passwordHash`. Never returned by the API. |
-| `Wallets` | `id` | `mode` is either `expense` or `investment`. |
-| `Transactions` | `id` | A transfer is **one** row: source `walletId` + `toWalletId`. |
-| `Investments` | `id` | Cost basis lives here; live price comes from the stock API. |
-| `Budgets` | `id` | One row per period + scope + target. |
-| `Settings` | `userId` | Theme, accent, custom CSS vars, currency, display currency + FX rate, locale, categories. |
+| `Users` | `ID` | `Salt` + `Password Hash`. Never returned by the API. |
+| `Wallets` | `ID` | `Mode` is either `expense` or `investment`. |
+| `Transactions` | `ID` | A transfer is **one** row: source `Wallet ID` + `To Wallet ID`. |
+| `Investments` | `ID` | Cost basis lives here; live price comes from the stock API. |
+| `Budgets` | `ID` | One row per period + scope + target. |
+| `Settings` | `User ID` | Theme, accent, custom CSS vars, currency, display currency + FX rate, locale, categories. |
 
-Every request after login carries a bearer token; the backend resolves it to a user id and scopes
-every query, so multiple profiles share one workbook without seeing each other's rows.
+Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this.
 
 **Balances** are derived, never stored:
 
@@ -168,148 +182,89 @@ net worth         = Σ wallet balances + Σ cost basis   (the UI swaps cost basi
                                                         for live market value)
 ```
 
-**Budgets** can be a fixed amount or a percentage. A percentage resolves against the first available
-of: the budget's own base override → Settings → monthly income → income actually recorded that month.
+**Budgets** can be a fixed amount or a percentage. A percentage resolves against the
+first available of: the budget's own base override → Settings → monthly income →
+income actually recorded that month.
 
 ### Numbers
 
-Every amount and quantity field accepts as many decimal places as you want to type — fractional
-shares, 8-decimal crypto, satang. They are plain text inputs (`DecimalInput` in `components/ui.tsx`)
-rather than `<input type="number">`, because the browser blanks a number input while a value is
-half-typed and a `step` attribute rejects anything more precise than the step. The raw string is kept
-while you type and parsed once on submit.
-
-Values are stored as ordinary numbers, so the real ceiling is IEEE-754 double precision — about 15–17
-significant digits. Currency *totals* are rounded to 2 decimals for display and storage; quantities
-and prices keep whatever precision you entered.
+Every amount and quantity field accepts as many decimals as you type — fractional
+shares, 8-decimal crypto, satang. They're plain text inputs (`DecimalInput`), because
+`<input type="number">` blanks a half-typed value and `step` rejects extra precision.
+The real ceiling is IEEE-754 double precision, ~15–17 significant digits. Currency
+totals round to 2 decimals; quantities and prices keep full precision.
 
 ### Currencies
 
-Two separate settings:
+**Currency** is what amounts are stored in. **Display in another currency** converts
+everything on screen at a rate you control (type it, or fetch it from
+[open.er-api.com](https://open.er-api.com)). Stored values never change, so switching
+back is lossless.
 
-- **Currency** — the bookkeeping currency. Everything in the workbook is denominated in it.
-- **Display in another currency** — optional. Set a target (e.g. `THB`) and a rate, and every amount
-  on screen is converted at read time. Nothing stored changes, so switching back is lossless and you
-  can flip between them freely.
-
-The rate is yours to control: type it, or press **Fetch today's rate** to pull it from
-[open.er-api.com](https://open.er-api.com) (free, no key, the only network call besides stock
-quotes). It is never refreshed behind your back — the number you saved is the number used, and
-Settings shows when it last changed.
-
-Inputs always stay in the bookkeeping currency and are labelled with it; where it helps, forms show
-the converted equivalent underneath.
-
-> Stock quotes come back in the market's own currency (USD for US tickers) and are compared directly
-> against your stored cost basis. So if you hold US stocks, keep **Currency** as `USD` and use the
-> display conversion to read your totals in baht — that keeps P&L correct. Settings warns you if the
-> two are inconsistent.
-
----
-
-## 4. Editing `database.xlsx` by hand
-
-You can. Two things to know:
-
-- **The server keeps the workbook in memory.** It reads the file once at startup and writes it back
-  after changes. If you edit the file while the server is running, restart the server or your edits
-  get overwritten. Use *Settings → Save workbook now* before you open it.
-- **If the file is open in Excel, writes fail.** Windows locks it. The backend detects this, keeps
-  your changes in memory, retries every 5 seconds, and the UI shows a banner. Close Excel and the
-  queued changes land automatically — nothing is lost unless you kill the server first.
-
-Adding a column to a sheet by hand is safe: unknown columns are ignored. Removing one is also safe —
-the server re-adds it on the next write. Rows without an id are skipped.
-
----
-
-## 5. API reference
-
-All routes except `/api/health`, `/api/flush` and `/api/auth/*` require `Authorization: Bearer <token>`.
-
-```
-GET    /api/health                     workbook status (locked? dirty? row counts)
-POST   /api/flush                      force a save to disk
-
-GET    /api/auth/users                 profiles on this machine (for the login screen)
-POST   /api/auth/register              { username, password, displayName }
-POST   /api/auth/login                 { username, password } → { token, user }
-GET    /api/auth/me
-POST   /api/auth/change-password
-
-GET    /api/wallets                    ?includeArchived — returns computed balances
-POST   /api/wallets
-PATCH  /api/wallets/:id
-DELETE /api/wallets/:id                ?cascade=true also deletes its records
-
-GET    /api/transactions               ?walletId&type&category&period&from&to&search&limit
-POST   /api/transactions
-PATCH  /api/transactions/:id
-DELETE /api/transactions/:id
-
-GET    /api/investments                ?walletId&status&symbol&tag
-GET    /api/investments/symbols        distinct held tickers
-POST   /api/investments
-POST   /api/investments/:id/sell       { sellPrice, sellDate }
-PATCH  /api/investments/:id
-DELETE /api/investments/:id
-
-GET    /api/budgets                    ?period=YYYY-MM → budgets with progress + totals
-POST   /api/budgets
-POST   /api/budgets/copy               { from, to }
-PATCH  /api/budgets/:id
-DELETE /api/budgets/:id
-
-GET    /api/settings
-PUT    /api/settings
-
-GET    /api/dashboard                  ?period=YYYY-MM
-GET    /api/dashboard/periods          months that contain data
-```
-
-Errors are always `{ error: string, code: string }` with a meaningful status.
+> Stock quotes come back in the market's own currency (USD for US tickers) and are
+> compared directly against your stored cost basis. If you hold US stocks, keep
+> **Currency** as `USD` and use display conversion to read totals in baht.
 
 ---
 
 ## 6. Theming
 
-`src/styles/theme.css` declares every colour, radius and shadow as a custom property on `:root`.
-Switching themes swaps token values — no component CSS changes.
+`src/styles/theme.css` is a two-layer token system:
 
-- `:root` — light palette (the base set)
-- `@media (prefers-color-scheme: dark)` on `:root:not([data-theme])` — follows the OS before React boots
-- `:root[data-theme="dark"]` — explicit choice, beats the OS
-- `:root[data-theme="custom"]` — a starting palette; `SettingsContext` writes individual properties
-  inline on `<html>`, which override everything above
+- **Primitives** — the only names the custom theme may write: `--bg`, `--surface`,
+  `--surface-2`, `--border`, `--text`, `--text-muted`, `--accent`,
+  `--accent-contrast`, `--positive`, `--negative`, `--warning`, `--radius`.
+- **Derived** — glass, tints, hover states, glows and shadows, all expressed as
+  `color-mix()` over the primitives, so one colour change ripples through the whole UI.
 
-The backend only accepts a fixed allow-list of variable names and rejects any value containing
-`; { } < > ( )`, so a custom palette can't smuggle CSS into the page.
+Theme selection: `:root` (light) → OS preference → `[data-theme="dark"]` →
+`[data-theme="custom"]` plus inline overrides on `<html>`. `Code.gs` accepts only
+the allow-listed variable names and rejects any value containing `; { } < > ( )`.
 
 ### The logo
 
-Source art lives at the repo root (`quickfinancial.png` on white, `quickfinancialPNG.png`
-transparent, both 992×992). Everything the app actually loads is a downscaled copy in
-`frontend/public/` — a 992px, 1 MB PNG behind a 30px sidebar mark is a lot of bytes for nothing.
-
-The **transparent** version is used throughout the UI so it sits correctly on light, dark and custom
-themes. The **white-background** version is used only for the iOS home-screen icon, because iOS
-composites transparency onto black.
-
-`<Logo size={n} />` picks the right file for the requested size. To swap the artwork, replace the
-files in `frontend/public/` at the same names and sizes — no code changes needed. To regenerate them
-from a new source image, any image editor will do; the sizes are 512 / 128 / 64 / 32 / 180.
+Source art is at the repo root; everything the app loads is a downscaled copy in
+`frontend/public/`. The transparent PNG is used throughout the UI; the
+white-background one is the iOS home-screen icon. Swap the files in `public/` at the
+same names to change the artwork — no code change needed.
 
 ---
 
-## 7. Known limits
+## 7. Retiring the Node backend
 
-- Auth is deliberately light: scrypt hashes and HMAC tokens, but no rate limiting or lockout. It
-  separates profiles on a machine you already control — it is not internet-grade.
-- The whole workbook is held in memory. That is fine for tens of thousands of rows; it is not a
-  database.
-- Only one server process may own the workbook at a time. Don't run two backends against one file.
-- Display conversion is a single flat rate across the whole app — it converts today's view, it does
-  not store historical rates. A transaction from March is converted at the rate you have saved now,
-  not the rate that applied in March.
-- Investment P&L assumes your bookkeeping currency matches the market's. Positions quoted in a
-  different currency are not FX-adjusted before P&L is calculated.
+**Passwords must be reset once.** The Express backend hashed with `scrypt`, which
+Apps Script has no equivalent for — it only offers SHA-256/HMAC. Migrated hashes are
+therefore unverifiable, and login fails with `PASSWORD_MIGRATION_REQUIRED` until you
+re-hash. Two ways:
+
+- **From the editor (easiest)** — open `Code.gs`, edit the two constants at the top
+  of `migratePassword()`, run it once, then clear what you typed.
+- **Over HTTP** — POST `auth.resetPassword` with `adminSecret`, `username` and
+  `newPassword`.
+
+Afterwards the hash is stored as `pbkdf2-sha256$<iterations>$<salt>$<hash>`.
+
+Once you can sign in, `backend/` is dead weight and can be deleted along with its
+`node_modules` and `data/database.xlsx`.
+
+---
+
+## 8. Known limits
+
+- **The Web App is a public URL.** Deployed to "Anyone", the endpoint is reachable by
+  anyone who has it. Reads and writes still require a valid session token, but treat
+  the `/exec` URL itself as sensitive and keep it out of anything you share publicly
+  (including a committed `.env.example`).
+- **Password hashing is weaker than before.** Apps Script has no scrypt/bcrypt, so
+  `Code.gs` uses iterated HMAC-SHA256 (PBKDF2-style). Raise `PBKDF2_ITERATIONS` if you
+  want more cost — it directly increases login latency.
+- **Apps Script quotas apply**: roughly 90 min/day of runtime and 20 000 URL fetches
+  on a consumer account. Normal use is nowhere near this, but a tight polling loop
+  could reach it.
+- **Every read loads whole sheets.** Fine into the tens of thousands of rows; it is
+  not a database.
+- **Concurrent writes are serialised** with `LockService`. Two browser tabs are safe;
+  a stampede will queue.
+- Display conversion uses one flat current rate — a March transaction is shown at
+  today's rate, not March's.
+- Investment P&L assumes your bookkeeping currency matches the market's.
