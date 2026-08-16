@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { useSettings } from '../state/SettingsContext';
 import { Wallet, WalletKind, WalletMode } from '../types';
@@ -79,13 +79,18 @@ export function WalletForm({
   const [form, setForm] = useState<FormState>(() => initialState(settings.currency, wallet));
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Reset whenever the sheet opens for a different wallet.
+  /* Reset when the sheet opens for a different wallet — not when the cached
+     wallet object is rebuilt by a background refresh mid-edit. */
+  const currencyRef = useRef(settings.currency);
+  currencyRef.current = settings.currency;
+
   useEffect(() => {
     if (open) {
-      setForm(initialState(settings.currency, wallet));
+      setForm(initialState(currencyRef.current, wallet));
       setLocalError(null);
     }
-  }, [open, wallet, settings.currency]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, wallet?.id]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));

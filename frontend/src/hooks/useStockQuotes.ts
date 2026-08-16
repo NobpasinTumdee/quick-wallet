@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { clearQuoteCache, fetchQuotes, hasLiveQuotes, providerName } from '../services/stockApi';
+import { useSettings } from '../state/SettingsContext';
 import { Investment, Quote } from '../types';
+import { useFxRate } from './useFxRate';
 
 export interface PositionValuation extends Investment {
   quote: Quote | null;
+  /** Price in the market's own currency, e.g. 210.00 USD. */
+  nativePrice: number;
+  nativeCurrency: string;
+  nativeValue: number;
+  /** Multiplier applied to reach the bookkeeping currency. 1 when they match. */
+  fxRate: number;
+  converted: boolean;
+  /** Price in the bookkeeping currency, e.g. 210.00 × 33.1 = 6,951 THB. */
   marketPrice: number;
   marketValue: number;
   unrealizedPnl: number;
@@ -25,6 +35,9 @@ export interface PortfolioValuation {
  * cost basis stored in the workbook.
  */
 export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
+  const { settings } = useSettings();
+  const baseCurrency = (settings.currency || 'USD').toUpperCase();
+
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -103,11 +116,24 @@ export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
     return () => window.clearInterval(timer);
   }, [load, refreshMs, symbolKey]);
 
+  /* Resolve an FX rate for every currency the portfolio is actually quoted in.
+     Usually that's just USD; the set is derived from the quotes themselves so a
+     non-US listing is handled without special-casing. */
+  const quoteCurrencies = useMemo(() => {
+    const currencies = Object.values(quotes).map((q) => q.currency);
+    // Assume the provider's default before the first quote lands, so the rate
+    // is already warm by the time prices arrive.
+    return currencies.length ? currencies : ['USD'];
+  }, [quotes]);
+
+  const fx = useFxRate(quoteCurrencies, baseCurrency);
+  const { rateFor } = fx;
+
   /** Bypasses the cache — wired to the "Refresh prices" button. */
   const refresh = useCallback(async () => {
     clearQuoteCache();
-    await load();
-  }, [load]);
+    await Promise.all([load(), fx.refresh()]);
+  }, [load, fx]);
 
   const valuation = useMemo<PortfolioValuation>(() => {
     const positions = open.map((inv) => {
@@ -115,8 +141,21 @@ export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
       // /api/dashboard returns raw rows, /api/investments returns decorated ones —
       // recompute when the server-side value isn't there.
       const costBasis = inv.costBasis || inv.quantity * inv.buyPrice + (inv.fees || 0);
-      const marketPrice = quote?.price ?? 0;
+
+      /* ---- Currency normalisation -------------------------------------
+         `costBasis` is in the bookkeeping currency (what the user typed).
+         `quote.price` is in the market's currency (USD for US listings).
+         Everything below the conversion is in the bookkeeping currency, so
+         the two are finally comparable.                                   */
+      const quoteCurrency = (quote?.currency || baseCurrency).toUpperCase();
+      const fxRate = rateFor(quoteCurrency);
+      const converted = quoteCurrency !== baseCurrency.toUpperCase();
+
+      const nativePrice = quote?.price ?? 0;
+      const marketPrice = nativePrice * fxRate;
       const marketValue = quote ? marketPrice * inv.quantity : costBasis;
+      // Uses cost basis rather than (price − buyPrice) × qty so that fees are
+      // included, matching how the server reports realised P&L.
       const unrealizedPnl = quote ? marketValue - costBasis : 0;
 
       return {
@@ -125,6 +164,13 @@ export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
         avgCost: inv.avgCost || (inv.quantity > 0 ? costBasis / inv.quantity : 0),
         tagList: inv.tagList ?? (inv.tags ? inv.tags.split(',').map((t) => t.trim()).filter(Boolean) : []),
         quote,
+        /** Price as the exchange quotes it, for display beside the ticker. */
+        nativePrice,
+        nativeCurrency: quoteCurrency,
+        nativeValue: nativePrice * inv.quantity,
+        fxRate,
+        /** True when this row needed an FX conversion to be comparable. */
+        converted,
         marketPrice,
         marketValue,
         unrealizedPnl,
@@ -143,7 +189,7 @@ export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
       totalPnl,
       totalPnlPercent: totalCost > 0 ? (totalPnl / totalCost) * 100 : 0,
     };
-  }, [open, quotes]);
+  }, [open, quotes, rateFor, baseCurrency]);
 
   return {
     ...valuation,
@@ -154,5 +200,8 @@ export function useStockQuotes(investments: Investment[], refreshMs = 60_000) {
     refresh,
     isLive: hasLiveQuotes(),
     provider: providerName(),
+    /** Bookkeeping currency every converted figure above is expressed in. */
+    baseCurrency,
+    fx,
   };
 }

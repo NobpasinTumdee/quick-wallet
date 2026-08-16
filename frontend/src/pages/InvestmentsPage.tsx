@@ -17,7 +17,15 @@ import {
 } from '../components/ui';
 import { useExcelDB } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
-import { cx, formatDate, formatNumber, formatPercent, formatRelativeTime, todayKey } from '../lib/format';
+import {
+  cx,
+  formatDate,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatRelativeTime,
+  todayKey,
+} from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, WalletBalance } from '../types';
 
@@ -34,6 +42,8 @@ export function InvestmentsPage() {
   const [selling, setSelling] = useState<Investment | undefined>();
   /** Raw string so long decimals survive typing; parsed on confirm. */
   const [sellPrice, setSellPrice] = useState('');
+  /** Which currency the sell price is being typed in. */
+  const [sellCurrency, setSellCurrency] = useState<'quote' | 'base'>('base');
 
   const portfolio = useStockQuotes(investments.items);
   const money = useMoneyFormatter();
@@ -53,6 +63,35 @@ export function InvestmentsPage() {
 
   const realizedTotal = soldPositions.reduce((sum, i) => sum + i.realizedPnl, 0);
 
+  /* The broker's currency and today's rate into the books. Used to show avg cost
+     the way the brokerage app shows it. */
+  const brokerCurrency =
+    Object.keys(portfolio.fx.rates).find((c) => c !== portfolio.baseCurrency) ?? 'USD';
+  const brokerRate =
+    brokerCurrency === portfolio.baseCurrency ? 0 : (portfolio.fx.rateFor(brokerCurrency) || 0);
+
+  /**
+   * Spots positions whose buy price was typed in the broker's currency but saved
+   * as base currency — the bug that produced +3000% P&L. The tell is a cost per
+   * share that is smaller than the live converted price by roughly the FX rate.
+   */
+  function looksMisEntered(position: (typeof portfolio.positions)[number]): boolean {
+    if (brokerRate < 2 || !position.quote || position.avgCost <= 0) return false;
+    const ratio = position.marketPrice / position.avgCost;
+    return ratio > brokerRate * 0.6 && ratio < brokerRate * 1.8;
+  }
+
+  const misEnteredCount = portfolio.positions.filter(looksMisEntered).length;
+
+  /** The rate actually in use, for the banner. Null when nothing needs converting. */
+  const convertedRate = useMemo(() => {
+    const entry = Object.entries(portfolio.fx.rates).find(
+      ([currency, lookup]) => currency !== portfolio.baseCurrency && lookup.source !== 'none',
+    );
+    if (!entry) return null;
+    return { currency: entry[0], rate: entry[1].rate, fetchedAt: entry[1].fetchedAt };
+  }, [portfolio.fx.rates, portfolio.baseCurrency]);
+
   async function save(payload: InvestmentPayload) {
     if (editing) await investments.update(editing.id, payload);
     else await investments.create(payload);
@@ -60,7 +99,11 @@ export function InvestmentsPage() {
     setEditing(undefined);
   }
 
-  const sellPriceValue = parseDecimal(sellPrice);
+  const sellInQuote = sellCurrency === 'quote' && brokerRate > 0;
+  /** Always submitted in the bookkeeping currency, whatever was typed. */
+  const sellPriceValue = sellInQuote
+    ? parseDecimal(sellPrice) * brokerRate
+    : parseDecimal(sellPrice);
 
   async function confirmSell() {
     if (!selling || sellPriceValue <= 0) return;
@@ -119,6 +162,36 @@ export function InvestmentsPage() {
           hint={`${soldPositions.length} closed position${soldPositions.length === 1 ? '' : 's'}`}
         />
       </div>
+
+      {/* Conversion is doing real work to the numbers, so it is stated openly
+          rather than hidden behind the totals. */}
+      {portfolio.fx.degraded ? (
+        <Alert tone="error" title="Exchange rate unavailable">
+          {portfolio.fx.unresolved.join(', ')} prices could not be converted to {portfolio.baseCurrency},
+          so they are being compared 1:1 against your cost basis. P&amp;L for those positions is wrong
+          until the rate is available — press Refresh prices to retry.
+        </Alert>
+      ) : (
+        convertedRate && (
+          <Alert tone="info" title="Currency conversion">
+            Prices are quoted in {convertedRate.currency} and converted at{' '}
+            <strong>
+              1 {convertedRate.currency} = {convertedRate.rate.toFixed(4)} {portfolio.baseCurrency}
+            </strong>{' '}
+            to compare against your {portfolio.baseCurrency} cost basis.
+            {convertedRate.fetchedAt && ` Rate from ${formatRelativeTime(convertedRate.fetchedAt)}.`}
+          </Alert>
+        )
+      )}
+
+      {misEnteredCount > 0 && (
+        <Alert tone="warning" title={`${misEnteredCount} position${misEnteredCount === 1 ? '' : 's'} may be priced in ${brokerCurrency}`}>
+          Their cost per share is roughly {brokerRate.toFixed(0)}× below the live price, which is what a{' '}
+          {brokerCurrency} price saved into a {portfolio.baseCurrency} field looks like. Open each one,
+          switch the buy price to <strong>{brokerCurrency}</strong>, re-enter the broker's figure, and it
+          will be converted and saved correctly.
+        </Alert>
+      )}
 
       {!portfolio.isLive && (
         <Alert tone="warning" title="Simulated prices">
@@ -243,17 +316,50 @@ export function InvestmentsPage() {
                     <tr key={row.id}>
                       <td>
                         <strong>{row.symbol}</strong>
+                        {isOpen && valuation && looksMisEntered(valuation) && (
+                          <>
+                            {' '}
+                            <Badge tone="warning">
+                              <span
+                                title={`The cost per share is about ${brokerRate.toFixed(0)}× below the live price — the sign of a ${brokerCurrency} figure saved as ${portfolio.baseCurrency}. Edit the position and re-enter the price with the ${brokerCurrency} toggle.`}
+                              >
+                                check price
+                              </span>
+                            </Badge>
+                          </>
+                        )}
                         <div className="list-item-sub">
                           {isOpen ? formatDate(row.buyDate, settings.locale) : `sold ${formatDate(row.sellDate, settings.locale)}`}
                         </div>
                       </td>
                       <td className="num">{formatNumber(row.quantity, 8, settings.locale)}</td>
-                      <td className="num">{money(row.avgCost)}</td>
+                      {/* Shown in the broker's currency so it matches their app,
+                          with the authoritative base-currency total beneath. */}
+                      <td className="num">
+                        {brokerRate > 0 && isOpen ? (
+                          <>
+                            <span className="price-native" title="Converted at today's rate">
+                              {formatMoney(row.avgCost / brokerRate, brokerCurrency, settings.locale)}
+                            </span>
+                            <div className="list-item-sub">{money(row.costBasis)} total</div>
+                          </>
+                        ) : (
+                          money(row.avgCost)
+                        )}
+                      </td>
+                      {/* Price stays in the market's own currency — that's the
+                          number you'd see on a broker screen. */}
                       <td className="num">
                         {isOpen ? (
                           valuation?.quote ? (
                             <>
-                              {money(valuation.marketPrice)}
+                              <span className="price-native">
+                                {formatMoney(
+                                  valuation.nativePrice,
+                                  valuation.nativeCurrency,
+                                  settings.locale,
+                                )}
+                              </span>
                               <div
                                 className={cx(
                                   'list-item-sub',
@@ -270,8 +376,15 @@ export function InvestmentsPage() {
                           money(row.sellPrice)
                         )}
                       </td>
+                      {/* Value and P&L are converted, so they're comparable with
+                          the cost basis and with the rest of the app. */}
                       <td className="num">
                         {isOpen ? money(valuation?.marketValue ?? row.costBasis) : money(row.quantity * row.sellPrice)}
+                        {isOpen && valuation?.converted && (
+                          <div className="list-item-sub" title={`Converted at ${valuation.fxRate.toFixed(4)}`}>
+                            @ {valuation.fxRate.toFixed(2)} {valuation.nativeCurrency}/{money.base}
+                          </div>
+                        )}
                       </td>
                       <td className={cx('num', pnl >= 0 ? 'text-positive' : 'text-negative')}>
                         {formatPercent(pnlPercent, 2, true)}
@@ -294,7 +407,12 @@ export function InvestmentsPage() {
                               variant="ghost"
                               onClick={() => {
                                 setSelling(row);
-                                setSellPrice(String(valuation?.marketPrice || row.buyPrice));
+                                // Prefill is the converted price, so start in base.
+                                setSellCurrency('base');
+                                // Round away float noise (10932.900000000001).
+                                setSellPrice(
+                                  String(Number((valuation?.marketPrice || row.buyPrice).toFixed(4))),
+                                );
                               }}
                             >
                               Sell
@@ -328,6 +446,11 @@ export function InvestmentsPage() {
         open={formOpen}
         wallets={investmentWallets}
         investment={editing}
+        quoteCurrency={brokerCurrency}
+        fxRate={brokerRate || 1}
+        // Never offer quote-currency entry without a real rate: converting at
+        // 1.0 would silently recreate the bug this form exists to prevent.
+        fxAvailable={brokerRate > 0 && !portfolio.fx.degraded}
         busy={investments.mutating}
         error={investments.mutationError}
         onClose={() => {
@@ -357,8 +480,36 @@ export function InvestmentsPage() {
           </>
         }
       >
-        <Field label={`Sell price per share (${money.base})`} hint="Pre-filled with the latest quote.">
-          <DecimalInput value={sellPrice} onChange={setSellPrice} placeholder="0.00" autoFocus />
+        <Field
+          label={`Sell price per share (${sellInQuote ? brokerCurrency : money.base})`}
+          hint={
+            sellInQuote
+              ? `Type it exactly as your broker shows it — converted at ${brokerRate.toFixed(4)} on save.`
+              : 'Pre-filled with the latest quote, already converted.'
+          }
+        >
+          <div className="field-with-unit">
+            <DecimalInput value={sellPrice} onChange={setSellPrice} placeholder="0.00" autoFocus />
+            {brokerRate > 0 && (
+              <Segmented<'quote' | 'base'>
+                value={sellCurrency}
+                ariaLabel="Sell price currency"
+                onChange={(next) => {
+                  if (next === sellCurrency) return;
+                  const value = parseDecimal(sellPrice);
+                  if (value) {
+                    const converted = next === 'quote' ? value / brokerRate : value * brokerRate;
+                    setSellPrice(String(Number(converted.toFixed(6))));
+                  }
+                  setSellCurrency(next);
+                }}
+                options={[
+                  { value: 'quote', label: brokerCurrency },
+                  { value: 'base', label: money.base },
+                ]}
+              />
+            )}
+          </div>
         </Field>
         {selling && (
           <p className="field-hint" style={{ marginTop: 10 }}>

@@ -1125,6 +1125,84 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
 }
 
+/* An input with a unit selector welded to its right edge. */
+.field-with-unit {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.field-with-unit .control {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-with-unit .segmented {
+  flex: none;
+  padding: 3px;
+}
+
+.field-with-unit .segmented-item {
+  padding: 5px 11px;
+  font-size: var(--text-xs);
+}
+
+.control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Live read-out of what the form will actually submit. Reads as a receipt
+   rather than another input, so the numbers feel settled. */
+.calc-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    var(--glass-bg)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.calc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.calc-row--total {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+.calc-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  text-align: right;
+}
+
+.calc-value--strong {
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.calc-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Segmented control ---- */
 .segmented {
   display: inline-flex;
@@ -1684,6 +1762,17 @@ tr:hover .row-actions,
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+}
+
+/* A figure shown in the market's own currency rather than the user's books.
+   Kept visually distinct so the two are never confused at a glance. */
+.price-native {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.price-native::after {
+  content: '';
 }
 
 /* ==========================================================================

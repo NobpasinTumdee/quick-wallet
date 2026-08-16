@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { todayKey } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -66,12 +66,17 @@ export function TransactionForm({
   const [form, setForm] = useState<FormState>(() => initialState(wallets, transaction));
   const [localError, setLocalError] = useState<string | null>(null);
 
+  /* Only on open / a different record — see the note in InvestmentForm. */
+  const walletsRef = useRef(wallets);
+  walletsRef.current = wallets;
+
   useEffect(() => {
     if (open) {
-      setForm(initialState(wallets, transaction));
+      setForm(initialState(walletsRef.current, transaction));
       setLocalError(null);
     }
-  }, [open, transaction, wallets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, transaction?.id]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
