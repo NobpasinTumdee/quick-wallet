@@ -96,7 +96,8 @@ export function AppShell() {
           </div>
           <div className="topbar-tools">
             {showPeriodPicker && (
-              <>
+              /* Three controls grouped so they read as a single month stepper. */
+              <div className="period-nav">
                 <Button
                   size="sm"
                   variant="ghost"
@@ -121,7 +122,7 @@ export function AppShell() {
                 >
                   ›
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </header>

@@ -1,93 +1,189 @@
 /* ==========================================================================
-   Quick Wallet — theme tokens
+   Quick Wallet — design tokens
    --------------------------------------------------------------------------
-   Every colour, radius and shadow in the app comes from a custom property
-   declared here. Switching themes swaps the token values; no component CSS
-   changes and nothing re-renders.
+   Every colour, radius, shadow, type step and easing curve in the app is
+   declared here. Components never hard-code a value; switching themes swaps
+   token values and nothing re-renders.
 
-   How a theme is chosen
-     1. `:root`                     -> light palette (the base set)
-     2. `@media (prefers-color-scheme: dark)` on `:root:not([data-theme])`
-                                    -> respects the OS before React boots
-     3. `:root[data-theme="dark"]`  -> explicit user choice, wins over the OS
-     4. `:root[data-theme="custom"]`-> starting point for user overrides;
-                                       SettingsContext writes individual
-                                       properties inline on <html>, which beat
-                                       everything here.
+   Two rules keep this maintainable:
+
+   1. THE USER-EDITABLE TOKENS ARE PRIMITIVES.
+      Settings → Custom theme may only write these names:
+        --bg --surface --surface-2 --border --text --text-muted
+        --accent --accent-contrast --positive --negative --warning --radius
+      Everything else (glass, tints, elevation, hover states) is *derived* from
+      them with color-mix, so a custom palette propagates through the whole UI
+      instead of only recolouring a few boxes.
+
+   2. THEME SELECTION ORDER
+        :root                                   -> light palette (the base set)
+        @media (prefers-color-scheme: dark) on
+          :root:not([data-theme])                -> follows the OS pre-hydration
+        :root[data-theme="dark"]                 -> explicit choice beats the OS
+        :root[data-theme="custom"]               -> base for user overrides,
+                                                    which land inline on <html>
    ========================================================================== */
 
 :root {
-  /* ---- surfaces & text (light) ---- */
-  --bg: #f4f6fb;
+  /* ---------- surfaces & text (light) ---------- */
+  --bg: #f7f8fb;
+  --bg-deep: #eef1f7;
   --surface: #ffffff;
-  --surface-2: #eef2f8;
-  --surface-hover: #e7ecf5;
-  --border: #d9e0ec;
-  --border-strong: #c2cbdb;
-  --text: #14203a;
-  --text-muted: #5d6b85;
-  --text-faint: #8b97ad;
+  --surface-2: #f2f5f9;
+  --surface-3: #e9eef5;
+  --border: #e3e8f0;
+  --border-strong: #cfd8e5;
 
-  /* ---- brand & semantics ---- */
+  --text: #0b1220;
+  --text-secondary: #3d4a60;
+  --text-muted: #64718a;
+  --text-faint: #94a0b4;
+
+  /* ---------- brand & semantics ---------- */
   --accent: #3b6fff;
-  --accent-soft: rgba(59, 111, 255, 0.12);
   --accent-contrast: #ffffff;
   --positive: #0f9d6b;
-  --positive-soft: rgba(15, 157, 107, 0.14);
-  --negative: #dc3a56;
-  --negative-soft: rgba(220, 58, 86, 0.14);
-  --warning: #d98324;
-  --warning-soft: rgba(217, 131, 36, 0.16);
+  --negative: #e03e58;
+  --warning: #d1830f;
 
-  /* ---- shape & depth ---- */
-  --radius: 14px;
-  --radius-sm: 9px;
+  /* ---------- ambient light ----------
+     Two soft colour washes sit behind everything so the glass surfaces have
+     something to refract. Without this, backdrop-filter over a flat colour is
+     invisible and "glassmorphism" just looks like a grey box. */
+  --ambient-1: color-mix(in srgb, var(--accent) 22%, transparent);
+  --ambient-2: color-mix(in srgb, var(--positive) 14%, transparent);
+  --ambient-opacity: 0.55;
+
+  /* ---------- shape ---------- */
+  --radius: 18px;
+  --radius-lg: 24px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 7px;
   --radius-pill: 999px;
-  --shadow-sm: 0 1px 2px rgba(20, 32, 58, 0.06);
-  --shadow-md: 0 6px 20px rgba(20, 32, 58, 0.09);
-  --shadow-lg: 0 18px 48px rgba(20, 32, 58, 0.18);
-  --ring: 0 0 0 3px var(--accent-soft);
 
-  /* ---- rhythm ---- */
+  /* ---------- spacing ---------- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 44px;
+  --space-8: 60px;
 
-  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Cascadia Mono', 'SF Mono', 'Roboto Mono', ui-monospace, monospace;
+  /* ---------- typography ---------- */
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter,
+    system-ui, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter,
+    system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, 'Roboto Mono', monospace;
 
-  --header-height: 62px;
-  --sidebar-width: 232px;
+  --text-2xs: 0.6875rem; /* 11 — micro labels */
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-base: 0.9375rem; /* 15 — body */
+  --text-md: 1.0625rem; /* 17 */
+  --text-lg: 1.25rem; /* 20 */
+  --text-xl: 1.625rem; /* 26 */
+  --text-2xl: 2.25rem; /* 36 */
+  --text-display: 3.25rem; /* 52 — the net-worth number */
+
+  /* Tight tracking on large numerals is what makes financial UIs read as
+     "designed" rather than "default". */
+  --tracking-display: -0.03em;
+  --tracking-tight: -0.015em;
+  --tracking-wide: 0.08em;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semi: 600;
+  --weight-bold: 680;
+
+  /* ---------- layout ---------- */
+  --header-height: 68px;
+  --sidebar-width: 252px;
+  --page-max: 1320px;
+
+  /* ---------- motion ----------
+     One expressive curve (decelerate hard, settle soft) used everywhere, so
+     every surface in the app feels like it obeys the same physics. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
 
   color-scheme: light;
 }
 
-/* Follow the OS until the user picks a theme explicitly. */
+/* ==========================================================================
+   Derived tokens
+   These reference only the primitives above, so they follow any theme —
+   including a user's custom palette — automatically.
+   ========================================================================== */
+:root {
+  /* Glass: a translucent slice of the surface colour, not a fixed white. */
+  --glass-bg: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--surface) 88%, transparent);
+  --glass-bg-subtle: color-mix(in srgb, var(--surface) 45%, transparent);
+  --glass-border: color-mix(in srgb, var(--border) 70%, transparent);
+  --glass-blur: 22px;
+  --glass-saturate: 165%;
+
+  /* Interaction states */
+  --surface-hover: color-mix(in srgb, var(--text) 5%, var(--surface-2));
+  --surface-active: color-mix(in srgb, var(--text) 9%, var(--surface-2));
+  --divider: color-mix(in srgb, var(--border) 65%, transparent);
+
+  /* Semantic tints */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-softer: color-mix(in srgb, var(--accent) 7%, transparent);
+  --accent-hover: color-mix(in srgb, var(--accent) 88%, #000);
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 40%, transparent);
+  --positive-soft: color-mix(in srgb, var(--positive) 14%, transparent);
+  --negative-soft: color-mix(in srgb, var(--negative) 14%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 16%, transparent);
+
+  /* Elevation — tinted with the text colour so shadows never look muddy. */
+  --shadow-color: color-mix(in srgb, var(--text) 14%, transparent);
+  --shadow-xs: 0 1px 2px var(--shadow-color);
+  --shadow-sm: 0 2px 8px -2px var(--shadow-color);
+  --shadow-md: 0 12px 28px -12px var(--shadow-color), 0 2px 6px -2px var(--shadow-color);
+  --shadow-lg: 0 28px 60px -24px var(--shadow-color), 0 6px 16px -8px var(--shadow-color);
+  --shadow-xl: 0 48px 100px -32px var(--shadow-color), 0 12px 28px -12px var(--shadow-color);
+  --shadow-accent: 0 10px 30px -12px var(--accent-glow);
+
+  --ring: 0 0 0 3px var(--accent-ring);
+}
+
+/* ---- Follow the OS until an explicit choice is stored ---- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0d1220;
-    --surface: #151c2e;
-    --surface-2: #1d2639;
-    --surface-hover: #26304a;
-    --border: #263149;
-    --border-strong: #37455f;
-    --text: #e9eefb;
-    --text-muted: #a0abc4;
-    --text-faint: #6e7b96;
-    --accent: #5b8cff;
-    --accent-soft: rgba(91, 140, 255, 0.18);
-    --positive: #35c48c;
-    --positive-soft: rgba(53, 196, 140, 0.16);
-    --negative: #ff6b81;
-    --negative-soft: rgba(255, 107, 129, 0.16);
-    --warning: #f0a740;
-    --warning-soft: rgba(240, 167, 64, 0.18);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+    --bg: #070a12;
+    --bg-deep: #04060c;
+    --surface: #111725;
+    --surface-2: #171e2f;
+    --surface-3: #1e2739;
+    --border: #232c40;
+    --border-strong: #33405b;
+
+    --text: #eef2fb;
+    --text-secondary: #b7c1d6;
+    --text-muted: #8b96ad;
+    --text-faint: #5f6a80;
+
+    --accent: #5d8bff;
+    --accent-contrast: #050c1e;
+    --positive: #2fcf94;
+    --negative: #ff6b83;
+    --warning: #f2ab48;
+
+    --ambient-opacity: 0.42;
+    --glass-blur: 26px;
+
     color-scheme: dark;
   }
 }
@@ -99,68 +195,68 @@
 
 /* ---- Dark ---- */
 :root[data-theme='dark'] {
-  --bg: #0d1220;
-  --surface: #151c2e;
-  --surface-2: #1d2639;
-  --surface-hover: #26304a;
-  --border: #263149;
-  --border-strong: #37455f;
-  --text: #e9eefb;
-  --text-muted: #a0abc4;
-  --text-faint: #6e7b96;
+  --bg: #070a12;
+  --bg-deep: #04060c;
+  --surface: #111725;
+  --surface-2: #171e2f;
+  --surface-3: #1e2739;
+  --border: #232c40;
+  --border-strong: #33405b;
 
-  --accent: #5b8cff;
-  --accent-soft: rgba(91, 140, 255, 0.18);
-  --accent-contrast: #08122b;
-  --positive: #35c48c;
-  --positive-soft: rgba(53, 196, 140, 0.16);
-  --negative: #ff6b81;
-  --negative-soft: rgba(255, 107, 129, 0.16);
-  --warning: #f0a740;
-  --warning-soft: rgba(240, 167, 64, 0.18);
+  --text: #eef2fb;
+  --text-secondary: #b7c1d6;
+  --text-muted: #8b96ad;
+  --text-faint: #5f6a80;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --accent: #5d8bff;
+  --accent-contrast: #050c1e;
+  --positive: #2fcf94;
+  --negative: #ff6b83;
+  --warning: #f2ab48;
+
+  --ambient-opacity: 0.42;
+  --glass-blur: 26px;
+  /* Dark surfaces need a lighter hairline than a tinted shadow can provide. */
+  --glass-border: color-mix(in srgb, #ffffff 9%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
 }
 
 /* ---- Custom ----
-   A muted "midnight teal" base. The Settings screen writes any of
-   --bg / --surface / --surface-2 / --border / --text / --text-muted /
-   --accent / --accent-contrast / --positive / --negative / --warning / --radius
-   as inline styles on <html>, which override these values. Anything the user
-   leaves alone falls back to this palette. */
+   A deep "midnight teal" starting point. The Settings screen writes individual
+   primitives inline on <html>; because every derived token above is expressed
+   via color-mix on those primitives, one colour change ripples through glass,
+   hover states, tints and shadows together. */
 :root[data-theme='custom'] {
-  --bg: #0f1a1c;
-  --surface: #16262a;
-  --surface-2: #1d3237;
-  --surface-hover: #244047;
-  --border: #26414a;
-  --border-strong: #34575f;
-  --text: #e6f4f1;
-  --text-muted: #9ab5b5;
-  --text-faint: #6c8a8a;
+  --bg: #071413;
+  --bg-deep: #030b0a;
+  --surface: #0f2523;
+  --surface-2: #143230;
+  --surface-3: #1a403d;
+  --border: #1d403d;
+  --border-strong: #2c5c57;
 
-  --accent: #46c2a4;
-  --accent-soft: rgba(70, 194, 164, 0.18);
-  --accent-contrast: #05201b;
-  --positive: #4fd1a5;
-  --positive-soft: rgba(79, 209, 165, 0.16);
+  --text: #e8f6f2;
+  --text-secondary: #b0cdc7;
+  --text-muted: #86a8a2;
+  --text-faint: #5c7c77;
+
+  --accent: #3fd0aa;
+  --accent-contrast: #032019;
+  --positive: #4fd6a8;
   --negative: #ff7a8a;
-  --negative-soft: rgba(255, 122, 138, 0.16);
-  --warning: #eeb45c;
-  --warning-soft: rgba(238, 180, 92, 0.18);
+  --warning: #efb45c;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --ambient-opacity: 0.4;
+  --glass-blur: 26px;
+  --glass-border: color-mix(in srgb, #ffffff 9%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
 }
 
-/* Respect users who ask for less motion. */
+/* Honour the OS accessibility setting — every transition below collapses. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -168,5 +264,6 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

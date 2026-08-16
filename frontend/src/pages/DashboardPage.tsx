@@ -1,10 +1,10 @@
-import { Badge, Card, EmptyState, ProgressBar, Skeleton, StatCard, Alert, Button } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Investment } from '../types';
+import { DashboardSummary, Investment, WalletBalance } from '../types';
 
 export function DashboardPage({ period, onNavigate }: { period: string; onNavigate: (route: Route) => void }) {
   const { settings } = useSettings();
@@ -31,7 +31,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     return (
       <Card title="Couldn't load the dashboard">
         <Alert tone="error">{error ?? 'No data returned'}</Alert>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 'var(--space-4)' }}>
           <Button onClick={() => void refresh()}>Try again</Button>
         </div>
       </Card>
@@ -46,6 +46,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
 
   const maxTrend = Math.max(1, ...data.trend.map((t) => Math.max(t.income, t.expense)));
   const isEmpty = data.walletCount === 0;
+
+  // Presentational grouping only — the wallets themselves are unchanged.
+  const spendWallets = data.wallets.filter((w) => w.mode === 'expense');
+  const investWallets = data.wallets.filter((w) => w.mode === 'investment');
 
   if (isEmpty) {
     return (
@@ -64,55 +68,91 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     );
   }
 
+  const walletRow = (wallet: WalletBalance) => (
+    <div key={wallet.id} className="list-item">
+      <span className="avatar" style={{ background: `${wallet.color}1f`, color: wallet.color }}>
+        {wallet.icon || '💳'}
+      </span>
+      <div className="list-item-main">
+        <div className="list-item-title truncate">{wallet.name}</div>
+        <div className="list-item-sub">
+          {wallet.mode === 'investment'
+            ? `${money(wallet.balance)} cash · ${money(wallet.investedCost)} invested`
+            : `${wallet.kind} · ${wallet.transactionCount} record${wallet.transactionCount === 1 ? '' : 's'}`}
+        </div>
+      </div>
+      <span className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
+        {money(wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance)}
+      </span>
+    </div>
+  );
+
   return (
     <>
-      <div className="grid grid--stats">
-        <StatCard
-          label="Net worth"
-          tone="accent"
-          icon="💎"
-          value={money(netWorthLive, true)}
-          hint={
-            hasPositions
-              ? `${money(portfolio.totalValue, true)} in positions · ${portfolio.provider} prices`
-              : `${data.walletCount} wallet${data.walletCount === 1 ? '' : 's'}`
-          }
-        />
-        <StatCard label="Cash on hand" icon="💵" value={money(data.liquidBalance, true)} hint="Expense wallets" />
-        <StatCard
-          label="Income"
-          tone="positive"
-          icon="↑"
-          value={money(data.monthIncome, true)}
-          hint={formatPeriod(period, locale)}
-        />
-        <StatCard
-          label="Spent"
-          tone="negative"
-          icon="↓"
-          value={money(data.monthExpense, true)}
-          hint={`${data.categoryBreakdown.length} categor${data.categoryBreakdown.length === 1 ? 'y' : 'ies'}`}
-        />
-        <StatCard
-          label="Saved this month"
-          tone={data.monthNet >= 0 ? 'positive' : 'negative'}
-          icon="🏦"
-          value={money(data.monthNet, true)}
-          hint={`Savings rate ${formatPercent(data.savingsRate)}`}
-        />
-        {hasPositions && (
-          <StatCard
-            label="Unrealised P&L"
-            tone={portfolio.totalPnl >= 0 ? 'positive' : 'negative'}
-            icon="📈"
-            value={formatPercent(portfolio.totalPnlPercent, 2, true)}
-            hint={`${format(portfolio.totalPnl, { signed: true })} on ${money(portfolio.totalCost, true)} cost`}
-          />
-        )}
-      </div>
+      {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
+      <section className="hero">
+        <div className="hero-primary">
+          <span className="section-label">Net worth · {formatPeriod(period, locale)}</span>
+          <span className="hero-value">{money(netWorthLive)}</span>
+          <div className="hero-meta">
+            <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
+              {data.monthNet >= 0 ? '↑' : '↓'} {format(Math.abs(data.monthNet), { compact: true })} this month
+            </Badge>
+            {hasPositions && (
+              <span>
+                {money(portfolio.totalValue, true)} in {portfolio.positions.length} position
+                {portfolio.positions.length === 1 ? '' : 's'} · {portfolio.provider} prices
+              </span>
+            )}
+            {!hasPositions && (
+              <span>
+                {data.walletCount} wallet{data.walletCount === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+        </div>
 
-      <div className="grid grid--split">
+        <div className="hero-metrics">
+          <div className="metric">
+            <span className="section-label">Cash on hand</span>
+            <span className="metric-value">{money(data.liquidBalance, true)}</span>
+            <span className="metric-hint">Expense wallets</span>
+          </div>
+          <div className="metric metric--positive">
+            <span className="section-label">Income</span>
+            <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>
+            <span className="metric-hint">This month</span>
+          </div>
+          <div className="metric metric--negative">
+            <span className="section-label">Spent</span>
+            <span className="metric-value text-negative">{money(data.monthExpense, true)}</span>
+            <span className="metric-hint">
+              {data.categoryBreakdown.length} categor{data.categoryBreakdown.length === 1 ? 'y' : 'ies'}
+            </span>
+          </div>
+          <div className="metric metric--accent">
+            <span className="section-label">Saved</span>
+            <span className="metric-value">{money(data.monthNet, true)}</span>
+            <span className="metric-hint">Rate {formatPercent(data.savingsRate)}</span>
+          </div>
+          {hasPositions && (
+            <div className={cx('metric', portfolio.totalPnl >= 0 ? 'metric--positive' : 'metric--negative')}>
+              <span className="section-label">Unrealised</span>
+              <span
+                className={cx('metric-value', portfolio.totalPnl >= 0 ? 'text-positive' : 'text-negative')}
+              >
+                {formatPercent(portfolio.totalPnlPercent, 2, true)}
+              </span>
+              <span className="metric-hint">{format(portfolio.totalPnl, { signed: true })}</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
+      <div className="bento">
         <Card
+          className="bento-item--wide"
           title="Budget progress"
           subtitle={formatPeriod(period, locale)}
           actions={
@@ -125,7 +165,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {data.budgets.length === 0 ? (
             <EmptyState
               icon="🎯"
-              title="No budgets for this month"
+              title="No budgets this month"
               description="Set limits by exact amount or as a share of income — 40% invest, 10% save, 20% needs."
               action={
                 <Button variant="primary" size="sm" onClick={() => onNavigate('budgets')}>
@@ -135,15 +175,15 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             />
           ) : (
             <div className="list">
-              {data.budgets.slice(0, 6).map((budget) => (
+              {data.budgets.slice(0, 5).map((budget) => (
                 <div key={budget.id} className="budget-item">
                   <div className="budget-head">
-                    <span className="budget-name">
+                    <span className="budget-name truncate">
                       {budget.targetLabel || 'All spending'}
                       {budget.mode === 'percent' && <Badge tone="accent">{budget.value}%</Badge>}
                     </span>
                     <span className="budget-numbers">
-                      {money(budget.spent)} / {money(budget.limit)}
+                      {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
                     </span>
                   </div>
                   <ProgressBar
@@ -165,44 +205,59 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
-        <Card title="Wallets" actions={<Button size="sm" onClick={() => onNavigate('wallets')}>Manage</Button>} padded={false}>
-          <div className="list">
-            {data.wallets.map((wallet) => (
-              <div key={wallet.id} className="list-item">
-                <span className="avatar" style={{ background: `${wallet.color}22`, color: wallet.color }}>
-                  {wallet.icon || '💳'}
-                </span>
-                <div className="list-item-main">
-                  <div className="list-item-title">{wallet.name}</div>
-                  <div className="list-item-sub">
-                    {wallet.mode === 'investment'
-                      ? `Cash ${money(wallet.balance)} · ${money(wallet.investedCost)} invested`
-                      : `${wallet.kind} · ${wallet.transactionCount} record${wallet.transactionCount === 1 ? '' : 's'}`}
-                  </div>
-                </div>
-                <span className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
-                  {money(wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance)}
+        {/* Wallets split by mode — the two halves of the app, side by side. */}
+        <Card
+          className="bento-item--narrow"
+          title="Wallets"
+          actions={
+            <Button size="sm" onClick={() => onNavigate('wallets')}>
+              Manage
+            </Button>
+          }
+          padded={false}
+        >
+          {spendWallets.length > 0 && (
+            <>
+              <div className="list-group-label">
+                <span className="section-label">Spending</span>
+                <span className="section-label">{money(data.liquidBalance, true)}</span>
+              </div>
+              <div className="list">{spendWallets.map(walletRow)}</div>
+            </>
+          )}
+
+          {investWallets.length > 0 && (
+            <>
+              <div className="list-group-label">
+                <span className="section-label">Investing</span>
+                <span className="section-label">
+                  {money(data.investmentCash + data.investedCost, true)}
                 </span>
               </div>
-            ))}
-          </div>
+              <div className="list">{investWallets.map(walletRow)}</div>
+            </>
+          )}
         </Card>
-      </div>
 
-      <div className="grid grid--split">
-        <Card title="Income vs spending" subtitle="Last 6 months">
+        <Card className="bento-item--half card--chart" title="Income vs spending" subtitle="Last 6 months">
           <div className="trend">
-            {data.trend.map((point) => (
+            {data.trend.map((point, index) => (
               <div key={point.period} className="trend-col">
                 <div className="trend-bars">
                   <div
                     className="trend-bar trend-bar--income"
-                    style={{ height: `${(point.income / maxTrend) * 100}%` }}
+                    style={{
+                      height: `${(point.income / maxTrend) * 100}%`,
+                      animationDelay: `${index * 60}ms`,
+                    }}
                     title={`Income ${money(point.income)}`}
                   />
                   <div
                     className="trend-bar trend-bar--expense"
-                    style={{ height: `${(point.expense / maxTrend) * 100}%` }}
+                    style={{
+                      height: `${(point.expense / maxTrend) * 100}%`,
+                      animationDelay: `${index * 60 + 30}ms`,
+                    }}
                     title={`Spent ${money(point.expense)}`}
                   />
                 </div>
@@ -210,7 +265,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
               </div>
             ))}
           </div>
-          <div className="legend" style={{ marginTop: 12 }}>
+          <div className="legend" style={{ marginTop: 'var(--space-4)' }}>
             <span>
               <i className="legend-dot" style={{ background: 'var(--positive)' }} /> Income
             </span>
@@ -220,16 +275,19 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           </div>
         </Card>
 
-        <Card title="Where it went" subtitle={formatPeriod(period, locale)}>
+        <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
-            <EmptyState icon="🧾" title="Nothing spent yet" description="Expenses recorded this month show up here." />
+            <EmptyState icon="🧾" title="Nothing spent yet" description="Expenses this month show up here." />
           ) : (
-            <div>
-              {data.categoryBreakdown.slice(0, 7).map((row) => (
+            <div className="stack stack--tight">
+              {data.categoryBreakdown.slice(0, 7).map((row, index) => (
                 <div key={row.category} className="share-row">
-                  <span className="list-item-title">{row.category}</span>
+                  <span className="truncate">{row.category}</span>
                   <span className="share-track">
-                    <span className="share-fill" style={{ width: `${row.share}%` }} />
+                    <span
+                      className="share-fill"
+                      style={{ width: `${row.share}%`, animationDelay: `${index * 55}ms` }}
+                    />
                   </span>
                   <span className="numeric text-muted">{money(row.amount)}</span>
                 </div>
@@ -237,51 +295,65 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </div>
           )}
         </Card>
-      </div>
 
-      <Card
-        title="Recent activity"
-        actions={<Button size="sm" onClick={() => onNavigate('transactions')}>See all</Button>}
-        padded={false}
-      >
-        {data.recentTransactions.length === 0 ? (
-          <EmptyState icon="🧾" title="No transactions yet" description="Add one from the Activity tab." />
-        ) : (
-          <div className="list">
-            {data.recentTransactions.map((tx) => {
-              const wallet = data.wallets.find((w) => w.id === tx.walletId);
-              const target = data.wallets.find((w) => w.id === tx.toWalletId);
-              const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '';
-              return (
-                <div key={tx.id} className="list-item">
-                  <span className="avatar" aria-hidden="true">
-                    {tx.type === 'income' ? '↑' : tx.type === 'expense' ? '↓' : '⇄'}
-                  </span>
-                  <div className="list-item-main">
-                    <div className="list-item-title">
-                      {tx.type === 'transfer' ? `${wallet?.name ?? '?'} → ${target?.name ?? '?'}` : tx.category}
+        <Card
+          title="Recent activity"
+          actions={
+            <Button size="sm" onClick={() => onNavigate('transactions')}>
+              See all
+            </Button>
+          }
+          padded={false}
+        >
+          {data.recentTransactions.length === 0 ? (
+            <EmptyState icon="🧾" title="No transactions yet" description="Add one from the Activity tab." />
+          ) : (
+            <div className="list">
+              {data.recentTransactions.map((tx) => {
+                const wallet = data.wallets.find((w) => w.id === tx.walletId);
+                const target = data.wallets.find((w) => w.id === tx.toWalletId);
+                const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '';
+                return (
+                  <div key={tx.id} className="list-item">
+                    <span
+                      className="avatar"
+                      aria-hidden="true"
+                      style={
+                        tx.type === 'income'
+                          ? { background: 'var(--positive-soft)', color: 'var(--positive)' }
+                          : tx.type === 'expense'
+                            ? { background: 'var(--negative-soft)', color: 'var(--negative)' }
+                            : undefined
+                      }
+                    >
+                      {tx.type === 'income' ? '↑' : tx.type === 'expense' ? '↓' : '⇄'}
+                    </span>
+                    <div className="list-item-main">
+                      <div className="list-item-title truncate">
+                        {tx.type === 'transfer' ? `${wallet?.name ?? '?'} → ${target?.name ?? '?'}` : tx.category}
+                      </div>
+                      <div className="list-item-sub">
+                        {formatDate(tx.date, locale)}
+                        {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
+                      </div>
                     </div>
-                    <div className="list-item-sub">
-                      {formatDate(tx.date, locale)}
-                      {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
-                    </div>
+                    <span
+                      className={cx(
+                        'list-item-amount',
+                        tx.type === 'income' && 'text-positive',
+                        tx.type === 'expense' && 'text-negative',
+                      )}
+                    >
+                      {sign}
+                      {money(tx.amount)}
+                    </span>
                   </div>
-                  <span
-                    className={cx(
-                      'list-item-amount',
-                      tx.type === 'income' && 'text-positive',
-                      tx.type === 'expense' && 'text-negative',
-                    )}
-                  >
-                    {sign}
-                    {money(tx.amount)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
     </>
   );
 }

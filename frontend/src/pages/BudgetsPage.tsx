@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton, StatCard } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -60,31 +60,90 @@ export function BudgetsPage({ period }: { period: string }) {
     }
   }
 
+  function openNew() {
+    setEditing(undefined);
+    setFormError(null);
+    setFormOpen(true);
+  }
+
+  const allocated = Math.min(100, totals?.percentAllocated ?? 0);
+  const baseIncome = settings.monthlyIncome || budgets.find((b) => b.base > 0)?.base || 0;
+  const spentShare = totals && totals.limit > 0 ? (totals.spent / totals.limit) * 100 : 0;
+
   return (
     <>
-      <div className="grid grid--stats">
-        <StatCard label="Total budgeted" icon="🎯" value={money(totals?.limit ?? 0)} hint={formatPeriod(period, settings.locale)} />
-        <StatCard
-          label="Spent against budgets"
-          tone={(totals?.spent ?? 0) > (totals?.limit ?? 0) ? 'negative' : 'neutral'}
-          icon="💸"
-          value={money(totals?.spent ?? 0)}
-          hint={totals && totals.limit > 0 ? `${formatPercent((totals.spent / totals.limit) * 100)} of plan` : '—'}
-        />
-        <StatCard
-          label="Income allocated"
-          tone="accent"
-          icon="📐"
-          value={formatPercent(totals?.percentAllocated ?? 0, 0)}
-          hint={`${formatPercent(totals?.percentUnallocated ?? 100, 0)} unallocated`}
-        />
-        <StatCard
-          label="Base income"
-          icon="🏦"
-          value={money(settings.monthlyIncome || budgets[0]?.base || 0)}
-          hint={settings.monthlyIncome > 0 ? 'From Settings' : 'Derived from recorded income'}
-        />
+      <div className="page-head">
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="section-label">{formatPeriod(period, settings.locale)}</span>
+          <h1 className="page-title">Budgets</h1>
+          <p className="page-lede">
+            Percentage budgets track a share of your income; fixed budgets track a flat amount.
+          </p>
+        </div>
+        <div className="cluster">
+          <Button size="sm" onClick={() => void copyLastMonth()}>
+            Copy last month
+          </Button>
+          <Button size="sm" variant="primary" onClick={openNew}>
+            New budget
+          </Button>
+        </div>
       </div>
+
+      {/* ---- Plan summary ---- */}
+      <section className="hero">
+        <div className="hero-primary">
+          <span className="section-label">Budgeted this month</span>
+          <span className="hero-value">{money(totals?.limit ?? 0)}</span>
+          <div className="hero-meta">
+            <Badge tone={spentShare > 100 ? 'negative' : spentShare > 80 ? 'warning' : 'positive'}>
+              {money(totals?.spent ?? 0)} spent
+            </Badge>
+            <span>
+              {totals && totals.limit > 0 ? `${formatPercent(spentShare)} of plan used` : 'Nothing planned yet'}
+            </span>
+          </div>
+
+          {/* How much of your income is committed, and what's still free. */}
+          <div className="allocation">
+            <div className="allocation-bar">
+              <span className="allocation-fill" style={{ width: `${allocated}%` }} />
+            </div>
+            <div className="allocation-legend">
+              <span>
+                <strong>{formatPercent(allocated, 0)}</strong> of income allocated
+              </span>
+              <span className="text-faint">
+                {formatPercent(Math.max(0, 100 - allocated), 0)} unallocated
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="hero-metrics">
+          <div className="metric metric--accent">
+            <span className="section-label">Base income</span>
+            <span className="metric-value">{money(baseIncome, { compact: true })}</span>
+            <span className="metric-hint">
+              {settings.monthlyIncome > 0 ? 'From Settings' : 'From recorded income'}
+            </span>
+          </div>
+          <div className="metric">
+            <span className="section-label">Budget lines</span>
+            <span className="metric-value">{budgets.length}</span>
+            <span className="metric-hint">
+              {budgets.filter((b) => b.status === 'over').length} over limit
+            </span>
+          </div>
+          <div className="metric metric--negative">
+            <span className="section-label">Remaining</span>
+            <span className="metric-value">
+              {money(Math.max(0, (totals?.limit ?? 0) - (totals?.spent ?? 0)), { compact: true })}
+            </span>
+            <span className="metric-hint">Across all budgets</span>
+          </div>
+        </div>
+      </section>
 
       {notice && (
         <Alert tone="info" onDismiss={() => setNotice(null)}>
@@ -92,44 +151,18 @@ export function BudgetsPage({ period }: { period: string }) {
         </Alert>
       )}
 
-      <Card
-        title={`Budgets · ${formatPeriod(period, settings.locale)}`}
-        subtitle="Percent budgets track a share of your income; fixed budgets track a flat amount."
-        actions={
-          <>
-            <Button size="sm" onClick={() => void copyLastMonth()}>
-              Copy last month
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                setEditing(undefined);
-                setFormError(null);
-                setFormOpen(true);
-              }}
-            >
-              + New budget
-            </Button>
-          </>
-        }
-        padded={false}
-      >
+      <Card padded={initialLoading || Boolean(error) || budgets.length === 0}>
         {initialLoading ? (
-          <div className="card-body">
-            <Skeleton rows={4} />
-          </div>
+          <Skeleton rows={4} />
         ) : error ? (
-          <div className="card-body">
-            <Alert tone="error">{error}</Alert>
-          </div>
+          <Alert tone="error">{error}</Alert>
         ) : budgets.length === 0 ? (
           <EmptyState
             icon="🎯"
             title="No budgets for this month"
             description="Try a 40 / 10 / 20 split — Invest 40%, Save 10%, Needs 20% — or set flat amounts per category."
             action={
-              <Button variant="primary" onClick={() => setFormOpen(true)}>
+              <Button variant="primary" onClick={openNew}>
                 Create a budget
               </Button>
             }
@@ -139,7 +172,7 @@ export function BudgetsPage({ period }: { period: string }) {
             {budgets.map((budget) => (
               <div key={budget.id} className="budget-item">
                 <div className="budget-head">
-                  <span className="budget-name">
+                  <span className="budget-name truncate">
                     {budget.targetLabel || 'All spending'}
                     {budget.mode === 'percent' ? (
                       <Badge tone="accent">{budget.value}% of income</Badge>
@@ -149,7 +182,7 @@ export function BudgetsPage({ period }: { period: string }) {
                     {budget.status === 'over' && <Badge tone="negative">over</Badge>}
                   </span>
                   <span className="budget-numbers">
-                    {money(budget.spent)} / {money(budget.limit)}
+                    {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
                   </span>
                 </div>
 
@@ -160,31 +193,33 @@ export function BudgetsPage({ period }: { period: string }) {
                 />
 
                 <div className="budget-foot">
-                  <span>
+                  <span className="truncate">
                     {formatPercent(budget.percentUsed)} used
                     {budget.mode === 'percent' && ` · base ${money(budget.base)}`}
                     {budget.note ? ` · ${budget.note}` : ''}
                   </span>
-                  <span className="row-actions">
+                  <span className="cluster" style={{ flexWrap: 'nowrap' }}>
                     <span className={budget.remaining < 0 ? 'text-negative' : 'text-muted'}>
                       {budget.remaining < 0
                         ? `${money(Math.abs(budget.remaining))} over`
                         : `${money(budget.remaining)} left`}
                     </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing(budget);
-                        setFormError(null);
-                        setFormOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => void remove(budget)}>
-                      ✕
-                    </Button>
+                    <span className="row-actions">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditing(budget);
+                          setFormError(null);
+                          setFormOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => void remove(budget)}>
+                        ✕
+                      </Button>
+                    </span>
                   </span>
                 </div>
               </div>

@@ -42,114 +42,192 @@ export function WalletsPage() {
     }
   }
 
+  // Presentational split only — one fetch, two groups.
+  const spending = visible.filter((w) => w.mode === 'expense');
+  const investing = visible.filter((w) => w.mode === 'investment');
+
+  const spendingTotal = spending.reduce((sum, w) => sum + w.balance, 0);
+  const investingTotal = investing.reduce((sum, w) => sum + w.balance + w.investedCost, 0);
+
+  function openNew() {
+    setEditing(undefined);
+    wallets.clearMutationError();
+    setFormOpen(true);
+  }
+
+  /** One wallet, as a card in the mode's grid. */
+  const walletCard = (wallet: WalletBalance) => (
+    <article key={wallet.id} className={cx('wallet-card', wallet.archived && 'is-archived')}>
+      <header className="wallet-card-head">
+        <span className="avatar" style={{ background: `${wallet.color}1f`, color: wallet.color }}>
+          {wallet.icon || '💳'}
+        </span>
+        <div className="stack stack--tight" style={{ gap: 2 }}>
+          <span className="wallet-card-name truncate">{wallet.name}</span>
+          <span className="list-item-sub">
+            {wallet.kind} · {wallet.currency}
+          </span>
+        </div>
+        {wallet.archived && <Badge>Archived</Badge>}
+      </header>
+
+      <div className="wallet-card-figures">
+        <div className="metric">
+          <span className="section-label">{wallet.mode === 'investment' ? 'Cash' : 'Balance'}</span>
+          <span className={cx('metric-value', wallet.balance < 0 && 'text-negative')}>
+            {money(wallet.balance)}
+          </span>
+        </div>
+        {wallet.mode === 'investment' ? (
+          <div className="metric metric--accent">
+            <span className="section-label">Invested</span>
+            <span className="metric-value">{money(wallet.investedCost)}</span>
+          </div>
+        ) : (
+          <div className="metric">
+            <span className="section-label">Activity</span>
+            <span className="metric-value">{wallet.transactionCount}</span>
+          </div>
+        )}
+      </div>
+
+      {wallet.note && <p className="wallet-card-note truncate">{wallet.note}</p>}
+
+      <footer className="wallet-card-foot">
+        <span className="section-label">Opened {money(wallet.openingBalance, { compact: true })}</span>
+        <div className="row-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setEditing(wallet);
+              wallets.clearMutationError();
+              setFormOpen(true);
+            }}
+          >
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void wallets.update(wallet.id, { archived: !wallet.archived })}
+          >
+            {wallet.archived ? 'Restore' : 'Archive'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void remove(wallet)}>
+            Delete
+          </Button>
+        </div>
+      </footer>
+    </article>
+  );
+
+  const group = (
+    key: string,
+    label: string,
+    caption: string,
+    total: number,
+    items: WalletBalance[],
+    emptyText: string,
+  ) => (
+    <section key={key} className="wallet-group">
+      <header className="wallet-group-head">
+        <div className="stack" style={{ gap: 2 }}>
+          <h2 className="wallet-group-title">{label}</h2>
+          <span className="list-item-sub">{caption}</span>
+        </div>
+        <div className="wallet-group-total">
+          <span className="section-label">Total</span>
+          <span className="metric-value">{money(total, { compact: true })}</span>
+        </div>
+      </header>
+
+      {items.length === 0 ? (
+        <div className="wallet-group-empty">
+          <p className="text-muted">{emptyText}</p>
+          <Button size="sm" onClick={openNew}>
+            Add one
+          </Button>
+        </div>
+      ) : (
+        <div className="wallet-grid">{items.map(walletCard)}</div>
+      )}
+    </section>
+  );
+
   return (
     <>
-      <Card
-        title="Wallets"
-        subtitle="Expense wallets track day-to-day money. Investment wallets hold stock positions."
-        actions={
-          <>
-            <Button size="sm" onClick={() => setShowArchived((v) => !v)}>
-              {showArchived ? 'Hide archived' : 'Show archived'}
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                setEditing(undefined);
-                setFormOpen(true);
-              }}
-            >
-              + New wallet
-            </Button>
-          </>
-        }
-        padded={false}
-      >
-        {wallets.mutationError && (
-          <div style={{ padding: 'var(--space-4) var(--space-4) 0' }}>
-            <Alert tone="error" onDismiss={wallets.clearMutationError}>
-              {wallets.mutationError}
-            </Alert>
-          </div>
-        )}
-        {notice && (
-          <div style={{ padding: 'var(--space-4) var(--space-4) 0' }}>
-            <Alert tone="success" onDismiss={() => setNotice(null)}>
-              {notice}
-            </Alert>
-          </div>
-        )}
+      <div className="page-head">
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="section-label">Accounts</span>
+          <h1 className="page-title">Wallets</h1>
+          <p className="page-lede">
+            Spending wallets track day-to-day money. Investment wallets hold positions and are funded by
+            a transfer.
+          </p>
+        </div>
+        <div className="cluster">
+          <Button size="sm" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? 'Hide archived' : 'Show archived'}
+          </Button>
+          <Button size="sm" variant="primary" onClick={openNew}>
+            New wallet
+          </Button>
+        </div>
+      </div>
 
-        {wallets.initialLoading ? (
-          <div className="card-body">
-            <Skeleton rows={4} />
-          </div>
-        ) : wallets.error ? (
-          <div className="card-body">
-            <Alert tone="error">{wallets.error}</Alert>
-          </div>
-        ) : visible.length === 0 ? (
+      {wallets.mutationError && (
+        <Alert tone="error" onDismiss={wallets.clearMutationError}>
+          {wallets.mutationError}
+        </Alert>
+      )}
+      {notice && (
+        <Alert tone="success" onDismiss={() => setNotice(null)}>
+          {notice}
+        </Alert>
+      )}
+
+      {wallets.initialLoading ? (
+        <Card>
+          <Skeleton rows={5} />
+        </Card>
+      ) : wallets.error ? (
+        <Card>
+          <Alert tone="error">{wallets.error}</Alert>
+        </Card>
+      ) : visible.length === 0 ? (
+        <Card>
           <EmptyState
             icon="👛"
             title="No wallets yet"
             description="Create a cash or bank wallet to record spending, or an investment wallet to track stocks."
             action={
-              <Button variant="primary" onClick={() => setFormOpen(true)}>
+              <Button variant="primary" onClick={openNew}>
                 Create a wallet
               </Button>
             }
           />
-        ) : (
-          <div className="list">
-            {visible.map((wallet) => (
-              <div key={wallet.id} className="list-item">
-                <span className="avatar" style={{ background: `${wallet.color}22`, color: wallet.color }}>
-                  {wallet.icon || '💳'}
-                </span>
-                <div className="list-item-main">
-                  <div className="list-item-title">
-                    {wallet.name}{' '}
-                    {wallet.mode === 'investment' && <Badge tone="accent">Investment</Badge>}
-                    {wallet.archived && <Badge>Archived</Badge>}
-                  </div>
-                  <div className="list-item-sub">
-                    {wallet.kind} · {wallet.currency} · opened with {money(wallet.openingBalance)}
-                    {wallet.mode === 'investment' && ` · ${money(wallet.investedCost)} invested`}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
-                    {money(wallet.balance)}
-                  </div>
-                  <div className="row-actions" style={{ marginTop: 4 }}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing(wallet);
-                        setFormOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void wallets.update(wallet.id, { archived: !wallet.archived })}
-                    >
-                      {wallet.archived ? 'Restore' : 'Archive'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => void remove(wallet)}>
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <>
+          {group(
+            'expense',
+            'Spending',
+            'Income, expenses and transfers',
+            spendingTotal,
+            spending,
+            'No spending wallets yet.',
+          )}
+          {group(
+            'investment',
+            'Investing',
+            'Stock positions valued at cost',
+            investingTotal,
+            investing,
+            'No investment wallets yet — add one to start tracking positions.',
+          )}
+        </>
+      )}
 
       <WalletForm
         open={formOpen}
