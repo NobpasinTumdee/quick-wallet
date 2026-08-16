@@ -1,5 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { clearCache } from '../api/cache';
 import { api, getToken, onUnauthorized, setToken } from '../api/client';
 import { PublicUser } from '../types';
 
@@ -71,6 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    // Cached rows are scoped to the signed-in user — never let the next one
+    // see them flash on screen before their own data arrives.
+    clearCache();
   }, []);
 
   const value = useMemo(

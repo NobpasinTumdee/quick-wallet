@@ -1,8 +1,9 @@
 import { useState } from 'react';
 
 import { WalletForm, WalletPayload } from '../components/WalletForm';
-import { Alert, Badge, Button, Card, EmptyState, Skeleton } from '../components/ui';
-import { useExcelDB } from '../hooks/useExcelDB';
+import { WalletGridSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState } from '../components/ui';
+import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
@@ -18,11 +19,13 @@ export function WalletsPage() {
 
   const visible = wallets.items.filter((w) => showArchived || !w.archived);
 
-  async function save(payload: WalletPayload) {
-    if (editing) await wallets.update(editing.id, payload);
-    else await wallets.create(payload);
+  /** Closes immediately — the card is already in the list. See TransactionsPage. */
+  function save(payload: WalletPayload) {
+    const pending = editing ? wallets.update(editing.id, payload) : wallets.create(payload);
     setFormOpen(false);
     setEditing(undefined);
+    pending.catch(() => undefined);
+    return Promise.resolve();
   }
 
   async function remove(wallet: WalletBalance) {
@@ -57,7 +60,10 @@ export function WalletsPage() {
 
   /** One wallet, as a card in the mode's grid. */
   const walletCard = (wallet: WalletBalance) => (
-    <article key={wallet.id} className={cx('wallet-card', wallet.archived && 'is-archived')}>
+    <article
+      key={wallet.id}
+      className={cx('wallet-card', wallet.archived && 'is-archived', isOptimistic(wallet) && 'is-pending')}
+    >
       <header className="wallet-card-head">
         <span className="avatar" style={{ background: `${wallet.color}1f`, color: wallet.color }}>
           {wallet.icon || '💳'}
@@ -188,10 +194,8 @@ export function WalletsPage() {
       )}
 
       {wallets.initialLoading ? (
-        <Card>
-          <Skeleton rows={5} />
-        </Card>
-      ) : wallets.error ? (
+        <WalletGridSkeleton cards={3} />
+      ) : wallets.error && !wallets.items.length ? (
         <Card>
           <Alert tone="error">{wallets.error}</Alert>
         </Card>

@@ -1,10 +1,13 @@
 import { useState } from 'react';
 
+import { invalidate, mutateMatching } from '../api/cache';
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
-import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
+import { ListSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar } from '../components/ui';
+import { isOptimistic, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
+import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
 
@@ -15,7 +18,8 @@ export function BudgetsPage({ period }: { period: string }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetProgress | undefined>();
-  const [busy, setBusy] = useState(false);
+  // No `busy` flag any more: the form closes on submit rather than waiting for
+  // the network, so there is no in-flight state for it to render.
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -23,27 +27,126 @@ export function BudgetsPage({ period }: { period: string }) {
   const budgets = data?.budgets ?? [];
   const totals = data?.totals;
 
-  async function save(payload: BudgetPayload) {
-    setBusy(true);
+  /**
+   * `/api/budgets` returns a shaped object rather than a plain array, so these
+   * patch the cached response directly instead of going through useExcelDB.
+   * Same contract: apply locally, send, reconcile or roll back + toast.
+   */
+  function runOptimistic(apply: (current: BudgetResponse) => BudgetResponse, send: () => Promise<unknown>) {
+    const rollback = mutateMatching<BudgetResponse>('/api/budgets', (current) => apply(current));
+
+    return send()
+      .then(() => {
+        // Limits and spend are server-derived; pull the authoritative copy.
+        invalidate(['/api/budgets', '/api/dashboard']);
+      })
+      .catch((err: unknown) => {
+        rollback();
+        toast.error(err instanceof Error ? err.message : 'Could not save the budget');
+        throw err;
+      });
+  }
+
+  function recalc(budget: BudgetProgress): BudgetProgress {
+    const limit = budget.mode === 'percent' ? (budget.base * budget.value) / 100 : budget.value;
+    const percentUsed = limit > 0 ? (budget.spent / limit) * 100 : 0;
+    return {
+      ...budget,
+      limit,
+      remaining: limit - budget.spent,
+      percentUsed,
+      status: percentUsed >= 100 ? 'over' : percentUsed >= 80 ? 'warning' : 'ok',
+    };
+  }
+
+  function save(payload: BudgetPayload) {
+    const editingId = editing?.id;
     setFormError(null);
-    try {
-      if (editing) await api.patch(`/api/budgets/${editing.id}`, payload);
-      else await api.post('/api/budgets', payload);
-      await refresh();
-      setFormOpen(false);
-      setEditing(undefined);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not save the budget');
-      throw err;
-    } finally {
-      setBusy(false);
-    }
+    setFormOpen(false);
+    setEditing(undefined);
+
+    const label =
+      payload.scope === 'wallet'
+        ? (wallets.items.find((w) => w.id === payload.targetId)?.name ?? payload.targetId)
+        : payload.scope === 'global'
+          ? 'All spending'
+          : payload.targetId;
+
+    const pending = runOptimistic(
+      (current) => {
+        if (!current) return current;
+
+        if (editingId) {
+          return {
+            ...current,
+            budgets: current.budgets.map((b) =>
+              b.id === editingId
+                ? // `spent` is unaffected by editing a limit, so the recomputed
+                  // progress here is exactly what the server will return.
+                  recalc({ ...b, ...payload, targetLabel: label })
+                : b,
+            ),
+          };
+        }
+
+        const base = payload.baseIncome || settings.monthlyIncome || baseIncome;
+        const limit = payload.mode === 'percent' ? (base * payload.value) / 100 : payload.value;
+
+        return {
+          ...current,
+          budgets: [
+            ...current.budgets,
+            {
+              ...payload,
+              id: `optimistic:${Date.now()}`,
+              userId: '',
+              targetLabel: label,
+              createdAt: new Date().toISOString(),
+              base,
+              limit,
+              // Unknown until the server tallies the period — the row renders a
+              // placeholder for these rather than a wrong number.
+              spent: 0,
+              remaining: limit,
+              percentUsed: 0,
+              status: 'ok',
+            } as BudgetProgress,
+          ],
+          totals: {
+            ...current.totals,
+            limit: current.totals.limit + limit,
+            percentAllocated:
+              current.totals.percentAllocated + (payload.mode === 'percent' ? payload.value : 0),
+          },
+        };
+      },
+      () =>
+        editingId ? api.patch(`/api/budgets/${editingId}`, payload) : api.post('/api/budgets', payload),
+    );
+
+    pending.catch(() => undefined);
+    return Promise.resolve();
   }
 
   async function remove(budget: BudgetProgress) {
     if (!window.confirm(`Delete the "${budget.targetLabel}" budget?`)) return;
-    await api.delete(`/api/budgets/${budget.id}`);
-    await refresh();
+    await runOptimistic(
+      (current) =>
+        current
+          ? {
+              ...current,
+              budgets: current.budgets.filter((b) => b.id !== budget.id),
+              totals: {
+                ...current.totals,
+                limit: current.totals.limit - budget.limit,
+                spent: current.totals.spent - budget.spent,
+                percentAllocated:
+                  current.totals.percentAllocated - (budget.mode === 'percent' ? budget.value : 0),
+              },
+            }
+          : current,
+      () => api.delete(`/api/budgets/${budget.id}`),
+    ).catch(() => undefined);
   }
 
   async function copyLastMonth() {
@@ -153,8 +256,8 @@ export function BudgetsPage({ period }: { period: string }) {
 
       <Card padded={initialLoading || Boolean(error) || budgets.length === 0}>
         {initialLoading ? (
-          <Skeleton rows={4} />
-        ) : error ? (
+          <ListSkeleton rows={4} />
+        ) : error && !budgets.length ? (
           <Alert tone="error">{error}</Alert>
         ) : budgets.length === 0 ? (
           <EmptyState
@@ -169,8 +272,12 @@ export function BudgetsPage({ period }: { period: string }) {
           />
         ) : (
           <div className="list">
-            {budgets.map((budget) => (
-              <div key={budget.id} className="budget-item">
+            {budgets.map((budget) => {
+              // Spend for a brand-new budget isn't known until the server tallies
+              // the period, so show a placeholder rather than a misleading 0.
+              const unconfirmed = isOptimistic(budget);
+              return (
+              <div key={budget.id} className={unconfirmed ? 'budget-item is-pending' : 'budget-item'}>
                 <div className="budget-head">
                   <span className="budget-name truncate">
                     {budget.targetLabel || 'All spending'}
@@ -182,19 +289,20 @@ export function BudgetsPage({ period }: { period: string }) {
                     {budget.status === 'over' && <Badge tone="negative">over</Badge>}
                   </span>
                   <span className="budget-numbers">
-                    {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
+                    {unconfirmed ? <span className="text-faint">—</span> : money(budget.spent)}{' '}
+                    <span className="text-faint">/ {money(budget.limit)}</span>
                   </span>
                 </div>
 
                 <ProgressBar
-                  percent={budget.percentUsed}
+                  percent={unconfirmed ? 0 : budget.percentUsed}
                   tone={budget.status}
                   label={`${budget.targetLabel}: ${formatPercent(budget.percentUsed)} used`}
                 />
 
                 <div className="budget-foot">
                   <span className="truncate">
-                    {formatPercent(budget.percentUsed)} used
+                    {unconfirmed ? 'Saving…' : `${formatPercent(budget.percentUsed)} used`}
                     {budget.mode === 'percent' && ` · base ${money(budget.base)}`}
                     {budget.note ? ` · ${budget.note}` : ''}
                   </span>
@@ -223,7 +331,8 @@ export function BudgetsPage({ period }: { period: string }) {
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
@@ -235,7 +344,6 @@ export function BudgetsPage({ period }: { period: string }) {
         wallets={wallets.items}
         percentAllocated={totals?.percentAllocated ?? 0}
         derivedBase={budgets.find((b) => b.base > 0)?.base ?? 0}
-        busy={busy}
         error={formError}
         onClose={() => {
           setFormOpen(false);

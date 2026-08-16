@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 
 import { TransactionForm, TransactionPayload } from '../components/TransactionForm';
-import { Alert, Badge, Button, Card, EmptyState, Input, Select, Skeleton } from '../components/ui';
-import { useExcelDB } from '../hooks/useExcelDB';
+import { ListSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState, Input, Select } from '../components/ui';
+import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx, formatDate, formatPeriod } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
@@ -33,16 +34,30 @@ export function TransactionsPage({ period }: { period: string }) {
     return { income, expense, net: income - expense };
   }, [transactions.items]);
 
-  async function save(payload: TransactionPayload) {
-    if (editing) await transactions.update(editing.id, payload);
-    else await transactions.create(payload);
+  /**
+   * Optimistic submit.
+   *
+   * The row is already in the cache by the time `create()` yields its first
+   * await, so we close the modal immediately rather than blocking on the 1–3s
+   * Apps Script round trip. If the write fails the hook rolls the row back out
+   * of the list and raises a toast — the form has already gone, which is the
+   * right trade for an operation that succeeds virtually every time.
+   */
+  function save(payload: TransactionPayload) {
+    const pending = editing ? transactions.update(editing.id, payload) : transactions.create(payload);
+
     setFormOpen(false);
     setEditing(undefined);
+
+    // Swallow here: the failure is reported by the toast + rollback.
+    pending.catch(() => undefined);
+    return Promise.resolve();
   }
 
   async function remove(tx: Transaction) {
     if (!window.confirm(`Delete this ${tx.type} of ${money(tx.amount)}?`)) return;
-    await transactions.remove(tx.id);
+    // Disappears instantly; reappears with a toast if the server refuses.
+    await transactions.remove(tx.id).catch(() => undefined);
   }
 
   return (
@@ -102,10 +117,8 @@ export function TransactionsPage({ period }: { period: string }) {
         )}
 
         {transactions.initialLoading ? (
-          <div className="card-body">
-            <Skeleton rows={6} />
-          </div>
-        ) : transactions.error ? (
+          <ListSkeleton rows={6} />
+        ) : transactions.error && !transactions.items.length ? (
           <div className="card-body">
             <Alert tone="error">{transactions.error}</Alert>
           </div>
@@ -142,7 +155,8 @@ export function TransactionsPage({ period }: { period: string }) {
               </thead>
               <tbody>
                 {transactions.items.map((tx) => (
-                  <tr key={tx.id}>
+                  // Dimmed until the server confirms it.
+                  <tr key={tx.id} className={cx(isOptimistic(tx) && 'is-pending')}>
                     <td>{formatDate(tx.date, settings.locale)}</td>
                     <td>
                       <Badge

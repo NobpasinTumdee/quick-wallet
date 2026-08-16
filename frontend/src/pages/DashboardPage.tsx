@@ -1,4 +1,5 @@
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
+import { DashboardSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
@@ -11,23 +12,22 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   const { locale } = settings;
   const format = useMoneyFormatter();
 
-  const { data, initialLoading, error, refresh } = useExcelQuery<DashboardSummary>('/api/dashboard', {
-    period,
-  });
+  const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
+    '/api/dashboard',
+    { period },
+  );
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
 
   const money = (value: number, compact = false) => format(value, { compact });
 
-  if (initialLoading) {
-    return (
-      <Card title="Loading your overview">
-        <Skeleton rows={6} />
-      </Card>
-    );
-  }
+  // Only shown when there is genuinely nothing cached. Revisiting this page
+  // paints the previous data immediately and refreshes behind the scenes.
+  if (initialLoading) return <DashboardSkeleton />;
 
-  if (error || !data) {
+  // Only a hard failure with nothing cached blocks the page. A failed refresh
+  // over good data leaves the data on screen.
+  if (!data) {
     return (
       <Card title="Couldn't load the dashboard">
         <Alert tone="error">{error ?? 'No data returned'}</Alert>
@@ -92,7 +92,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
       <section className="hero">
         <div className="hero-primary">
-          <span className="section-label">Net worth · {formatPeriod(period, locale)}</span>
+          <span className="section-label">
+            Net worth · {formatPeriod(period, locale)}
+            {/* Cached figures are live; this marks a silent background refresh. */}
+            {isValidating && <span className="refresh-dot" title="Refreshing…" />}
+          </span>
           <span className="hero-value">{money(netWorthLive)}</span>
           <div className="hero-meta">
             <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>

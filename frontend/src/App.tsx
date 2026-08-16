@@ -1,5 +1,6 @@
 import { AppShell } from './components/AppShell';
 import { Logo } from './components/Logo';
+import { Toaster } from './components/Toaster';
 import { LoginPage } from './pages/LoginPage';
 import { AuthProvider, useAuth } from './state/AuthContext';
 import { SettingsProvider } from './state/SettingsContext';
@@ -29,6 +30,9 @@ export default function App() {
       {/* Settings live inside auth: they're scoped per user. */}
       <SettingsProvider>
         <Gate />
+        {/* Mounted once, outside the routed area, so a toast raised by an
+            optimistic rollback survives the page it was triggered from. */}
+        <Toaster />
       </SettingsProvider>
     </AuthProvider>
   );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { useExcelQuery } from '../hooks/useExcelDB';
+import { prefetch, useExcelQuery } from '../hooks/useExcelDB';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -23,6 +23,36 @@ const NAV: { route: Route; label: string; icon: string }[] = [
   { route: 'budgets', label: 'Budgets', icon: '🎯' },
   { route: 'settings', label: 'Settings', icon: '⚙️' },
 ];
+
+/**
+ * What each tab needs before it can paint. Warmed on hover — a pointer takes
+ * 200-400ms to travel and click, which buys a meaningful head start on a
+ * request that takes 1-3s.
+ */
+function warmRoute(route: Route, period: string): void {
+  switch (route) {
+    case 'dashboard':
+      prefetch('/api/dashboard', { period });
+      break;
+    case 'wallets':
+      prefetch('/api/wallets', { includeArchived: true });
+      break;
+    case 'transactions':
+      prefetch('/api/transactions', { period });
+      prefetch('/api/wallets', { includeArchived: true });
+      break;
+    case 'investments':
+      prefetch('/api/investments');
+      prefetch('/api/wallets');
+      break;
+    case 'budgets':
+      prefetch('/api/budgets', { period });
+      prefetch('/api/wallets');
+      break;
+    default:
+      break;
+  }
+}
 
 /** Warns when database.xlsx can't be written — almost always "open in Excel". */
 function DbStatusBanner() {
@@ -66,6 +96,8 @@ export function AppShell() {
               type="button"
               className={cx('sidebar-item', route === item.route && 'is-active')}
               aria-current={route === item.route ? 'page' : undefined}
+              onMouseEnter={() => warmRoute(item.route, period)}
+              onFocus={() => warmRoute(item.route, period)}
               onClick={() => go(item.route)}
             >
               <span aria-hidden="true">{item.icon}</span>
@@ -146,6 +178,9 @@ export function AppShell() {
             type="button"
             className={cx('tabbar-item', route === item.route && 'is-active')}
             aria-current={route === item.route ? 'page' : undefined}
+            // On touch there is no hover, but touchstart still lands ~100ms
+            // before the click resolves.
+            onTouchStart={() => warmRoute(item.route, period)}
             onClick={() => go(item.route)}
           >
             <span className="tab-icon" aria-hidden="true">
