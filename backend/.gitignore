@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+
+# The workbook is your data — never commit it.
+data/
+!data/.gitkeep

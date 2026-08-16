@@ -1,0 +1,172 @@
+/* ==========================================================================
+   Quick Wallet — theme tokens
+   --------------------------------------------------------------------------
+   Every colour, radius and shadow in the app comes from a custom property
+   declared here. Switching themes swaps the token values; no component CSS
+   changes and nothing re-renders.
+
+   How a theme is chosen
+     1. `:root`                     -> light palette (the base set)
+     2. `@media (prefers-color-scheme: dark)` on `:root:not([data-theme])`
+                                    -> respects the OS before React boots
+     3. `:root[data-theme="dark"]`  -> explicit user choice, wins over the OS
+     4. `:root[data-theme="custom"]`-> starting point for user overrides;
+                                       SettingsContext writes individual
+                                       properties inline on <html>, which beat
+                                       everything here.
+   ========================================================================== */
+
+:root {
+  /* ---- surfaces & text (light) ---- */
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --surface-hover: #e7ecf5;
+  --border: #d9e0ec;
+  --border-strong: #c2cbdb;
+  --text: #14203a;
+  --text-muted: #5d6b85;
+  --text-faint: #8b97ad;
+
+  /* ---- brand & semantics ---- */
+  --accent: #3b6fff;
+  --accent-soft: rgba(59, 111, 255, 0.12);
+  --accent-contrast: #ffffff;
+  --positive: #0f9d6b;
+  --positive-soft: rgba(15, 157, 107, 0.14);
+  --negative: #dc3a56;
+  --negative-soft: rgba(220, 58, 86, 0.14);
+  --warning: #d98324;
+  --warning-soft: rgba(217, 131, 36, 0.16);
+
+  /* ---- shape & depth ---- */
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(20, 32, 58, 0.06);
+  --shadow-md: 0 6px 20px rgba(20, 32, 58, 0.09);
+  --shadow-lg: 0 18px 48px rgba(20, 32, 58, 0.18);
+  --ring: 0 0 0 3px var(--accent-soft);
+
+  /* ---- rhythm ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', 'SF Mono', 'Roboto Mono', ui-monospace, monospace;
+
+  --header-height: 62px;
+  --sidebar-width: 232px;
+
+  color-scheme: light;
+}
+
+/* Follow the OS until the user picks a theme explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0d1220;
+    --surface: #151c2e;
+    --surface-2: #1d2639;
+    --surface-hover: #26304a;
+    --border: #263149;
+    --border-strong: #37455f;
+    --text: #e9eefb;
+    --text-muted: #a0abc4;
+    --text-faint: #6e7b96;
+    --accent: #5b8cff;
+    --accent-soft: rgba(91, 140, 255, 0.18);
+    --positive: #35c48c;
+    --positive-soft: rgba(53, 196, 140, 0.16);
+    --negative: #ff6b81;
+    --negative-soft: rgba(255, 107, 129, 0.16);
+    --warning: #f0a740;
+    --warning-soft: rgba(240, 167, 64, 0.18);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+
+/* ---- Light (explicit) ---- */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* ---- Dark ---- */
+:root[data-theme='dark'] {
+  --bg: #0d1220;
+  --surface: #151c2e;
+  --surface-2: #1d2639;
+  --surface-hover: #26304a;
+  --border: #263149;
+  --border-strong: #37455f;
+  --text: #e9eefb;
+  --text-muted: #a0abc4;
+  --text-faint: #6e7b96;
+
+  --accent: #5b8cff;
+  --accent-soft: rgba(91, 140, 255, 0.18);
+  --accent-contrast: #08122b;
+  --positive: #35c48c;
+  --positive-soft: rgba(53, 196, 140, 0.16);
+  --negative: #ff6b81;
+  --negative-soft: rgba(255, 107, 129, 0.16);
+  --warning: #f0a740;
+  --warning-soft: rgba(240, 167, 64, 0.18);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+/* ---- Custom ----
+   A muted "midnight teal" base. The Settings screen writes any of
+   --bg / --surface / --surface-2 / --border / --text / --text-muted /
+   --accent / --accent-contrast / --positive / --negative / --warning / --radius
+   as inline styles on <html>, which override these values. Anything the user
+   leaves alone falls back to this palette. */
+:root[data-theme='custom'] {
+  --bg: #0f1a1c;
+  --surface: #16262a;
+  --surface-2: #1d3237;
+  --surface-hover: #244047;
+  --border: #26414a;
+  --border-strong: #34575f;
+  --text: #e6f4f1;
+  --text-muted: #9ab5b5;
+  --text-faint: #6c8a8a;
+
+  --accent: #46c2a4;
+  --accent-soft: rgba(70, 194, 164, 0.18);
+  --accent-contrast: #05201b;
+  --positive: #4fd1a5;
+  --positive-soft: rgba(79, 209, 165, 0.16);
+  --negative: #ff7a8a;
+  --negative-soft: rgba(255, 122, 138, 0.16);
+  --warning: #eeb45c;
+  --warning-soft: rgba(238, 180, 92, 0.18);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
