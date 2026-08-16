@@ -12,6 +12,7 @@ import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
+import { Logo } from './Logo';
 import { Alert, Button } from './ui';
 
 const NAV: { route: Route; label: string; icon: string }[] = [
@@ -56,7 +57,7 @@ export function AppShell() {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span aria-hidden="true">💰</span> Quick Wallet
+          <Logo size={30} /> Quick Wallet
         </div>
         <nav className="sidebar-nav">
           {NAV.map((item) => (
@@ -84,6 +85,8 @@ export function AppShell() {
 
       <div className="main">
         <header className="topbar">
+          {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
+          <Logo size={30} className="topbar-logo" label="Quick Wallet" />
           <div className="topbar-title">
             <h1>{active.label}</h1>
             <span>

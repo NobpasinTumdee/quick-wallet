@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { api } from '../api/client';
+import { Logo } from '../components/Logo';
 import { Alert, Button, Field, Input } from '../components/ui';
 import { useAuth } from '../state/AuthContext';
 
@@ -57,7 +58,7 @@ export function LoginPage() {
     <div className="auth">
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-brand">
-          <span aria-hidden="true">💰</span> Quick Wallet
+          <Logo size={72} className="auth-logo" /> Quick Wallet
         </div>
         <p className="auth-sub">
           {mode === 'login'

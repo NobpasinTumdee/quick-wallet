@@ -46,6 +46,13 @@ quick-wallet/
 └── frontend/
     ├── .env.example              # VITE_STOCK_API_KEY and friends
     ├── index.html
+    ├── public/                   # served at the site root, not bundled
+    │   ├── logo.png              # 512, transparent — used in the UI
+    │   ├── logo-128.png          # small mark (sidebar / mobile topbar)
+    │   ├── favicon-32.png        # browser tab
+    │   ├── favicon-64.png
+    │   ├── apple-touch-icon.png  # 180, white background for iOS
+    │   └── logo-social.png       # 512, white background
     ├── package.json
     ├── tsconfig.json
     ├── vite.config.ts            # proxies /api → localhost:4000
@@ -66,6 +73,7 @@ quick-wallet/
         │   └── SettingsContext.tsx   # loads settings, applies theme to <html>
         ├── components/
         │   ├── AppShell.tsx      # sidebar + mobile tab bar + period picker
+        │   ├── Logo.tsx          # the brand mark
         │   ├── ui.tsx            # Card, Button, Field, Modal, DecimalInput, …
         │   ├── WalletForm.tsx
         │   ├── TransactionForm.tsx
@@ -276,6 +284,20 @@ Switching themes swaps token values — no component CSS changes.
 
 The backend only accepts a fixed allow-list of variable names and rejects any value containing
 `; { } < > ( )`, so a custom palette can't smuggle CSS into the page.
+
+### The logo
+
+Source art lives at the repo root (`quickfinancial.png` on white, `quickfinancialPNG.png`
+transparent, both 992×992). Everything the app actually loads is a downscaled copy in
+`frontend/public/` — a 992px, 1 MB PNG behind a 30px sidebar mark is a lot of bytes for nothing.
+
+The **transparent** version is used throughout the UI so it sits correctly on light, dark and custom
+themes. The **white-background** version is used only for the iOS home-screen icon, because iOS
+composites transparency onto black.
+
+`<Logo size={n} />` picks the right file for the requested size. To swap the artwork, replace the
+files in `frontend/public/` at the same names and sizes — no code changes needed. To regenerate them
+from a new source image, any image editor will do; the sizes are 512 / 128 / 64 / 32 / 180.
 
 ---
 
