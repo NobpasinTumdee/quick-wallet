@@ -2,7 +2,7 @@ import { Receipt, Target, Wallet } from 'lucide-react';
 
 import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
@@ -95,11 +95,17 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
       <section className="hero">
         <div className="hero-primary">
-          <span className="section-label">
-            Net worth · {formatPeriod(period, locale)}
-            {/* Cached figures are live; this marks a silent background refresh. */}
-            {isValidating && <span className="refresh-dot" title="Refreshing…" />}
-          </span>
+          {/* The button replaces the old passive refresh-dot: it spins on a
+              background revalidation too, so it reports the same thing while
+              also being actionable. */}
+          <div className="hero-label-row">
+            <span className="section-label">Net worth · {formatPeriod(period, locale)}</span>
+            <RefreshButton
+              onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
+              busy={isValidating}
+              label="Refresh dashboard"
+            />
+          </div>
           <span className="hero-value">{money(netWorthLive)}</span>
           <div className="hero-meta">
             <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>

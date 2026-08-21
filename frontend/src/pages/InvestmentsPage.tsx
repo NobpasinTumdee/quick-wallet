@@ -12,6 +12,7 @@ import {
   EmptyState,
   Field,
   Modal,
+  RefreshButton,
   Segmented,
   Skeleton,
   StatCard,
@@ -214,6 +215,13 @@ export function InvestmentsPage() {
         title="Positions"
         actions={
           <>
+            {/* Positions come from the sheet; prices come from the quote API.
+                This pulls the rows, the button beside it re-quotes them. */}
+            <RefreshButton
+              onRefresh={() => Promise.all([investments.refresh(), wallets.refresh()])}
+              busy={investments.isValidating || wallets.isValidating}
+              label="Refresh positions"
+            />
             <Button size="sm" onClick={() => void portfolio.refresh()} loading={portfolio.loading}>
               Refresh prices
             </Button>

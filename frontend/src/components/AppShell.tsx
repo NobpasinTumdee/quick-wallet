@@ -10,8 +10,9 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
+import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelQuery } from '../hooks/useExcelDB';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
@@ -26,7 +27,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
-import { Alert, Button } from './ui';
+import { Alert, Button, RefreshButton } from './ui';
 
 const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
   { route: 'dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -67,6 +68,23 @@ function warmRoute(route: Route, period: string): void {
   }
 }
 
+/**
+ * What the topbar's Refresh button re-fetches, per route.
+ *
+ * Deliberately the same map as `warmRoute` above, one level less precise: these
+ * are cache-key *prefixes*, so `/api/transactions` also catches the cached
+ * copies carrying query params. Settings is absent because its data does not
+ * live in this cache — see `refreshCurrentRoute` below.
+ */
+const ROUTE_DATA: Record<Route, string[]> = {
+  dashboard: ['/api/dashboard'],
+  wallets: ['/api/wallets'],
+  transactions: ['/api/transactions', '/api/wallets'],
+  investments: ['/api/investments', '/api/wallets'],
+  budgets: ['/api/budgets', '/api/wallets'],
+  settings: ['/api/health'],
+};
+
 /** Warns when database.xlsx can't be written — almost always "open in Excel". */
 function DbStatusBanner() {
   const { data } = useExcelQuery<DbHealth>('/api/health', undefined, { refreshInterval: 20_000 });
@@ -89,9 +107,20 @@ function DbStatusBanner() {
 export function AppShell() {
   const [route, go] = useRoute();
   const { user, logout } = useAuth();
-  const { settings } = useSettings();
+  const { settings, reload: reloadSettings } = useSettings();
   const money = useMoneyFormatter();
   const [period, setPeriod] = useState(currentPeriod());
+
+  /**
+   * Re-fetches whatever the current screen is showing. Settings keeps its row
+   * in SettingsContext rather than the request cache, so it needs its own
+   * reload alongside the cached health check.
+   */
+  const refreshCurrentRoute = useCallback(async () => {
+    const work: Promise<unknown>[] = [refreshPrefixes(ROUTE_DATA[route])];
+    if (route === 'settings') work.push(reloadSettings());
+    await Promise.all(work);
+  }, [route, reloadSettings]);
 
   const active = NAV.find((item) => item.route === route) ?? NAV[0];
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
@@ -170,6 +199,7 @@ export function AppShell() {
                 </Button>
               </div>
             )}
+            <RefreshButton onRefresh={refreshCurrentRoute} label="Refresh this page" />
           </div>
         </header>
 

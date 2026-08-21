@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { TransactionForm, TransactionPayload } from '../components/TransactionForm';
 import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
-import { Alert, Badge, Button, Card, EmptyState, Input, Select } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, Input, RefreshButton, Select } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx, formatDate, formatPeriod } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -68,6 +68,12 @@ export function TransactionsPage({ period }: { period: string }) {
         title={`Activity · ${formatPeriod(period, settings.locale)}`}
         subtitle={`${money(totals.income)} in · ${money(totals.expense)} out · net ${money(totals.net)}`}
         actions={
+          <>
+          <RefreshButton
+            onRefresh={() => Promise.all([transactions.refresh(), wallets.refresh()])}
+            busy={transactions.isValidating || wallets.isValidating}
+            label="Refresh transactions"
+          />
           <Button
             size="sm"
             variant="primary"
@@ -79,6 +85,7 @@ export function TransactionsPage({ period }: { period: string }) {
           >
             + New transaction
           </Button>
+          </>
         }
       >
         <div className="toolbar">

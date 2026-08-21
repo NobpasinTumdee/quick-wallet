@@ -208,13 +208,26 @@ export function mutateMatching<T>(
 /**
  * Marks keys stale and refreshes the ones something is currently showing.
  * Keys nobody is subscribed to are simply dropped so they re-fetch on next use.
+ *
+ * Resolves once every forced refresh has settled, which is what a manual
+ * Refresh button needs in order to stop spinning at the right moment.
+ * `revalidate` never rejects, so this never rejects either.
  */
-export function invalidate(prefixes: string[]): void {
+export function refreshPrefixes(prefixes: string[]): Promise<void> {
+  const pending: Promise<unknown>[] = [];
+
   for (const key of [...store.keys()]) {
     if (!prefixes.some((prefix) => key.startsWith(prefix))) continue;
-    if (refCounts.has(key)) void revalidate(key, { force: true });
+    if (refCounts.has(key)) pending.push(revalidate(key, { force: true }));
     else store.delete(key);
   }
+
+  return Promise.all(pending).then(() => undefined);
+}
+
+/** Fire-and-forget form of {@link refreshPrefixes}, used after a write lands. */
+export function invalidate(prefixes: string[]): void {
+  void refreshPrefixes(prefixes);
 }
 
 /** Wipes everything — used on sign-out so the next user starts clean. */

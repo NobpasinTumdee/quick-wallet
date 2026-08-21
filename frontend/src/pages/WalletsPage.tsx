@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
 import { Icon } from '../components/Icon';
 import { WalletGridSkeleton } from '../components/Skeletons';
-import { Alert, Badge, Button, Card, EmptyState } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
@@ -175,6 +175,11 @@ export function WalletsPage() {
           </p>
         </div>
         <div className="cluster">
+          <RefreshButton
+            onRefresh={wallets.refresh}
+            busy={wallets.isValidating}
+            label="Refresh wallets"
+          />
           <Button size="sm" onClick={() => setShowArchived((v) => !v)}>
             {showArchived ? 'Hide archived' : 'Show archived'}
           </Button>

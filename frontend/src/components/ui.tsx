@@ -1,4 +1,4 @@
-import { FileText, X } from 'lucide-react';
+import { FileText, RefreshCw, X } from 'lucide-react';
 import {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -7,6 +7,7 @@ import {
   TextareaHTMLAttributes,
   useEffect,
   useId,
+  useState,
 } from 'react';
 
 import { cx } from '../lib/format';
@@ -289,6 +290,55 @@ export function Alert({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Manual refresh, used in every page header and in the topbar.
+ *
+ * Icon-only on purpose: it sits beside labelled actions ("New wallet", "Show
+ * archived") and a second word there would compete with them. The glyph spins
+ * while a fetch is in flight, so the button doubles as the progress indicator
+ * instead of needing a separate one.
+ *
+ * `onRefresh` is awaited, so the spin lasts exactly as long as the request.
+ */
+export function RefreshButton({
+  onRefresh,
+  busy = false,
+  label = 'Refresh',
+  size = 'sm',
+}: {
+  onRefresh: () => void | Promise<unknown>;
+  /** Also spin for refreshes this button did not start (polling, focus). */
+  busy?: boolean;
+  label?: string;
+  size?: 'sm' | 'md';
+}) {
+  const [running, setRunning] = useState(false);
+  const spinning = running || busy;
+
+  async function run() {
+    if (running) return;
+    setRunning(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <Button
+      size={size}
+      variant="ghost"
+      onClick={() => void run()}
+      disabled={running}
+      aria-label={label}
+      title={label}
+    >
+      <Icon icon={RefreshCw} size="sm" className={spinning ? 'icon-spin' : undefined} />
+    </Button>
   );
 }
 

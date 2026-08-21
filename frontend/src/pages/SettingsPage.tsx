@@ -11,6 +11,7 @@ import {
   DecimalInput,
   Field,
   Input,
+  RefreshButton,
   Select,
   decimalToInput,
   parseDecimal,
@@ -40,7 +41,7 @@ const CUSTOM_VARS: { key: string; label: string; fallback: string }[] = [
 
 export function SettingsPage() {
   const { user } = useAuth();
-  const { settings, save, error } = useSettings();
+  const { settings, save, error, reload: reloadSettings } = useSettings();
   const health = useExcelQuery<DbHealth>('/api/health', undefined, { refreshInterval: 30_000 });
 
   const [currency, setCurrency] = useState(settings.currency);
@@ -387,7 +388,16 @@ export function SettingsPage() {
         )}
       </Card>
 
-      <Card title="Workbook">
+      <Card
+        title="Workbook"
+        actions={
+          <RefreshButton
+            onRefresh={() => Promise.all([health.refresh(), reloadSettings()])}
+            busy={health.isValidating}
+            label="Refresh settings and workbook status"
+          />
+        }
+      >
         {health.data ? (
           <div className="form-grid">
             <Field label="File">

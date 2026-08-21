@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon';
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
 import { ListSkeleton } from '../components/Skeletons';
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
 import { toast } from '../lib/toast';
@@ -16,7 +16,9 @@ import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
 export function BudgetsPage({ period }: { period: string }) {
   const { settings } = useSettings();
   const wallets = useExcelDB<WalletBalance>('wallets');
-  const { data, initialLoading, error, refresh } = useExcelQuery<BudgetResponse>('/api/budgets', { period });
+  const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<BudgetResponse>('/api/budgets', {
+    period,
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetProgress | undefined>();
@@ -186,6 +188,13 @@ export function BudgetsPage({ period }: { period: string }) {
           </p>
         </div>
         <div className="cluster">
+          {/* Limits come from Budgets but the wallet-scope targets come from
+              Wallets, so a manual refresh pulls both. */}
+          <RefreshButton
+            onRefresh={() => Promise.all([refresh(), wallets.refresh()])}
+            busy={isValidating || wallets.isValidating}
+            label="Refresh budgets"
+          />
           <Button size="sm" onClick={() => void copyLastMonth()}>
             Copy last month
           </Button>

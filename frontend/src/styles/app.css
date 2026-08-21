@@ -1475,17 +1475,6 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
 }
 
 /* Quiet marker that cached data is being refreshed behind the scenes. */
-.refresh-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-left: 8px;
-  vertical-align: middle;
-  animation: pending-pulse 1.2s var(--ease-in-out) infinite;
-}
-
 .skeleton {
   display: flex;
   flex-direction: column;
@@ -2260,6 +2249,28 @@ tr:hover .row-actions,
 
 .empty-icon {
   color: var(--accent);
+}
+
+/* Spins the glyph inside a RefreshButton while its fetch is in flight, so the
+   button is its own progress indicator. Collapsed by the reduced-motion block
+   in theme.css, where the disabled state still signals "working". */
+.icon-spin {
+  animation: spin 800ms linear infinite;
+}
+
+/* The dashboard opens on the hero rather than a page header, so its Refresh
+   sits on the net-worth label line. Negative margins keep the button from
+   adding height to a row sized for 11px type. */
+.hero-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.hero-label-row .btn {
+  margin: -8px 0;
+  padding: 6px 8px;
 }
 
 .stat-label svg {
