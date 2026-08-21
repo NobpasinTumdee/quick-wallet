@@ -2278,6 +2278,317 @@ tr:hover .row-actions,
 }
 
 
+/* ==========================================================================
+   Cash-flow Sankey
+   --------------------------------------------------------------------------
+   Every colour here is a theme token, so the chart re-themes with the rest of
+   the app and never needs a JS palette. Stage encoding:
+
+     income   --positive     money arriving
+     wallet   --accent       money held
+     expense  --negative     money leaving
+
+   Ribbons are stroked paths with a gradient between the two stage colours, so
+   direction reads without an arrowhead.
+   ========================================================================== */
+
+/* Reserves the card's footprint while the chart chunk loads, so the bento
+   grid does not jump when it arrives. */
+.sankey-placeholder {
+  min-height: 420px;
+}
+
+.sankey-wrap {
+  position: relative;
+  min-width: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+/* Refetch holds the previous render instead of flashing a skeleton. */
+.sankey-wrap.is-stale {
+  opacity: 0.55;
+}
+
+/* Zero-size carrier for the gradient defs. Kept out of the flow entirely —
+   `display: none` would stop the gradients resolving in some engines. */
+.sankey-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sankey-stop--income {
+  stop-color: var(--positive);
+}
+
+.sankey-stop--wallet {
+  stop-color: var(--accent);
+}
+
+.sankey-stop--expense {
+  stop-color: var(--negative);
+}
+
+/* Synthetic endpoints ("Existing balance", "Left over") are real numbers but
+   not real transactions, so their ribbons fade to neutral rather than implying
+   income or spending. */
+.sankey-stop--neutral {
+  stop-color: var(--text-faint);
+}
+
+/* ---- Nodes ---- */
+
+.sankey-node rect {
+  fill: var(--accent);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.sankey-node--income rect {
+  fill: var(--positive);
+}
+
+.sankey-node--expense rect {
+  fill: var(--negative);
+}
+
+/* Synthetic bookkeeping nodes ("Existing balance", "Left over") are real
+   numbers but not real transactions, so they recede. */
+.sankey-node.is-synthetic rect {
+  fill: var(--text-faint);
+}
+
+.sankey-node-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  /* Middle-column labels sit over ribbons; the halo keeps them readable
+     without a filled plate competing with the data. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.sankey-node-value {
+  fill: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.sankey-node.is-synthetic .sankey-node-label {
+  fill: var(--text-muted);
+  font-style: italic;
+}
+
+/* ---- Ribbons ---- */
+
+.sankey-link {
+  opacity: 0.3;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.sankey-link.is-synthetic {
+  opacity: 0.15;
+}
+
+/* Recharts wraps each ribbon in its own <Layer>, so hovering one dims nothing
+   else — instead the hovered ribbon lifts clear of the rest. */
+.sankey-wrap:hover .sankey-link {
+  opacity: 0.2;
+}
+
+.sankey-wrap .sankey-link:hover,
+.sankey-wrap:hover .sankey-link:hover {
+  opacity: 0.62;
+}
+
+.sankey-wrap:hover .sankey-link.is-synthetic {
+  opacity: 0.11;
+}
+
+/* ---- Legend ---- */
+
+.sankey-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sankey-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sankey-legend-note {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.sankey-footnote {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.sankey-footnote strong {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Glass tooltip ----
+   Shared by any future chart, hence the neutral `chart-tip` name. */
+
+.chart-tip {
+  min-width: 172px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  pointer-events: none;
+}
+
+/* The reader already knows which ribbon they are on — they came for the
+   number, so the value leads and the names follow. */
+.chart-tip-value {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.15;
+}
+
+.chart-tip-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.chart-tip-flow svg {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.chart-tip-name {
+  font-weight: var(--weight-medium);
+}
+
+/* A short stroke, not a filled box: at tooltip density a block of series
+   colour is data-weight ink doing a label's job. */
+.chart-tip-key {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.chart-tip-key--income {
+  background: var(--positive);
+}
+
+.chart-tip-key--expense {
+  background: var(--negative);
+}
+
+.chart-tip-muted {
+  margin-top: 4px;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.chart-tip-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  max-width: 220px;
+}
+
+/* ---- Table view ----
+   The WCAG-clean twin: every number the chart draws, reachable without a
+   pointer. Scrolls inside its own box so the page never scrolls sideways. */
+
+.table-scroll {
+  overflow-x: auto;
+  margin-inline: calc(var(--space-1) * -1);
+  padding-inline: var(--space-1);
+}
+
+.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.flow-table th,
+.flow-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.flow-table th {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.flow-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.flow-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.flow-table .is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visually hidden, still read aloud. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---- Brand mark ---- */
 .logo {
   flex: none;

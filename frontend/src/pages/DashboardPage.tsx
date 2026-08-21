@@ -1,14 +1,25 @@
 import { Receipt, Target, Wallet } from 'lucide-react';
+import { Suspense, lazy } from 'react';
 
 import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
-import { useExcelQuery } from '../hooks/useExcelDB';
+import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Investment, WalletBalance } from '../types';
+import { DashboardSummary, Investment, Transaction, WalletBalance } from '../types';
+
+/**
+ * Recharts is ~300kB of the bundle for one card on one screen. Splitting it out
+ * lets the shell, the login screen and every other route paint without it; the
+ * chunk then loads alongside the dashboard's own 1-3s data request, so it is
+ * ready before the data it draws.
+ */
+const CashFlowSankey = lazy(() =>
+  import('../components/CashFlowSankey').then((m) => ({ default: m.CashFlowSankey })),
+);
 
 export function DashboardPage({ period, onNavigate }: { period: string; onNavigate: (route: Route) => void }) {
   const { settings } = useSettings();
@@ -19,6 +30,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     '/api/dashboard',
     { period },
   );
+  // The dashboard summary only carries aggregates and a handful of recent rows;
+  // the Sankey needs every transaction in the month. Same cache key the Activity
+  // tab uses when its filters are clear, so the two share one request.
+  const monthTransactions = useExcelDB<Transaction>('transactions', { period });
+
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
 
@@ -308,6 +324,16 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </div>
           )}
         </Card>
+
+        <Suspense fallback={<div className="card sankey-placeholder" aria-hidden="true" />}>
+          <CashFlowSankey
+            transactions={monthTransactions.items}
+            wallets={data.wallets}
+            period={period}
+            loading={monthTransactions.initialLoading}
+            stale={monthTransactions.isValidating}
+          />
+        </Suspense>
 
         <Card
           title="Recent activity"
