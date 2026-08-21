@@ -58,6 +58,61 @@ export function onUnauthorized(handler: () => void): () => void {
 }
 
 export type QueryParams = Record<string, string | number | boolean | undefined | null>;
+/* ------------------------------------------------------------------ */
+/* Request tracing                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Opt-in logging of every script call, off unless you switch it on.
+ *
+ * In the browser console:
+ *   qwDebug.on()                every request
+ *   qwDebug.on('/api/budgets')  only paths containing that string
+ *   qwDebug.off()
+ *
+ * The flag lives in localStorage, so it survives a reload and works against a
+ * production build as well as the dev server.
+ */
+const DEBUG_KEY = 'quick-wallet.debug';
+
+function debugFilter(): string | null {
+  try {
+    return localStorage.getItem(DEBUG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function trace(path: string, action: string, ms: number, payload: unknown, error?: unknown): void {
+  const filter = debugFilter();
+  if (filter === null || (filter && !path.includes(filter))) return;
+
+  /* eslint-disable no-console */
+  console.groupCollapsed(
+    '%c' + (error ? '✗' : '✓') + ' ' + action + '%c ' + path + ' %c' + Math.round(ms) + 'ms',
+    'color:' + (error ? '#e5484d' : '#30a46c') + ';font-weight:600',
+    'color:inherit',
+    'color:#888',
+  );
+  if (error) console.error(error);
+  else console.log(payload);
+  console.groupEnd();
+  /* eslint-enable no-console */
+}
+
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).qwDebug = {
+    on: (filter = '') => {
+      localStorage.setItem(DEBUG_KEY, filter);
+      return filter ? 'API tracing on for paths containing "' + filter + '"' : 'API tracing on';
+    },
+    off: () => {
+      localStorage.removeItem(DEBUG_KEY);
+      return 'API tracing off';
+    },
+  };
+}
+
 
 /** Unchanged from the Express client — `useExcelQuery` uses it as its cache key. */
 export function buildPath(path: string, params?: QueryParams): string {
@@ -177,6 +232,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   assertConfigured();
 
   const { action, query } = resolve(path, method, params);
+  const startedAt = Date.now();
 
   let response: Response;
   try {
@@ -235,9 +291,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       setToken(null);
       unauthorizedHandlers.forEach((handler) => handler());
     }
-    throw new ApiError(payload?.error || 'Request failed', status, payload?.code ?? 'UNKNOWN');
+    const failure = new ApiError(payload?.error || 'Request failed', status, payload?.code ?? 'UNKNOWN');
+    trace(path, action, Date.now() - startedAt, undefined, failure);
+    throw failure;
   }
 
+  trace(path, action, Date.now() - startedAt, payload.data);
   return payload.data as T;
 }
 

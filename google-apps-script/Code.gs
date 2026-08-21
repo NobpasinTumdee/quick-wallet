@@ -127,7 +127,7 @@ var SHEETS = {
     columns: [
       { key: 'id', header: 'ID', type: 'string' },
       { key: 'userId', header: 'User ID', type: 'string' },
-      { key: 'period', header: 'Period', type: 'string' },
+      { key: 'period', header: 'Period', type: 'period' },
       { key: 'scope', header: 'Scope', type: 'string' },
       { key: 'targetId', header: 'Target ID', type: 'string' },
       { key: 'targetLabel', header: 'Target Label', type: 'string' },
@@ -481,6 +481,11 @@ function coerce_(value, type) {
       var parsed = new Date(raw);
       return isNaN(parsed.getTime()) ? raw : toDateKey_(parsed);
     }
+    /* Same trap one level up: Sheets reads "2026-08" as a date too, and a
+       Date coerced as a plain string comes back as a UTC ISO stamp whose month
+       can differ from the one that was stored. Always rebuild the YYYY-MM key. */
+    case 'period':
+      return periodOf_(value);
     case 'json': {
       if (value && typeof value === 'object' && !(value instanceof Date)) return value;
       if (!value) return {};
@@ -528,6 +533,7 @@ function serialize_(value, type) {
         : String(value);
     /* Leading apostrophe stops Sheets re-parsing the date into a serial number. */
     case 'datekey':
+    case 'period':
       return value ? "'" + String(value) : '';
     default:
       return String(value);
@@ -623,6 +629,28 @@ function toDateKey_(date) {
 
 function currentPeriod_() {
   return toDateKey_(new Date()).slice(0, 7);
+}
+
+/**
+ * Normalises anything that has ever represented a month into a YYYY-MM key.
+ *
+ * Handles the three shapes a Period cell can arrive in:
+ *   "2026-08"                  already correct
+ *   Date(2026-08-01)           Sheets parsed the text as a date on write
+ *   "2026-07-31T17:00:00.000Z" that Date read back through String coercion,
+ *                              where UTC has already shifted it a month back
+ *
+ * Local getters are used throughout, so GMT+7 stays in August.
+ */
+function periodOf_(value) {
+  if (value instanceof Date) return toDateKey_(value).slice(0, 7);
+  if (value === null || value === undefined) return '';
+  var raw = String(value).trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 7);
+  var parsed = new Date(raw);
+  return isNaN(parsed.getTime()) ? raw : toDateKey_(parsed).slice(0, 7);
 }
 
 function shiftPeriod_(period, delta) {
@@ -916,7 +944,9 @@ function userRows_(sheetName, userId) {
 }
 
 function inPeriod_(dateKey, period) {
-  return typeof dateKey === 'string' && dateKey.slice(0, 7) === period;
+  if (!dateKey || !period) return false;
+  if (dateKey instanceof Date) return toDateKey_(dateKey).slice(0, 7) === period;
+  return String(dateKey).slice(0, 7) === period;
 }
 
 /** Fetches one row by id and refuses it if it belongs to someone else. */
@@ -1019,7 +1049,7 @@ function getSettingsRow_(userId) {
 }
 
 function computeBudgetProgress_(userId, period) {
-  var budgets = userRows_('Budgets', userId).filter(function (b) { return b.period === period; });
+  var budgets = userRows_('Budgets', userId).filter(function (b) { return periodOf_(b.period) === period; });
   var transactions = userRows_('Transactions', userId).filter(function (t) {
     return inPeriod_(t.date, period);
   });
@@ -1053,7 +1083,10 @@ function computeBudgetProgress_(userId, period) {
         });
       } else if (budget.scope === 'wallet') {
         transactions.forEach(function (t) {
-          if (t.type === 'expense' && t.walletId === budget.targetId) spent += Number(t.amount) || 0;
+          if (t.type === 'expense' &&
+              String(t.walletId).trim() === String(budget.targetId).trim()) {
+            spent += Number(t.amount) || 0;
+          }
         });
       } else {
         spent = totalExpense;
@@ -1063,7 +1096,7 @@ function computeBudgetProgress_(userId, period) {
       var percentUsed = limit > 0 ? money_((spent / limit) * 100) : (spent > 0 ? 100 : 0);
 
       return {
-        id: budget.id, userId: budget.userId, period: budget.period, scope: budget.scope,
+        id: budget.id, userId: budget.userId, period: periodOf_(budget.period), scope: budget.scope,
         targetId: budget.targetId, targetLabel: budget.targetLabel, mode: budget.mode,
         value: budget.value, baseIncome: budget.baseIncome, note: budget.note,
         createdAt: budget.createdAt,
@@ -1565,7 +1598,7 @@ function budgetsCreate_(user, body) {
   var parsed = parseBudget_(user.id, body);
 
   var clash = userRows_('Budgets', user.id).filter(function (b) {
-    return b.period === parsed.period && b.scope === parsed.scope &&
+    return periodOf_(b.period) === parsed.period && b.scope === parsed.scope &&
       String(b.targetId).toLowerCase() === String(parsed.targetId).toLowerCase();
   })[0];
   if (clash) {
@@ -1618,12 +1651,12 @@ function budgetsCopy_(user, body) {
   var to = periodKey_(body.to, 'to', currentPeriod_());
   if (from === to) throw bad_('Source and target periods must differ', 'SAME_PERIOD');
 
-  var source = userRows_('Budgets', user.id).filter(function (b) { return b.period === from; });
+  var source = userRows_('Budgets', user.id).filter(function (b) { return periodOf_(b.period) === from; });
   if (!source.length) throw bad_('No budgets found for ' + from, 'NOTHING_TO_COPY');
 
   var taken = {};
   userRows_('Budgets', user.id).forEach(function (b) {
-    if (b.period === to) taken[b.scope + ':' + String(b.targetId).toLowerCase()] = true;
+    if (periodOf_(b.period) === to) taken[b.scope + ':' + String(b.targetId).toLowerCase()] = true;
   });
 
   var copied = 0;
@@ -1850,7 +1883,7 @@ function dashboardPeriods_(user) {
     if (t.date) seen[t.date.slice(0, 7)] = true;
   });
   userRows_('Budgets', user.id).forEach(function (b) {
-    if (b.period) seen[b.period] = true;
+    if (b.period) seen[periodOf_(b.period)] = true;
   });
 
   return Object.keys(seen).sort().reverse();
@@ -1922,6 +1955,83 @@ function setup() {
     Logger.log('Setup OK. ' + JSON.stringify(health_().rowCounts));
   }
   return problems;
+}
+
+/**
+ * Prints exactly what the Budgets sheet holds and why each row does or does not
+ * match a period. Run from the Apps Script editor, then View -> Logs.
+ *
+ * The line to look at is RAW TYPE: "object" means Sheets parsed the text
+ * "2026-08" into a date when it was written, which is what broke matching.
+ */
+function debugBudgets() {
+  var period = currentPeriod_();
+  var sheet = sheet_('Budgets');
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  var col = headers.indexOf('period');
+
+  Logger.log('Matching against period: ' + period);
+  Logger.log('--- raw cells ---');
+  for (var r = 1; r < values.length; r += 1) {
+    var cell = values[r][col];
+    Logger.log(
+      'row ' + (r + 1) +
+      ' | RAW TYPE: ' + (cell instanceof Date ? 'object (Date) <-- was parsed by Sheets' : typeof cell) +
+      ' | RAW: ' + cell +
+      ' | NORMALISED: "' + periodOf_(cell) + '"' +
+      ' | MATCHES: ' + (periodOf_(cell) === period)
+    );
+  }
+
+  var users = readTable_('Users');
+  users.forEach(function (u) {
+    var progress = computeBudgetProgress_(u.id, period);
+    var tx = userRows_('Transactions', u.id).filter(function (t) { return inPeriod_(t.date, period); });
+    Logger.log('--- ' + u.username + ' ---');
+    Logger.log('  transactions in period: ' + tx.length +
+               ' (expenses: ' + tx.filter(function (t) { return t.type === 'expense'; }).length + ')');
+    Logger.log('  categories present: ' + JSON.stringify(tx.map(function (t) { return t.category; })));
+    Logger.log('  budgets returned: ' + progress.length);
+    progress.forEach(function (b) {
+      Logger.log('    ' + b.scope + ' "' + b.targetId + '" limit=' + b.limit +
+                 ' spent=' + b.spent + ' remaining=' + b.remaining + ' (' + b.percentUsed + '%)');
+    });
+  });
+}
+
+/**
+ * One-shot cleanup: rewrites every Period cell as literal text.
+ *
+ * Not required for correctness -- periodOf_() already repairs these on read --
+ * but it stops the column rendering as "Aug 1, 2026" in the sheet and makes the
+ * stored value match what the API returns.
+ */
+function repairBudgetPeriods() {
+  var sheet = sheet_('Budgets');
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) { Logger.log('Budgets sheet is empty'); return 0; }
+
+  var headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  var col = headers.indexOf('period');
+  if (col < 0) { Logger.log('No Period column'); return 0; }
+
+  var range = sheet.getRange(2, col + 1, values.length - 1, 1);
+  range.setNumberFormat('@'); // plain text, so Sheets stops re-parsing on future writes
+
+  var fixed = 0;
+  var out = [];
+  for (var r = 1; r < values.length; r += 1) {
+    var cell = values[r][col];
+    var normalised = periodOf_(cell);
+    if (String(cell) !== normalised) fixed += 1;
+    out.push([normalised]);
+  }
+  range.setValues(out);
+  invalidate_('Budgets');
+
+  Logger.log('Repaired ' + fixed + ' of ' + out.length + ' Period cells');
+  return fixed;
 }
 
 /** Generates strong values for the two Script Properties. Run once, then copy
