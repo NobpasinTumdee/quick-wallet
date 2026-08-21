@@ -256,6 +256,307 @@
   color-scheme: dark;
 }
 
+/* ==========================================================================
+   Preset themes
+   --------------------------------------------------------------------------
+   Each block redeclares only the primitives listed at the top of this file.
+   Everything else — glass, tints, hover states, elevation, the two ambient
+   washes — is derived with color-mix and follows automatically, which is why
+   a theme is roughly twenty lines rather than two hundred.
+
+   Dark themes additionally override three tokens that cannot be derived well
+   from a dark palette:
+     --glass-border   a light hairline reads on dark; a tinted border does not
+     --shadow-color   dark surfaces need real black, not a tint of the text
+     --ambient-opacity  the washes have to sit back further
+
+   Light themes leave all three at their :root values.
+   ========================================================================== */
+
+/* ---- Ocean — deep water, cold cyan ---- */
+:root[data-theme='ocean'] {
+  --bg: #05141f;
+  --bg-deep: #020c14;
+  --surface: #0c2231;
+  --surface-2: #123044;
+  --surface-3: #17405a;
+  --border: #17415a;
+  --border-strong: #205d7a;
+
+  --text: #e9f5fb;
+  --text-secondary: #b4d5e4;
+  --text-muted: #8fb3c6;
+  --text-faint: #67899c;
+
+  --accent: #38bde0;
+  --accent-contrast: #02141c;
+  --positive: #35d0a5;
+  --negative: #ff7085;
+  --warning: #f0a94c;
+
+  --ambient-opacity: 0.44;
+  --glass-blur: 26px;
+  --glass-border: color-mix(in srgb, #ffffff 9%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+/* ---- Forest — pine and moss ---- */
+:root[data-theme='forest'] {
+  --bg: #0a1410;
+  --bg-deep: #050c09;
+  --surface: #10241c;
+  --surface-2: #163024;
+  --surface-3: #1d3d2e;
+  --border: #1e402f;
+  --border-strong: #2d5c45;
+
+  --text: #eaf6ee;
+  --text-secondary: #b7d7c3;
+  --text-muted: #90b19e;
+  --text-faint: #688774;
+
+  --accent: #55cf85;
+  --accent-contrast: #05170e;
+  --positive: #5cd98f;
+  --negative: #ff7385;
+  --warning: #e8b155;
+
+  --ambient-opacity: 0.42;
+  --glass-blur: 26px;
+  --glass-border: color-mix(in srgb, #ffffff 9%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+/* ---- Sunset — dusk over warm plum ---- */
+:root[data-theme='sunset'] {
+  --bg: #1a0e12;
+  --bg-deep: #0f070a;
+  --surface: #2a1620;
+  --surface-2: #361d29;
+  --surface-3: #442534;
+  --border: #422434;
+  --border-strong: #61374c;
+
+  --text: #fdeef1;
+  --text-secondary: #e6c6cd;
+  --text-muted: #c49faa;
+  --text-faint: #977382;
+
+  --accent: #ff9264;
+  --accent-contrast: #23100a;
+  --positive: #4fd6a0;
+  --negative: #ff6480;
+  --warning: #ffb64d;
+
+  --ambient-opacity: 0.46;
+  --glass-blur: 26px;
+  --glass-border: color-mix(in srgb, #ffffff 10%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.58);
+
+  color-scheme: dark;
+}
+
+/* ---- Cyberpunk — neon magenta on near-black ---- */
+:root[data-theme='cyberpunk'] {
+  --bg: #070510;
+  --bg-deep: #030209;
+  --surface: #120c22;
+  --surface-2: #1a112f;
+  --surface-3: #24193f;
+  --border: #2d1d4e;
+  --border-strong: #452f70;
+
+  --text: #f3edff;
+  --text-secondary: #cfbff4;
+  --text-muted: #a694ca;
+  --text-faint: #7a6c9c;
+
+  --accent: #fa4fdc;
+  --accent-contrast: #14000f;
+  --positive: #2ae5cb;
+  --negative: #ff5573;
+  --warning: #ffd23f;
+
+  --ambient-opacity: 0.5;
+  --glass-blur: 28px;
+  --glass-border: color-mix(in srgb, #ffffff 11%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.62);
+
+  color-scheme: dark;
+}
+
+/* ---- Rose Gold — light, warm blush and copper ---- */
+:root[data-theme='rosegold'] {
+  --bg: #fdf6f3;
+  --bg-deep: #f5e9e4;
+  --surface: #ffffff;
+  --surface-2: #fbeeea;
+  --surface-3: #f5e2dc;
+  --border: #f0ded7;
+  --border-strong: #dcbdb2;
+
+  --text: #2e1c18;
+  --text-secondary: #5b4139;
+  --text-muted: #7d5c52;
+  --text-faint: #a4837a;
+
+  --accent: #9e5f67;
+  --accent-contrast: #ffffff;
+  --positive: #0d8a62;
+  --negative: #cc3049;
+  --warning: #a86a08;
+
+  --ambient-opacity: 0.5;
+
+  color-scheme: light;
+}
+
+/* ---- Midnight — neutral navy, the quietest of the set ---- */
+:root[data-theme='midnight'] {
+  --bg: #05070d;
+  --bg-deep: #020308;
+  --surface: #0c1018;
+  --surface-2: #121722;
+  --surface-3: #1a2130;
+  --border: #1c2332;
+  --border-strong: #2d3648;
+
+  --text: #eaeef7;
+  --text-secondary: #b5bece;
+  --text-muted: #8b96ab;
+  --text-faint: #626d81;
+
+  --accent: #7aa2f7;
+  --accent-contrast: #04080f;
+  --positive: #2fcf94;
+  --negative: #ff6b83;
+  --warning: #f2ab48;
+
+  --ambient-opacity: 0.38;
+  --glass-blur: 26px;
+  --glass-border: color-mix(in srgb, #ffffff 8%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/* ---- Dracula — the classic palette, surfaces lifted for glass ---- */
+:root[data-theme='dracula'] {
+  --bg: #282a36;
+  --bg-deep: #21222c;
+  --surface: #343746;
+  --surface-2: #3d4152;
+  --surface-3: #474b5e;
+  --border: #474b5e;
+  --border-strong: #6272a4;
+
+  --text: #f8f8f2;
+  --text-secondary: #d3d4cd;
+  --text-muted: #adb0c0;
+  --text-faint: #7f8aab;
+
+  --accent: #bd93f9;
+  --accent-contrast: #1b1c24;
+  --positive: #50fa7b;
+  --negative: #ff6e6e;
+  --warning: #ffb86c;
+
+  --ambient-opacity: 0.34;
+  --glass-blur: 24px;
+  --glass-border: color-mix(in srgb, #ffffff 10%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* ---- Nord — polar night surfaces, frost accent, aurora semantics ---- */
+:root[data-theme='nord'] {
+  --bg: #2e3440;
+  --bg-deep: #272c36;
+  --surface: #3b4252;
+  --surface-2: #434c5e;
+  --surface-3: #4c566a;
+  --border: #4c566a;
+  --border-strong: #5f6d84;
+
+  --text: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #bcc6d4;
+  --text-faint: #8894a6;
+
+  --accent: #88c0d0;
+  --accent-contrast: #2e3440;
+  --positive: #a3be8c;
+  --negative: #d0757e;
+  --warning: #ebcb8b;
+
+  --ambient-opacity: 0.32;
+  --glass-blur: 24px;
+  --glass-border: color-mix(in srgb, #ffffff 10%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.45);
+
+  color-scheme: dark;
+}
+
+/* ---- Solarized — light, on Ethan Schoonover's base3 paper ---- */
+:root[data-theme='solarized'] {
+  --bg: #fdf6e3;
+  --bg-deep: #f2ead4;
+  --surface: #fffbf0;
+  --surface-2: #efe9d6;
+  --surface-3: #e5dec8;
+  --border: #e6ddc4;
+  --border-strong: #c9bf9f;
+
+  --text: #073642;
+  --text-secondary: #4e6b72;
+  --text-muted: #4e686e;
+  --text-faint: #7f8c8c;
+
+  --accent: #1a72ac;
+  --accent-contrast: #ffffff;
+  --positive: #6b7d00;
+  --negative: #d02b28;
+  --warning: #9c7600;
+
+  --ambient-opacity: 0.5;
+
+  color-scheme: light;
+}
+
+/* ---- Amethyst — violet, the richest dark in the set ---- */
+:root[data-theme='amethyst'] {
+  --bg: #0e0818;
+  --bg-deep: #070410;
+  --surface: #1a1029;
+  --surface-2: #231636;
+  --surface-3: #2e1e45;
+  --border: #2f1f48;
+  --border-strong: #472f6a;
+
+  --text: #f2ebfd;
+  --text-secondary: #cdbdea;
+  --text-muted: #a794c6;
+  --text-faint: #7d6b9b;
+
+  --accent: #b06bfa;
+  --accent-contrast: #14031f;
+  --positive: #3fd4a0;
+  --negative: #ff6b8a;
+  --warning: #f0b155;
+
+  --ambient-opacity: 0.46;
+  --glass-blur: 27px;
+  --glass-border: color-mix(in srgb, #ffffff 10%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
 /* Honour the OS accessibility setting — every transition below collapses. */
 @media (prefers-reduced-motion: reduce) {
   *,

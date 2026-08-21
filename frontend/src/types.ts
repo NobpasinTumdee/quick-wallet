@@ -6,7 +6,20 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 export type InvestmentStatus = 'hold' | 'sold';
 export type BudgetScope = 'category' | 'wallet' | 'global';
 export type BudgetMode = 'amount' | 'percent';
-export type ThemeName = 'light' | 'dark' | 'custom';
+export type ThemeName =
+  | 'light'
+  | 'dark'
+  | 'custom'
+  | 'ocean'
+  | 'forest'
+  | 'sunset'
+  | 'cyberpunk'
+  | 'rosegold'
+  | 'midnight'
+  | 'dracula'
+  | 'nord'
+  | 'solarized'
+  | 'amethyst';
 
 export interface PublicUser {
   id: string;

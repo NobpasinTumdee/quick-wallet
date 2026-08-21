@@ -1,3 +1,4 @@
+import { FileText, X } from 'lucide-react';
 import {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -9,6 +10,7 @@ import {
 } from 'react';
 
 import { cx } from '../lib/format';
+import { Icon } from './Icon';
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -283,7 +285,7 @@ export function Alert({
       </div>
       {onDismiss && (
         <button type="button" className="alert-close" onClick={onDismiss} aria-label="Dismiss">
-          ×
+          <Icon icon={X} size="sm" />
         </button>
       )}
     </div>
@@ -291,7 +293,7 @@ export function Alert({
 }
 
 export function EmptyState({
-  icon = '📄',
+  icon = <Icon icon={FileText} size="xl" />,
   title,
   description,
   action,

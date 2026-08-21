@@ -1,5 +1,7 @@
+import { ChartColumn, Flag, Receipt, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { Icon } from '../components/Icon';
 import { InvestmentForm, InvestmentPayload } from '../components/InvestmentForm';
 import {
   Alert,
@@ -128,7 +130,7 @@ export function InvestmentsPage() {
     return (
       <Card>
         <EmptyState
-          icon="📈"
+          icon={<Icon icon={TrendingUp} size="xl" />}
           title="No investment wallet yet"
           description="Create a wallet in Investment mode from the Wallets tab, then add positions here. Fund it with a transfer from a cash wallet."
         />
@@ -139,25 +141,25 @@ export function InvestmentsPage() {
   return (
     <>
       <div className="grid grid--stats">
-        <StatCard label="Cost basis" icon="🧾" value={money(portfolio.totalCost, { compact: true })} hint="Open positions" />
+        <StatCard label="Cost basis" icon={<Icon icon={Receipt} size="sm" />} value={money(portfolio.totalCost, { compact: true })} hint="Open positions" />
         <StatCard
           label="Market value"
           tone="accent"
-          icon="💹"
+          icon={<Icon icon={TrendingUp} size="sm" />}
           value={money(portfolio.totalValue, { compact: true })}
           hint={`${portfolio.provider} · ${formatRelativeTime(portfolio.lastUpdated)}`}
         />
         <StatCard
           label="Unrealised P&L"
           tone={portfolio.totalPnl >= 0 ? 'positive' : 'negative'}
-          icon="📊"
+          icon={<Icon icon={ChartColumn} size="sm" />}
           value={formatPercent(portfolio.totalPnlPercent, 2, true)}
           hint={money(portfolio.totalPnl, { signed: true })}
         />
         <StatCard
           label="Realised P&L"
           tone={realizedTotal >= 0 ? 'positive' : 'negative'}
-          icon="🏁"
+          icon={<Icon icon={Flag} size="sm" />}
           value={money(realizedTotal, { signed: true })}
           hint={`${soldPositions.length} closed position${soldPositions.length === 1 ? '' : 's'}`}
         />
@@ -275,7 +277,7 @@ export function InvestmentsPage() {
 
         {rows.length === 0 ? (
           <EmptyState
-            icon="📈"
+            icon={<Icon icon={TrendingUp} size="xl" />}
             title={view === 'hold' ? 'No open positions' : 'Nothing sold yet'}
             description={
               view === 'hold'

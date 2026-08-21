@@ -1,6 +1,8 @@
+import { Target } from 'lucide-react';
 import { useState } from 'react';
 
 import { invalidate, mutateMatching } from '../api/cache';
+import { Icon } from '../components/Icon';
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
 import { ListSkeleton } from '../components/Skeletons';
@@ -261,7 +263,7 @@ export function BudgetsPage({ period }: { period: string }) {
           <Alert tone="error">{error}</Alert>
         ) : budgets.length === 0 ? (
           <EmptyState
-            icon="🎯"
+            icon={<Icon icon={Target} size="xl" />}
             title="No budgets for this month"
             description="Try a 40 / 10 / 20 split — Invest 40%, Save 10%, Needs 20% — or set flat amounts per category."
             action={

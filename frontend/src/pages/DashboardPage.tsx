@@ -1,3 +1,6 @@
+import { Receipt, Target, Wallet } from 'lucide-react';
+
+import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
@@ -55,7 +58,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     return (
       <Card>
         <EmptyState
-          icon="👛"
+          icon={<Icon icon={Wallet} size="xl" />}
           title="Create your first wallet"
           description="Wallets are where transactions and positions live. Add one, then start recording activity."
           action={
@@ -168,7 +171,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         >
           {data.budgets.length === 0 ? (
             <EmptyState
-              icon="🎯"
+              icon={<Icon icon={Target} size="xl" />}
               title="No budgets this month"
               description="Set limits by exact amount or as a share of income — 40% invest, 10% save, 20% needs."
               action={
@@ -281,7 +284,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
 
         <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
-            <EmptyState icon="🧾" title="Nothing spent yet" description="Expenses this month show up here." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title="Nothing spent yet" description="Expenses this month show up here." />
           ) : (
             <div className="stack stack--tight">
               {data.categoryBreakdown.slice(0, 7).map((row, index) => (
@@ -310,7 +313,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           padded={false}
         >
           {data.recentTransactions.length === 0 ? (
-            <EmptyState icon="🧾" title="No transactions yet" description="Add one from the Activity tab." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title="No transactions yet" description="Add one from the Activity tab." />
           ) : (
             <div className="list">
               {data.recentTransactions.map((tx) => {

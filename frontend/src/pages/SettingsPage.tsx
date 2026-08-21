@@ -1,6 +1,8 @@
+import { Check, RotateCcw } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 
 import { api } from '../api/client';
+import { Icon } from '../components/Icon';
 import {
   Alert,
   Badge,
@@ -15,17 +17,12 @@ import {
 } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
+import { THEME_PRESETS, themePreset } from '../lib/themes';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
-import { DbHealth, ThemeName } from '../types';
-
-const THEMES: { value: ThemeName; label: string; swatches: string[] }[] = [
-  { value: 'light', label: '☀️ Light', swatches: ['#f4f6fb', '#ffffff', '#3b6fff', '#14203a'] },
-  { value: 'dark', label: '🌙 Dark', swatches: ['#0d1220', '#151c2e', '#5b8cff', '#e9eefb'] },
-  { value: 'custom', label: '🎨 Custom', swatches: ['#0f1a1c', '#16262a', '#46c2a4', '#e6f4f1'] },
-];
+import { DbHealth } from '../types';
 
 const ACCENTS = ['#3b6fff', '#5b8cff', '#46c2a4', '#0f9d6b', '#d98324', '#dc3a56', '#8b5cf6', '#ec4899'];
 
@@ -134,29 +131,73 @@ export function SettingsPage() {
   }
 
   const customVars = settings.customVars ?? {};
+  const activePreset = themePreset(settings.theme);
 
   return (
     <>
-      <Card title="Appearance" subtitle="Themes are plain CSS variables on :root — saved to the Settings sheet.">
-        <div className="theme-preview">
-          {THEMES.map((theme) => (
-            <button
-              key={theme.value}
-              type="button"
-              className={cx('theme-option', settings.theme === theme.value && 'is-active')}
-              onClick={() => void save({ theme: theme.value })}
-            >
-              <strong>{theme.label}</strong>
-              <div className="theme-swatch-row">
-                {theme.swatches.map((color) => (
-                  <span key={color} className="theme-swatch" style={{ background: color }} />
-                ))}
+      <Card
+        title="Appearance"
+        subtitle="Themes are plain CSS variables on :root — saved to the Settings sheet."
+      >
+        {/* Grouped by scheme so a light theme is never a surprise, and capped
+            in height so thirteen options do not push the rest of the page down. */}
+        <div className="theme-grid" role="radiogroup" aria-label="Theme">
+          {(['light', 'dark'] as const).map((scheme) => (
+            <fieldset key={scheme} className="theme-group">
+              <legend className="section-label">{scheme === 'light' ? 'Light' : 'Dark'}</legend>
+              <div className="theme-row">
+                {THEME_PRESETS.filter((preset) => preset.scheme === scheme).map((preset) => {
+                  const active = settings.theme === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={cx('theme-card', active && 'is-active')}
+                      // The theme's own accent rides along: SettingsContext
+                      // writes settings.accent inline as --accent, which would
+                      // otherwise leave every palette wearing the old colour.
+                      onClick={() => void save({ theme: preset.value, accent: preset.accent })}
+                      title={preset.blurb}
+                    >
+                      <span
+                        className="theme-card-preview"
+                        style={{ background: preset.swatches[0], borderColor: preset.swatches[1] }}
+                        aria-hidden="true"
+                      >
+                        <span className="theme-card-dot" style={{ background: preset.swatches[2] }} />
+                        <span className="theme-card-surface" style={{ background: preset.swatches[1] }}>
+                          <span className="theme-card-bar" style={{ background: preset.swatches[3] }} />
+                          <span
+                            className="theme-card-bar theme-card-bar--short"
+                            style={{ background: preset.swatches[3] }}
+                          />
+                        </span>
+                      </span>
+                      <span className="theme-card-name">
+                        <Icon icon={preset.icon} size="sm" />
+                        {preset.label}
+                      </span>
+                      <span className="theme-card-blurb truncate">{preset.blurb}</span>
+                      {active && (
+                        <span className="theme-card-check" aria-hidden="true">
+                          <Icon icon={Check} size="sm" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-            </button>
+            </fieldset>
           ))}
         </div>
 
-        <Field label="Accent colour" className="span-2" hint="Applied on top of whichever theme is active.">
+        <Field
+          label="Accent colour"
+          className="span-2"
+          hint="Applied on top of whichever theme is active. Picking a theme resets it to that theme's own accent."
+        >
           <div className="swatches" style={{ marginTop: 4 }}>
             {ACCENTS.map((color) => (
               <button
@@ -176,6 +217,10 @@ export function SettingsPage() {
               onChange={(e) => void save({ accent: e.target.value })}
               aria-label="Custom accent colour"
             />
+            <Button size="sm" variant="ghost" onClick={() => void save({ accent: activePreset.accent })}>
+              <Icon icon={RotateCcw} size="sm" />
+              Match theme
+            </Button>
           </div>
         </Field>
 

@@ -1,3 +1,15 @@
+import {
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  LogOut,
+  Receipt,
+  Settings,
+  Target,
+  TrendingUp,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { prefetch, useExcelQuery } from '../hooks/useExcelDB';
@@ -12,16 +24,17 @@ import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
+import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { Alert, Button } from './ui';
 
-const NAV: { route: Route; label: string; icon: string }[] = [
-  { route: 'dashboard', label: 'Overview', icon: '📊' },
-  { route: 'wallets', label: 'Wallets', icon: '👛' },
-  { route: 'transactions', label: 'Activity', icon: '🧾' },
-  { route: 'investments', label: 'Invest', icon: '📈' },
-  { route: 'budgets', label: 'Budgets', icon: '🎯' },
-  { route: 'settings', label: 'Settings', icon: '⚙️' },
+const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
+  { route: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+  { route: 'wallets', label: 'Wallets', icon: Wallet },
+  { route: 'transactions', label: 'Activity', icon: Receipt },
+  { route: 'investments', label: 'Invest', icon: TrendingUp },
+  { route: 'budgets', label: 'Budgets', icon: Target },
+  { route: 'settings', label: 'Settings', icon: Settings },
 ];
 
 /**
@@ -100,7 +113,7 @@ export function AppShell() {
               onFocus={() => warmRoute(item.route, period)}
               onClick={() => go(item.route)}
             >
-              <span aria-hidden="true">{item.icon}</span>
+              <Icon icon={item.icon} />
               {item.label}
             </button>
           ))}
@@ -110,6 +123,7 @@ export function AppShell() {
             Signed in as <strong>{user?.displayName}</strong>
           </div>
           <Button variant="ghost" size="sm" onClick={logout}>
+            <Icon icon={LogOut} size="sm" />
             Sign out
           </Button>
         </div>
@@ -136,7 +150,7 @@ export function AppShell() {
                   onClick={() => setPeriod((p) => shiftPeriod(p, -1))}
                   aria-label="Previous month"
                 >
-                  ‹
+                  <Icon icon={ChevronLeft} size="sm" />
                 </Button>
                 <Button
                   size="sm"
@@ -152,7 +166,7 @@ export function AppShell() {
                   onClick={() => setPeriod((p) => shiftPeriod(p, 1))}
                   aria-label="Next month"
                 >
-                  ›
+                  <Icon icon={ChevronRight} size="sm" />
                 </Button>
               </div>
             )}
@@ -183,8 +197,8 @@ export function AppShell() {
             onTouchStart={() => warmRoute(item.route, period)}
             onClick={() => go(item.route)}
           >
-            <span className="tab-icon" aria-hidden="true">
-              {item.icon}
+            <span className="tab-icon">
+              <Icon icon={item.icon} />
             </span>
             {item.label}
           </button>

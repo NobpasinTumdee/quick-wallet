@@ -1,6 +1,8 @@
+import { Wallet } from 'lucide-react';
 import { useState } from 'react';
 
 import { WalletForm, WalletPayload } from '../components/WalletForm';
+import { Icon } from '../components/Icon';
 import { WalletGridSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
@@ -202,7 +204,7 @@ export function WalletsPage() {
       ) : visible.length === 0 ? (
         <Card>
           <EmptyState
-            icon="👛"
+            icon={<Icon icon={Wallet} size="xl" />}
             title="No wallets yet"
             description="Create a cash or bank wallet to record spending, or an investment wallet to track stocks."
             action={

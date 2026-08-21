@@ -2085,48 +2085,187 @@ tr:hover .row-actions,
   transform: scale(1.08);
 }
 
-.theme-preview {
+/* ---- Theme picker ----
+   Thirteen options is too many for a flat row, so they are grouped by scheme
+   and the whole thing scrolls inside a fixed height rather than pushing the
+   rest of Settings down the page. */
+.theme-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 380px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-2);
+  /* Room for the lift on hover and the focus ring, which would otherwise be
+     clipped by the scroll container. */
+  padding-block: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.theme-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.theme-grid::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.theme-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.theme-group legend {
+  padding: 0 0 var(--space-2);
+}
+
+.theme-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: var(--space-3);
 }
 
-.theme-option {
-  padding: var(--space-4);
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-2) 60%, transparent);
   color: var(--text);
   font: inherit;
-  font-size: var(--text-sm);
   cursor: pointer;
   text-align: left;
+  min-width: 0;
   transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out),
     box-shadow var(--dur-base) var(--ease-out);
 }
 
-.theme-option:hover {
+.theme-card:hover {
   transform: translateY(-2px);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
 }
 
-.theme-option.is-active {
-  border-color: var(--accent);
+.theme-card:focus-visible {
+  outline: none;
   box-shadow: var(--ring);
 }
 
-.theme-swatch-row {
-  display: flex;
-  gap: 5px;
-  margin-top: var(--space-2);
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-accent);
 }
 
-.theme-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+/* A miniature of the theme: page colour behind, a text bar, a surface bar and
+   an accent dot. Enough to tell Nord from Dracula at a glance. */
+.theme-card-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 46px;
+  padding: 8px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
+
+/* The surface colour as an actual card sitting on the page colour, rather than
+   a bar — on themes where surface is close to bg a bar just disappears. */
+.theme-card-surface {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 6px;
+}
+
+.theme-card-bar {
+  height: 4px;
+  width: 52%;
+  border-radius: var(--radius-pill);
+}
+
+.theme-card-bar--short {
+  width: 22%;
+  opacity: 0.5;
+}
+
+.theme-card-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+
+.theme-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.theme-card.is-active .theme-card-name {
+  color: var(--accent);
+}
+
+.theme-card-blurb {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.theme-card-check {
+  position: absolute;
+  top: calc(var(--space-3) + 6px);
+  right: calc(var(--space-3) + 6px);
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- Icons ----
+   Lucide renders inline SVG inheriting currentColor. These rules only handle
+   alignment and the couple of places where an icon needs its own colour.
+   Wallet icons are emoji text and are untouched by any of this. */
+.sidebar-item svg,
+.tabbar-item svg,
+.btn svg,
+.stat-label svg,
+.theme-card-name svg {
+  flex: none;
+}
+
+.empty-icon {
+  color: var(--accent);
+}
+
+.stat-label svg {
+  opacity: 0.75;
+}
+
 
 /* ---- Brand mark ---- */
 .logo {

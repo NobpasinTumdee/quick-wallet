@@ -1678,7 +1678,14 @@ function budgetsCopy_(user, body) {
  * Settings
  * ========================================================================= */
 
-var THEMES = ['light', 'dark', 'custom'];
+/* Must stay in step with ThemeName in the frontend types: settingsSave_ runs
+   every incoming theme through oneOf_(), so a name missing here is rejected
+   with a 400 and the picker silently rolls back. */
+var THEMES = [
+  'light', 'dark', 'custom',
+  'ocean', 'forest', 'sunset', 'cyberpunk', 'rosegold',
+  'midnight', 'dracula', 'nord', 'solarized', 'amethyst'
+];
 
 /** CSS custom properties the client may override in the `custom` theme. */
 var ALLOWED_CUSTOM_VARS = [
@@ -2069,4 +2076,334 @@ function migratePassword() {
   var hashed = hashPassword_(NEW_PASSWORD);
   updateRow_('Users', user.id, { salt: hashed.salt, passwordHash: hashed.stored });
   Logger.log('Password updated for ' + USERNAME + '. Sign in with the new password.');
+}
+
+/* =========================================================================
+ * Demo account seeder
+ *
+ * Builds a complete, self-consistent demo user so every screen has something
+ * real to show: four months of transactions for the trend charts, a brokerage
+ * wallet with four open positions and one closed one, and budgets deliberately
+ * sized to land on all three status colours.
+ *
+ * Run seedDemoAccount() once from the editor, then sign in as demo / demo.
+ * Every row goes through insertRow_(), so the schema, coercion and the
+ * apostrophe guards on date and period cells are all applied for us.
+ * ========================================================================= */
+
+function seedDemoAccount() {
+  var USERNAME = 'demo';
+  var PASSWORD = 'demo';
+
+  if (readTable_('Users').filter(function (u) { return u.username === USERNAME; })[0]) {
+    Logger.log('A user named "' + USERNAME + '" already exists. ' +
+               'Run deleteDemoAccount() first if you want to rebuild it.');
+    return null;
+  }
+
+  var now = new Date();
+  var nowIso = now.toISOString();
+
+  /* ---------------------------------------------------------------- *
+   * Dates. Offsets are months back from today; 0 is the current month.
+   * ---------------------------------------------------------------- */
+
+  function monthStart(offset) {
+    return new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  }
+
+  function periodAt(offset) {
+    return toDateKey_(monthStart(offset)).slice(0, 7);
+  }
+
+  /**
+   * A date key inside the given month. The current month is clamped to today,
+   * so seeding on the 3rd never writes transactions dated in the future.
+   */
+  function dayAt(offset, wanted) {
+    var start = monthStart(offset);
+    var lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    var latest = offset === 0 ? Math.min(now.getDate(), lastDay) : lastDay;
+    var day = Math.min(Math.max(1, wanted), latest);
+    return toDateKey_(new Date(start.getFullYear(), start.getMonth(), day));
+  }
+
+  /* ---------------------------------------------------------------- *
+   * User + settings
+   * ---------------------------------------------------------------- */
+
+  var hashed = hashPassword_(PASSWORD);
+  var userId = uuid_();
+
+  insertRow_('Users', {
+    id: userId,
+    username: USERNAME,
+    displayName: 'Demo User',
+    salt: hashed.salt,
+    passwordHash: hashed.stored,
+    active: true,
+    createdAt: monthStart(-3).toISOString()
+  });
+
+  var MONTHLY_INCOME = 65000;
+
+  insertRow_('Settings', {
+    userId: userId,
+    theme: 'dark',
+    accent: '#4f8cff',
+    customVars: {},
+    currency: 'THB',
+    // Left blank so the app reports in THB only. Set this to 'USD' plus an
+    // fxRate if you want the secondary-currency display on the dashboard.
+    displayCurrency: '',
+    fxRate: 1,
+    fxRateUpdatedAt: '',
+    locale: 'th-TH',
+    // Percent budgets divide into this rather than into recorded income, which
+    // keeps the numbers stable no matter which day of the month you seed on.
+    monthlyIncome: MONTHLY_INCOME,
+    categories: [
+      'Salary', 'Bonus', 'Investment Income',
+      'Rent', 'Groceries', 'Utilities', 'Transport', 'Health', 'Insurance',
+      'Dining', 'Entertainment', 'Shopping', 'Subscriptions', 'Travel',
+      'Education', 'Gifts', 'Fees', 'Save', 'Invest', 'Other'
+    ],
+    updatedAt: nowIso
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Wallets
+   * ---------------------------------------------------------------- */
+
+  var wallets = {
+    bank:   { id: uuid_(), name: 'K-PLUS', mode: 'expense',    kind: 'bank',      opening: 50000, color: '#22c55e', icon: '\u{1F3E6}', note: 'Main salary account' },
+    cash:   { id: uuid_(), name: 'Cash',   mode: 'expense',    kind: 'cash',      opening: 2000,  color: '#f59e0b', icon: '\u{1F4B5}', note: 'Wallet cash' },
+    invest: { id: uuid_(), name: 'Dime!',  mode: 'investment', kind: 'brokerage', opening: 5000,  color: '#6366f1', icon: '\u{1F4C8}', note: 'US equities, settled in THB' }
+  };
+
+  ['bank', 'cash', 'invest'].forEach(function (key) {
+    var w = wallets[key];
+    insertRow_('Wallets', {
+      id: w.id, userId: userId, name: w.name, mode: w.mode, kind: w.kind,
+      currency: 'THB', openingBalance: w.opening, color: w.color, icon: w.icon,
+      archived: false, note: w.note, createdAt: monthStart(-3).toISOString()
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Transactions
+   *
+   * Columns: monthOffset, day, type, wallet, amount, category, note, toWallet
+   *
+   * Current-month expenses are sized against the budgets defined below:
+   *   Groceries    5,200 of  8,000                 -> ok
+   *   Dining       4,300 of  5,000                 -> warning
+   *   Shopping     5,450 of  4,000                 -> over
+   *   Cash wallet  1,870 of  2,500                 -> ok
+   *   All spending 32,739 of 45,500 (70% of income) -> ok
+   * ---------------------------------------------------------------- */
+
+  var TX = [
+    /* ---- current month ---- */
+    [0,  1, 'income',   'bank', 65000, 'Salary',        'Monthly salary'],
+    [0, 12, 'income',   'bank', 15000, 'Bonus',         'Mid-year performance bonus'],
+
+    [0,  1, 'expense',  'bank', 12000, 'Rent',          'Condo rent'],
+    [0,  4, 'expense',  'bank',  1850, 'Utilities',     'MEA electricity'],
+    [0,  4, 'expense',  'bank',   599, 'Utilities',     'AIS Fibre'],
+    [0,  3, 'expense',  'bank',  1450, 'Groceries',     'Big C weekly run'],
+    [0,  9, 'expense',  'bank',   980, 'Groceries',     'Lotus top-up'],
+    [0, 16, 'expense',  'bank',  1320, 'Groceries',     'Makro bulk buy'],
+    [0, 23, 'expense',  'bank',  1450, 'Groceries',     'Villa Market'],
+    [0,  2, 'expense',  'cash',   620, 'Dining',        'Som tam and gai yang'],
+    [0,  7, 'expense',  'bank',  1180, 'Dining',        'Dinner with friends'],
+    [0, 11, 'expense',  'cash',   450, 'Dining',        'Coffee and work'],
+    [0, 18, 'expense',  'bank',   890, 'Dining',        'Sunday brunch'],
+    [0, 24, 'expense',  'bank',  1160, 'Dining',        'Ramen night'],
+    [0,  6, 'expense',  'bank',  3200, 'Shopping',      'Running shoes'],
+    [0, 14, 'expense',  'bank',  1450, 'Shopping',      'Uniqlo restock'],
+    [0, 21, 'expense',  'bank',   800, 'Shopping',      'Phone case and cable'],
+    [0,  5, 'expense',  'cash',   420, 'Transport',     'BTS card top-up'],
+    [0, 19, 'expense',  'cash',   380, 'Transport',     'Grab to the airport'],
+    [0, 13, 'expense',  'bank',  1200, 'Health',        'Dental cleaning'],
+    [0,  8, 'expense',  'bank',   350, 'Entertainment', 'Netflix and Spotify'],
+    [0, 17, 'expense',  'bank',   990, 'Education',     'Udemy course'],
+
+    [0,  2, 'transfer', 'bank',  3000, 'Other',         'Cash withdrawal', 'cash'],
+    [0,  5, 'transfer', 'bank', 10000, 'Invest',        'Monthly DCA',     'invest'],
+
+    /* ---- last month ---- */
+    [-1,  1, 'income',   'bank', 62000, 'Salary',        'Monthly salary'],
+    [-1,  1, 'expense',  'bank', 12000, 'Rent',          'Condo rent'],
+    [-1,  4, 'expense',  'bank',  2300, 'Utilities',     'Electricity and internet'],
+    [-1, 10, 'expense',  'bank',  6100, 'Groceries',     'Groceries for the month'],
+    [-1, 14, 'expense',  'bank',  3800, 'Dining',        'Eating out'],
+    [-1, 20, 'expense',  'bank',  2400, 'Shopping',      'Household bits'],
+    [-1,  8, 'expense',  'bank',   350, 'Entertainment', 'Netflix and Spotify'],
+    [-1, 22, 'expense',  'bank',   800, 'Health',        'Pharmacy'],
+    [-1,  7, 'expense',  'cash',   900, 'Transport',     'BTS and Grab'],
+    [-1,  2, 'transfer', 'bank',  2000, 'Other',         'Cash withdrawal', 'cash'],
+    [-1,  5, 'transfer', 'bank', 12000, 'Invest',        'Monthly DCA',     'invest'],
+
+    /* ---- two months ago: the expensive one, so the trend has a peak ---- */
+    [-2,  1, 'income',   'bank', 62000, 'Salary',        'Monthly salary'],
+    [-2,  1, 'expense',  'bank', 12000, 'Rent',          'Condo rent'],
+    [-2,  4, 'expense',  'bank',  2600, 'Utilities',     'Electricity and internet'],
+    [-2, 11, 'expense',  'bank',  5600, 'Groceries',     'Groceries for the month'],
+    [-2, 15, 'expense',  'bank',  4900, 'Dining',        'Eating out'],
+    [-2, 18, 'expense',  'bank',  6800, 'Shopping',      'New monitor'],
+    [-2,  8, 'expense',  'bank',   350, 'Entertainment', 'Netflix and Spotify'],
+    [-2, 25, 'expense',  'bank',  2500, 'Travel',        'Songkran trip'],
+    [-2,  7, 'expense',  'cash',  1100, 'Transport',     'BTS and Grab'],
+    [-2,  2, 'transfer', 'bank',  2000, 'Other',         'Cash withdrawal', 'cash'],
+    [-2,  5, 'transfer', 'bank', 12000, 'Invest',        'Monthly DCA',     'invest'],
+
+    /* ---- three months ago ---- */
+    [-3,  1, 'income',   'bank', 62000, 'Salary',        'Monthly salary'],
+    [-3, 20, 'income',   'bank', 20000, 'Bonus',         'Annual bonus'],
+    [-3,  1, 'expense',  'bank', 12000, 'Rent',          'Condo rent'],
+    [-3,  4, 'expense',  'bank',  2100, 'Utilities',     'Electricity and internet'],
+    [-3, 12, 'expense',  'bank',  5900, 'Groceries',     'Groceries for the month'],
+    [-3, 16, 'expense',  'bank',  3200, 'Dining',        'Eating out'],
+    [-3, 19, 'expense',  'bank',  1900, 'Shopping',      'Clothes'],
+    [-3,  8, 'expense',  'bank',   350, 'Entertainment', 'Netflix and Spotify'],
+    [-3,  6, 'expense',  'cash',   850, 'Transport',     'BTS and Grab'],
+    [-3,  2, 'transfer', 'bank',  2000, 'Other',         'Cash withdrawal', 'cash'],
+    [-3,  5, 'transfer', 'bank', 15000, 'Invest',        'Opening the brokerage account', 'invest']
+  ];
+
+  TX.forEach(function (row) {
+    insertRow_('Transactions', {
+      id: uuid_(),
+      userId: userId,
+      walletId: wallets[row[3]].id,
+      toWalletId: row[7] ? wallets[row[7]].id : '',
+      type: row[2],
+      amount: row[4],
+      category: row[5],
+      note: row[6],
+      date: dayAt(row[0], row[1]),
+      createdAt: nowIso
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Investments
+   *
+   * buyPrice is per share in THB, the base currency — the same figure the buy
+   * form produces once a USD price has been converted. The USD price it came
+   * from is kept in the note so the arithmetic can be checked by eye.
+   *
+   * Columns: monthOffset, day, symbol, qty, thbPerShare, fees, tags, note
+   * ---------------------------------------------------------------- */
+
+  var HOLDINGS = [
+    [-3, 15, 'NVDA',  2,  3500, 40, 'semis;ai',     'Bought at about $105 at 33.30 THB/USD'],
+    [-2,  6, 'AAPL',  1,  6900, 30, 'bluechip',     'Bought at about $208 at 33.15 THB/USD'],
+    [-2, 19, 'MSFT',  1, 14200, 45, 'bluechip;ai',  'Bought at about $428 at 33.18 THB/USD'],
+    [-1,  9, 'GOOGL', 3,  5900, 35, 'bluechip;ads', 'Bought at about $178 at 33.15 THB/USD']
+  ];
+
+  HOLDINGS.forEach(function (row) {
+    insertRow_('Investments', {
+      id: uuid_(), userId: userId, walletId: wallets.invest.id,
+      symbol: row[2], quantity: row[3], buyPrice: row[4], fees: row[5],
+      buyDate: dayAt(row[0], row[1]),
+      tags: row[6], status: 'hold', sellPrice: 0, sellDate: '',
+      note: row[7], createdAt: nowIso
+    });
+  });
+
+  // One closed position so the Investments page has realised PnL to show:
+  // 2 x 7,800 + 50 fees = 15,650 cost, sold for 18,800 -> +3,150 realised.
+  insertRow_('Investments', {
+    id: uuid_(), userId: userId, walletId: wallets.invest.id,
+    symbol: 'TSLA', quantity: 2, buyPrice: 7800, fees: 50,
+    buyDate: dayAt(-3, 8),
+    tags: 'ev;volatile', status: 'sold',
+    sellPrice: 9400, sellDate: dayAt(-1, 20),
+    note: 'Bought at about $236, sold at about $285. Realised +3,150 THB.',
+    createdAt: nowIso
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Budgets
+   *
+   * Sized against the current-month spending above so the list shows one of
+   * every status the UI can render.
+   * ---------------------------------------------------------------- */
+
+  var thisPeriod = periodAt(0);
+  var lastPeriod = periodAt(-1);
+
+  var BUDGETS = [
+    // period,   scope,       targetId,    label,          mode,      value, note
+    [thisPeriod, 'category', 'Groceries', 'Groceries',    'amount',   8000, 'Spent 5,200 — comfortably on track'],
+    [thisPeriod, 'category', 'Dining',    'Dining',       'amount',   5000, 'Spent 4,300 — approaching the limit'],
+    [thisPeriod, 'category', 'Shopping',  'Shopping',     'amount',   4000, 'Spent 5,450 — over budget'],
+    [thisPeriod, 'wallet',   'cash',      'Cash',         'amount',   2500, 'Keeps pocket spending in check'],
+    [thisPeriod, 'global',   '',          'All spending', 'percent',    70, '70% of monthly income'],
+    // Last month too, so the period switcher and "Copy last month" have data.
+    [lastPeriod, 'category', 'Groceries', 'Groceries',    'amount',   8000, ''],
+    [lastPeriod, 'category', 'Dining',    'Dining',       'amount',   5000, '']
+  ];
+
+  BUDGETS.forEach(function (row) {
+    var scope = row[1];
+    insertRow_('Budgets', {
+      id: uuid_(), userId: userId,
+      period: row[0], scope: scope,
+      // Wallet budgets point at a wallet id; category budgets at the name.
+      targetId: scope === 'wallet' ? wallets[row[2]].id : row[2],
+      targetLabel: row[3],
+      mode: row[4], value: row[5], baseIncome: 0,
+      note: row[6],
+      createdAt: nowIso
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Report what was built
+   * ---------------------------------------------------------------- */
+
+  var balances = computeWalletBalances_(userId, thisPeriod);
+  var progress = computeBudgetProgress_(userId, thisPeriod);
+
+  Logger.log('Seeded demo account — sign in as ' + USERNAME + ' / ' + PASSWORD);
+  Logger.log('  transactions: ' + TX.length + '   investments: ' + (HOLDINGS.length + 1) +
+             '   budgets: ' + BUDGETS.length);
+  Logger.log('  wallets:');
+  balances.forEach(function (w) {
+    Logger.log('    ' + w.name + ': balance ' + w.balance +
+               (w.investedCost ? ', invested ' + w.investedCost : ''));
+  });
+  Logger.log('  budgets for ' + thisPeriod + ':');
+  progress.forEach(function (b) {
+    Logger.log('    ' + b.targetLabel + ': ' + b.spent + ' / ' + b.limit +
+               ' (' + b.percentUsed + '%) -> ' + b.status);
+  });
+
+  return { userId: userId, username: USERNAME, period: thisPeriod };
+}
+
+/**
+ * Removes the demo user and everything belonging to it, so seedDemoAccount()
+ * can be run again from clean. Touches nothing owned by any other account.
+ */
+function deleteDemoAccount() {
+  var user = readTable_('Users').filter(function (u) { return u.username === 'demo'; })[0];
+  if (!user) {
+    Logger.log('No demo account to remove.');
+    return 0;
+  }
+
+  var removed = 0;
+  ['Transactions', 'Investments', 'Budgets', 'Wallets'].forEach(function (name) {
+    removed += deleteWhere_(name, function (row) { return row.userId === user.id; });
+  });
+  removed += deleteWhere_('Settings', function (row) { return row.userId === user.id; });
+  removed += deleteWhere_('Users', function (row) { return row.id === user.id; });
+
+  Logger.log('Removed the demo account and ' + removed + ' rows.');
+  return removed;
 }

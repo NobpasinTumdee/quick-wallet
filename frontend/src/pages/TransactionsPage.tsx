@@ -1,6 +1,8 @@
+import { Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { TransactionForm, TransactionPayload } from '../components/TransactionForm';
+import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, Input, Select } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
@@ -124,7 +126,7 @@ export function TransactionsPage({ period }: { period: string }) {
           </div>
         ) : transactions.items.length === 0 ? (
           <EmptyState
-            icon="🧾"
+            icon={<Icon icon={Receipt} size="xl" />}
             title="Nothing recorded here"
             description={
               wallets.items.length === 0
