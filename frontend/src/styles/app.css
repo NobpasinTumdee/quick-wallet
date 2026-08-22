@@ -2589,6 +2589,226 @@ tr:hover .row-actions,
   border: 0;
 }
 
+/* ==========================================================================
+   Candlestick chart
+   --------------------------------------------------------------------------
+   The canvas itself is painted by lightweight-charts, which cannot read CSS
+   variables — StockCandlestickChart resolves those in JS and re-applies them
+   on a theme swap. Everything *around* the canvas is styled here, so the frame,
+   skeleton and overlays follow the theme the ordinary way.
+   ========================================================================== */
+
+/* A heavier glass treatment than the default card — this panel is the focus
+   of the screen, so it sits slightly forward of the ones around it. */
+.card--glass {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow-lg);
+}
+
+.candle-frame {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.candle-canvas {
+  width: 100%;
+  transition: opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
+}
+
+/* Refetching, or an error is being explained on top: hold the previous render
+   at reduced strength rather than tearing it down. */
+.candle-canvas.is-dimmed {
+  opacity: 0.35;
+}
+
+/* ---- Skeleton ----
+   Shaped like a price series rather than a grey bar, so the reader already
+   knows what is arriving. */
+.candle-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2%;
+  padding: var(--space-5) var(--space-4);
+  pointer-events: none;
+}
+
+.candle-skeleton-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    color-mix(in srgb, var(--text) 8%, var(--surface-2)) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
+}
+
+/* Stagger so the bars breathe as a group instead of pulsing in lockstep. */
+.candle-skeleton-bar:nth-child(3n) { animation-delay: 120ms; }
+.candle-skeleton-bar:nth-child(3n + 1) { animation-delay: 240ms; }
+
+/* ---- Overlays ----
+   Frosted, so the chart stays faintly visible underneath: the message is
+   about the fetch, not about the data being gone. */
+.candle-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  animation: fade var(--dur-base) var(--ease-out) both;
+}
+
+.candle-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 380px;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.candle-overlay-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+/* Hitting a free-tier ceiling is a "wait", not a failure — warm, not alarming. */
+.candle-overlay.is-limit .candle-overlay-icon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.candle-overlay-title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  /* The countdown re-renders every second; tabular figures stop the text
+     jittering as the digit width changes. */
+  font-variant-numeric: tabular-nums;
+}
+
+.candle-overlay-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ---- Chart card ---- */
+
+.candle-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.candle-symbol {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.candle-symbol-meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+/* O/H/L/C readout — follows the crosshair, falls back to the latest bar, so
+   the values are legible without hovering. */
+.candle-ohlc {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.candle-ohlc b {
+  margin-left: 4px;
+  font-weight: var(--weight-semi);
+  color: var(--text-secondary);
+}
+
+.candle-ohlc .is-up {
+  color: var(--positive);
+}
+
+.candle-ohlc .is-down {
+  color: var(--negative);
+}
+
+/* ---- Selectable position rows ---- */
+
+.data tbody tr.is-selectable {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.data tbody tr.is-selectable:hover {
+  background: var(--surface-hover);
+}
+
+.data tbody tr.is-charted {
+  background: var(--accent-softer);
+}
+
+.data tbody tr.is-charted:hover {
+  background: var(--accent-soft);
+}
+
+/* An accent rail on the first cell marks the charted row without relying on
+   the background tint alone, which is very faint in some themes. */
+.data tbody tr.is-charted > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.data tbody tr.is-selectable:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 /* ---- Brand mark ---- */
 .logo {
   flex: none;

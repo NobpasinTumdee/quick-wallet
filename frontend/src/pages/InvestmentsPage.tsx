@@ -1,7 +1,10 @@
 import { ChartColumn, Flag, Receipt, TrendingUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import type { ChartReadout } from '../components/StockCandlestickChart';
+import { useCandles } from '../hooks/useCandles';
+import { candleProviderName } from '../services/candleApi';
 import { InvestmentForm, InvestmentPayload } from '../components/InvestmentForm';
 import {
   Alert,
@@ -32,6 +35,12 @@ import {
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, WalletBalance } from '../types';
 
+/* lightweight-charts is ~180kB and only this one card uses it, so it loads
+   alongside the positions request rather than blocking every other route. */
+const StockCandlestickChart = lazy(() =>
+  import('../components/StockCandlestickChart').then((m) => ({ default: m.StockCandlestickChart })),
+);
+
 export function InvestmentsPage() {
   const { settings } = useSettings();
   const [view, setView] = useState<'hold' | 'sold'>('hold');
@@ -39,6 +48,11 @@ export function InvestmentsPage() {
 
   const wallets = useExcelDB<WalletBalance>('wallets');
   const investments = useExcelDB<Investment>('investments');
+
+  /** Which position the chart is drawing. Defaults to the first open one. */
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  /** O/H/L/C under the crosshair; null falls back to the latest bar. */
+  const [readout, setReadout] = useState<ChartReadout | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Investment | undefined>();
@@ -65,6 +79,29 @@ export function InvestmentsPage() {
   );
 
   const realizedTotal = soldPositions.reduce((sum, i) => sum + i.realizedPnl, 0);
+
+  /* Pick the first open position once data arrives, and re-pick if the charted
+     symbol is sold or deleted — otherwise the chart would keep drawing a
+     position that is no longer in the table. */
+  const openSymbols = useMemo(
+    () => [...new Set(portfolio.positions.map((p) => p.symbol))],
+    [portfolio.positions],
+  );
+
+  useEffect(() => {
+    if (!openSymbols.length) {
+      setSelectedSymbol(null);
+      return;
+    }
+    setSelectedSymbol((current) => (current && openSymbols.includes(current) ? current : openSymbols[0]));
+  }, [openSymbols]);
+
+  const chart = useCandles(selectedSymbol, 12);
+
+  /* The crosshair bar when hovering, else the most recent one, so the readout
+     always shows real numbers instead of blanking when the pointer leaves. */
+  const latest = chart.candles.length ? chart.candles[chart.candles.length - 1] : null;
+  const shown = readout ?? (latest ? { ...latest, change: latest.close - latest.open } : null);
 
   /* The broker's currency and today's rate into the books. Used to show avg cost
      the way the brokerage app shows it. */
@@ -211,6 +248,52 @@ export function InvestmentsPage() {
         </Alert>
       )}
 
+      {/* ---- Price history for the selected position ---- */}
+      {selectedSymbol && (
+        <Card className="card--glass">
+          <div className="candle-card-head">
+            <div>
+              <span className="candle-symbol">
+                {selectedSymbol}
+                <span className="candle-symbol-meta">
+                  daily · 12 months · {candleProviderName()}
+                  {chart.fromCache && ' · cached'}
+                </span>
+              </span>
+            </div>
+
+            {shown && (
+              <div className="candle-ohlc">
+                <span>O<b>{shown.open.toFixed(2)}</b></span>
+                <span>H<b>{shown.high.toFixed(2)}</b></span>
+                <span>L<b>{shown.low.toFixed(2)}</b></span>
+                <span>
+                  C
+                  <b className={shown.change >= 0 ? 'is-up' : 'is-down'}>{shown.close.toFixed(2)}</b>
+                </span>
+                <span className={shown.change >= 0 ? 'is-up' : 'is-down'}>
+                  {shown.change >= 0 ? '+' : ''}
+                  {shown.change.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Suspense fallback={<div className="candle-frame" style={{ height: 340 }} />}>
+          <StockCandlestickChart
+            candles={chart.candles}
+            height={340}
+            loading={chart.loading}
+            refreshing={chart.refreshing}
+            error={chart.error}
+            cooldown={chart.cooldown}
+            onRetry={chart.reload}
+            onReadout={setReadout}
+          />
+          </Suspense>
+        </Card>
+      )}
+
       <Card
         title="Positions"
         actions={
@@ -322,8 +405,30 @@ export function InvestmentsPage() {
                   const pnl = isOpen ? (valuation?.unrealizedPnl ?? 0) : row.realizedPnl;
                   const pnlPercent = isOpen ? (valuation?.unrealizedPnlPercent ?? 0) : row.realizedPnlPercent;
 
+                  const charted = isOpen && row.symbol === selectedSymbol;
+
                   return (
-                    <tr key={row.id}>
+                    <tr
+                      key={row.id}
+                      /* Only open positions have a live series worth charting;
+                         sold rows stay inert rather than offering a dead click. */
+                      className={cx(isOpen && 'is-selectable', charted && 'is-charted')}
+                      onClick={isOpen ? () => setSelectedSymbol(row.symbol) : undefined}
+                      tabIndex={isOpen ? 0 : undefined}
+                      role={isOpen ? 'button' : undefined}
+                      aria-pressed={isOpen ? charted : undefined}
+                      aria-label={isOpen ? `Chart ${row.symbol}` : undefined}
+                      onKeyDown={
+                        isOpen
+                          ? (event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                setSelectedSymbol(row.symbol);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
                       <td>
                         <strong>{row.symbol}</strong>
                         {isOpen && valuation && looksMisEntered(valuation) && (
