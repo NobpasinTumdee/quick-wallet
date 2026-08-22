@@ -3070,6 +3070,388 @@ tr:hover .row-actions,
   }
 }
 
+/* ==========================================================================
+   Boot screen
+   --------------------------------------------------------------------------
+   PERFORMANCE CONTRACT
+   Every @keyframes block below animates `transform` and `opacity` and nothing
+   else. Those two are the only properties the compositor can handle without
+   re-running layout or paint, so the whole scene runs on the GPU at 60fps even
+   with three blurred layers stacked.
+
+   What is deliberately NOT animated:
+     background-position  repaints the gradient every frame
+     filter: blur(...)    re-rasterises every frame
+     width/height/top     full layout on every frame
+   The blur is set once per blob and never touched again; only the transform
+   moves, so the blurred texture is rasterised once and then just composited.
+
+   THEMING
+   This screen renders before SettingsProvider resolves the user's palette, so
+   it owns its colours rather than following a theme that is not loaded yet.
+   Re-point the three --boot-* hues at --accent / --positive / --warning to
+   make it follow the theme instead.
+   ========================================================================== */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--space-4);
+  overflow: hidden;
+  isolation: isolate;
+
+  /* Deep space, then the three accent hues that wash over it. */
+  --boot-void: #04060d;
+  --boot-void-2: #080d1c;
+  --boot-emerald: #12c88d;
+  --boot-cyan: #22d3ee;
+  --boot-amethyst: #a855f7;
+
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--boot-void-2) 0%, var(--boot-void) 62%);
+  color: #e8eefc;
+}
+
+/* ---- Aurora ---- */
+
+.boot-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.boot-blob {
+  position: absolute;
+  /* Oversized and centred with a negative offset so a blob can drift well past
+     the viewport edge without ever revealing a hard edge. */
+  width: 78vmax;
+  height: 78vmax;
+  margin: -39vmax 0 0 -39vmax;
+  border-radius: 50%;
+  filter: blur(52px);
+  opacity: 0.62;
+  /* Promote once, up front — not mid-animation, which causes a visible hitch. */
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+.boot-blob--emerald {
+  top: 28%;
+  left: 22%;
+  background: radial-gradient(circle at 50% 50%, var(--boot-emerald) 0%, rgba(16, 185, 129, 0) 62%);
+  animation: boot-drift-a 19s var(--ease-in-out) infinite alternate;
+}
+
+.boot-blob--cyan {
+  top: 20%;
+  left: 76%;
+  background: radial-gradient(circle at 50% 50%, var(--boot-cyan) 0%, rgba(34, 211, 238, 0) 60%);
+  opacity: 0.42;
+  animation: boot-drift-b 23s var(--ease-in-out) infinite alternate;
+}
+
+.boot-blob--amethyst {
+  top: 82%;
+  left: 54%;
+  background: radial-gradient(circle at 50% 50%, var(--boot-amethyst) 0%, rgba(168, 85, 247, 0) 64%);
+  opacity: 0.5;
+  animation: boot-drift-c 31s var(--ease-in-out) infinite alternate;
+}
+
+/* Periods are 19 / 23 / 31 seconds — pairwise coprime, so the three blobs
+   never realign and the loop has no seam a viewer can catch. */
+@keyframes boot-drift-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(9vw, -6vh, 0) scale(1.18); }
+  100% { transform: translate3d(-7vw, 8vh, 0) scale(0.94); }
+}
+
+@keyframes boot-drift-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1.06); opacity: 0.42; }
+  50%  { transform: translate3d(-11vw, 9vh, 0) scale(0.9); opacity: 0.6; }
+  100% { transform: translate3d(6vw, -5vh, 0) scale(1.14); opacity: 0.38; }
+}
+
+@keyframes boot-drift-c {
+  0%   { transform: translate3d(0, 0, 0) scale(0.96); }
+  50%  { transform: translate3d(8vw, -11vh, 0) scale(1.2); }
+  100% { transform: translate3d(-9vw, -4vh, 0) scale(1); }
+}
+
+/* A faint engineering grid, masked to fade out at the edges so it reads as
+   depth rather than as a table. */
+.boot-grid {
+  position: absolute;
+  inset: -50%;
+  background-image:
+    linear-gradient(to right, rgba(180, 220, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(180, 220, 255, 0.055) 1px, transparent 1px);
+  background-size: 54px 54px;
+  -webkit-mask-image: radial-gradient(52% 48% at 50% 46%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(52% 48% at 50% 46%, #000 0%, transparent 78%);
+  will-change: transform;
+  /* Translating by exactly one cell makes the loop seamless — the grid is
+     identical every 54px, so the reset is invisible. */
+  animation: boot-grid-drift 9s linear infinite;
+}
+
+@keyframes boot-grid-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(54px, 54px, 0); }
+}
+
+/* Darkens the corners so the card sits in a pool of light. */
+.boot-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(68% 58% at 50% 46%, transparent 0%, rgba(3, 5, 11, 0.72) 100%);
+}
+
+/* ---- Card ---- */
+
+.boot-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-6) var(--space-6);
+  border-radius: var(--radius-lg);
+  /* Two layers: a specular sheen lit from the top-left, over a dark smoked
+     base. Without the base the backdrop-filter just tints the card with
+     whatever aurora is behind it, and the whole thing reads as coloured
+     plastic rather than glass. */
+  background:
+    linear-gradient(
+      158deg,
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.04) 34%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
+    rgba(7, 11, 22, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  box-shadow:
+    0 32px 80px -28px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  text-align: center;
+  animation: boot-card-in 900ms var(--ease-out) both;
+}
+
+@keyframes boot-card-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.985); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* ---- Logo: halo, rings, scan ---- */
+
+.boot-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+}
+
+.boot-halo {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  /* Three stops with a long tail — a two-stop gradient terminates too sharply
+     and reads as a disc with an edge rather than as light. */
+  background: radial-gradient(
+    circle,
+    rgba(34, 211, 238, 0.34) 0%,
+    rgba(34, 211, 238, 0.12) 34%,
+    rgba(34, 211, 238, 0) 72%
+  );
+  will-change: transform, opacity;
+  animation: boot-halo-pulse 3.2s var(--ease-in-out) infinite;
+}
+
+@keyframes boot-halo-pulse {
+  0%, 100% { transform: scale(0.86); opacity: 0.45; }
+  50%      { transform: scale(1.12); opacity: 0.9; }
+}
+
+/* Two rings on the same keyframes, one half a cycle behind, so a ring is
+   always expanding — the effect reads as continuous rather than as a beat. */
+.boot-ring {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  will-change: transform, opacity;
+  animation: boot-ring-out 3.2s var(--ease-out) infinite;
+}
+
+.boot-ring--delayed {
+  animation-delay: 1.6s;
+}
+
+@keyframes boot-ring-out {
+  0%   { transform: scale(0.82); opacity: 0; }
+  18%  { opacity: 0.75; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* Clips the scan bar to the logo's box so the sweep reads as passing *over*
+   the mark rather than across the card. */
+.boot-logo-clip {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.boot-logo {
+  display: block;
+  filter: drop-shadow(0 6px 18px rgba(34, 211, 238, 0.35));
+}
+
+.boot-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 42%;
+  background: linear-gradient(
+    180deg,
+    rgba(34, 211, 238, 0) 0%,
+    rgba(34, 211, 238, 0.28) 45%,
+    rgba(190, 255, 255, 0.6) 50%,
+    rgba(34, 211, 238, 0.28) 55%,
+    rgba(34, 211, 238, 0) 100%
+  );
+  will-change: transform;
+  animation: boot-scan-sweep 2.6s var(--ease-in-out) infinite;
+}
+
+@keyframes boot-scan-sweep {
+  0%       { transform: translate3d(0, -110%, 0); }
+  55%, 100% { transform: translate3d(0, 260%, 0); }
+}
+
+/* ---- Wordmark & status ---- */
+
+.boot-brand {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.01em;
+  color: #f2f7ff;
+  animation: boot-fade-up 800ms var(--ease-out) 120ms both;
+}
+
+.boot-status {
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  color: rgba(216, 231, 255, 0.66);
+  animation: boot-fade-up 800ms var(--ease-out) 220ms both;
+}
+
+@keyframes boot-fade-up {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Three real elements rather than animated text content: a width or content
+   animation would reflow the line and shift the label on every tick. */
+.boot-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 5px;
+}
+
+.boot-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  will-change: transform, opacity;
+  animation: boot-dot 1.4s var(--ease-in-out) infinite;
+}
+
+.boot-dots i:nth-child(2) { animation-delay: 0.18s; }
+.boot-dots i:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes boot-dot {
+  0%, 60%, 100% { opacity: 0.25; transform: translate3d(0, 0, 0); }
+  30%           { opacity: 1; transform: translate3d(0, -3px, 0); }
+}
+
+/* ---- Data-flow line ---- */
+
+.boot-track {
+  position: relative;
+  width: 172px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  animation: boot-fade-up 800ms var(--ease-out) 320ms both;
+}
+
+.boot-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0) 0%,
+    var(--boot-cyan) 42%,
+    var(--boot-emerald) 58%,
+    rgba(16, 185, 129, 0) 100%
+  );
+  will-change: transform;
+  /* Indeterminate on purpose: the boot has no measurable progress, and a fake
+     percentage bar would be a lie about how far along it is. */
+  animation: boot-beam-run 1.9s var(--ease-in-out) infinite;
+}
+
+@keyframes boot-beam-run {
+  0%   { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(100%, 0, 0); }
+}
+
+/* ---- Reduced motion ----
+   theme.css already collapses every animation globally, which leaves the
+   scene as a still. These two keep that still looking composed rather than
+   caught mid-frame. */
+@media (prefers-reduced-motion: reduce) {
+  .boot-scan {
+    opacity: 0;
+  }
+
+  .boot-ring {
+    display: none;
+  }
+}
+
+/* ---- Small screens ---- */
+@media (max-width: 480px) {
+  .boot-card {
+    padding: var(--space-6) var(--space-5);
+  }
+
+  .boot-blob {
+    filter: blur(38px);
+  }
+}
+
 /* ---- Brand mark ---- */
 .logo {
   flex: none;
