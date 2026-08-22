@@ -2254,6 +2254,14 @@ tr:hover .row-actions,
 /* Spins the glyph inside a RefreshButton while its fetch is in flight, so the
    button is its own progress indicator. Collapsed by the reduced-motion block
    in theme.css, where the disabled state still signals "working". */
+/* Settings sits in the topbar rather than the nav lists, so it needs its own
+   active treatment — the sidebar rail and tabbar underline do not reach here. */
+.topbar-settings.is-active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--accent);
+}
+
 .icon-spin {
   animation: spin 800ms linear infinite;
 }

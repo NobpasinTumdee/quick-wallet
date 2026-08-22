@@ -38,8 +38,18 @@ const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
   { route: 'investments', label: 'Invest', icon: TrendingUp },
   { route: 'budgets', label: 'Budgets', icon: Target },
   { route: 'subscriptions', label: 'Recurring', icon: Repeat2 },
-  { route: 'settings', label: 'Settings', icon: Settings },
 ];
+
+/**
+ * Settings lives in the topbar instead of the nav lists — icon only, on every
+ * breakpoint. Kept in the same shape as a NAV row so the topbar title lookup
+ * below can treat it as one.
+ */
+const SETTINGS_ITEM: { route: Route; label: string; icon: LucideIcon } = {
+  route: 'settings',
+  label: 'Settings',
+  icon: Settings,
+};
 
 /**
  * What each tab needs before it can paint. Warmed on hover — a pointer takes
@@ -130,7 +140,7 @@ export function AppShell() {
     await Promise.all(work);
   }, [route, reloadSettings]);
 
-  const active = NAV.find((item) => item.route === route) ?? NAV[0];
+  const active = [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
 
   return (
@@ -208,6 +218,18 @@ export function AppShell() {
               </div>
             )}
             <RefreshButton onRefresh={refreshCurrentRoute} label="Refresh this page" />
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cx('topbar-settings', route === 'settings' && 'is-active')}
+              aria-label="Settings"
+              aria-current={route === 'settings' ? 'page' : undefined}
+              title="Settings"
+              onClick={() => go('settings')}
+            >
+              <Icon icon={SETTINGS_ITEM.icon} size="sm" />
+            </Button>
           </div>
         </header>
 
