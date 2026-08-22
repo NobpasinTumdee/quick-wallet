@@ -2809,6 +2809,267 @@ tr:hover .row-actions,
   box-shadow: var(--ring);
 }
 
+/* ==========================================================================
+   Subscriptions timeline
+   --------------------------------------------------------------------------
+   Urgency is carried by the group, not by each card: a vertical rail runs down
+   each section tinted by how soon its bills fall due, so the eye lands on the
+   red section first and the cards themselves stay calm.
+   ========================================================================== */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.timeline-group {
+  position: relative;
+  /* The tone each group inherits. Overridden per bucket below so a single
+     token drives the dot, the rail and the card edge together. */
+  --timeline-tone: var(--text-faint);
+}
+
+.timeline-group--due {
+  --timeline-tone: var(--negative);
+}
+
+.timeline-group--soon {
+  --timeline-tone: var(--warning);
+}
+
+.timeline-group--later {
+  --timeline-tone: var(--positive);
+}
+
+.timeline-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.timeline-dot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--timeline-tone) 15%, transparent);
+  color: var(--timeline-tone);
+  border: 1px solid color-mix(in srgb, var(--timeline-tone) 35%, transparent);
+}
+
+.timeline-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.timeline-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--timeline-tone) 16%, transparent);
+  color: var(--timeline-tone);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-blurb {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* The connecting line. Sits under the dot's centre and stops short of the last
+   card, so the timeline reads as a thread rather than a border. */
+.timeline-items {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: 46px;
+}
+
+.timeline-items::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  bottom: 18px;
+  left: 17px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--timeline-tone) 45%, transparent) 0%,
+    color-mix(in srgb, var(--timeline-tone) 8%, transparent) 100%
+  );
+}
+
+/* ---- Cards ---- */
+
+.sub-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.sub-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--timeline-tone) 35%, var(--border));
+  box-shadow: var(--shadow-md);
+}
+
+/* Optimistic rows: the payment is on the wire, so the card recedes rather than
+   disappearing — the number stays readable while it settles. */
+.sub-card.is-pending {
+  opacity: 0.6;
+}
+
+.sub-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--timeline-tone);
+}
+
+/* Due bills get a soft wash so the section reads as urgent at a glance. */
+.timeline-group--due .sub-card {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--negative) 9%, transparent) 0%,
+    var(--glass-bg) 42%
+  );
+  box-shadow: var(--shadow-md);
+}
+
+.sub-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sub-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sub-name {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.sub-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sub-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sub-meta svg {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.sub-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.sub-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.sub-amount {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sub-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* A slightly shorter hero for screens whose headline is a summary rather than
+   the point of the page. */
+.hero--compact {
+  padding: var(--space-5);
+}
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  .timeline-items {
+    padding-left: 30px;
+  }
+
+  .timeline-items::before {
+    left: 11px;
+  }
+
+  .sub-card {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .sub-side {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .sub-actions {
+    flex-wrap: wrap;
+  }
+}
+
 /* ---- Brand mark ---- */
 .logo {
   flex: none;

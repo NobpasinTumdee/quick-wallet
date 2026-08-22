@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   LogOut,
   Receipt,
+  Repeat2,
   Settings,
   Target,
   TrendingUp,
@@ -20,6 +21,7 @@ import { BudgetsPage } from '../pages/BudgetsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { SubscriptionsPage } from '../pages/SubscriptionsPage';
 import { TransactionsPage } from '../pages/TransactionsPage';
 import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
@@ -35,6 +37,7 @@ const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
   { route: 'transactions', label: 'Activity', icon: Receipt },
   { route: 'investments', label: 'Invest', icon: TrendingUp },
   { route: 'budgets', label: 'Budgets', icon: Target },
+  { route: 'subscriptions', label: 'Recurring', icon: Repeat2 },
   { route: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -63,6 +66,10 @@ function warmRoute(route: Route, period: string): void {
       prefetch('/api/budgets', { period });
       prefetch('/api/wallets');
       break;
+    case 'subscriptions':
+      prefetch('/api/subscriptions');
+      prefetch('/api/wallets');
+      break;
     default:
       break;
   }
@@ -82,6 +89,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   transactions: ['/api/transactions', '/api/wallets'],
   investments: ['/api/investments', '/api/wallets'],
   budgets: ['/api/budgets', '/api/wallets'],
+  subscriptions: ['/api/subscriptions', '/api/wallets'],
   settings: ['/api/health'],
 };
 
@@ -211,6 +219,7 @@ export function AppShell() {
           {route === 'transactions' && <TransactionsPage period={period} />}
           {route === 'investments' && <InvestmentsPage />}
           {route === 'budgets' && <BudgetsPage period={period} />}
+          {route === 'subscriptions' && <SubscriptionsPage />}
           {route === 'settings' && <SettingsPage />}
         </main>
       </div>

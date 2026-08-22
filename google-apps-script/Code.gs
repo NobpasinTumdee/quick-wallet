@@ -138,6 +138,24 @@ var SHEETS = {
       { key: 'createdAt', header: 'Created At', type: 'date' }
     ]
   },
+  Subscriptions: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'name', header: 'Name', type: 'string' },
+      { key: 'amount', header: 'Amount', type: 'number' },
+      { key: 'walletId', header: 'Wallet ID', type: 'string' },
+      { key: 'category', header: 'Category', type: 'string' },
+      { key: 'frequency', header: 'Frequency', type: 'string' },
+      /* datekey, not string: Sheets would otherwise parse "2026-09-01" into a
+         Date and hand it back as a UTC ISO stamp — the same trap the Budgets
+         Period column fell into. */
+      { key: 'nextDueDate', header: 'Next Due Date', type: 'datekey' },
+      { key: 'note', header: 'Note', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -262,6 +280,13 @@ function dispatch_(action, method, query, body, token) {
     'budgets.update': function () { return budgetsUpdate_(requireAuth_(token), query, body); },
     'budgets.delete': function () { return budgetsDelete_(requireAuth_(token), query); },
     'budgets.copy': function () { return budgetsCopy_(requireAuth_(token), body); },
+
+    'subscriptions.list': function () { return subscriptionsList_(requireAuth_(token)); },
+    'subscriptions.get': function () { return ownedRow_(requireAuth_(token), 'Subscriptions', query); },
+    'subscriptions.create': function () { return subscriptionsCreate_(requireAuth_(token), body); },
+    'subscriptions.update': function () { return subscriptionsUpdate_(requireAuth_(token), query, body); },
+    'subscriptions.delete': function () { return subscriptionsDelete_(requireAuth_(token), query); },
+    'subscriptions.pay': function () { return subscriptionsPay_(requireAuth_(token), query, body); },
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
@@ -1678,6 +1703,167 @@ function budgetsCopy_(user, body) {
  * Settings
  * ========================================================================= */
 
+/* =========================================================================
+ * Subscriptions & recurring bills
+ *
+ * Just-in-time rather than scheduled: nothing runs on a timer. A subscription
+ * carries a `nextDueDate`, the UI shows it as due once that date arrives, and
+ * confirming payment does two things atomically enough for a spreadsheet —
+ * writes a real expense Transaction, then rolls the date to the next cycle.
+ *
+ * Rolling forward from the OLD due date rather than from today is deliberate:
+ * a bill missed for two months then paid twice lands on the two months it was
+ * actually for, instead of silently swallowing a cycle.
+ * ========================================================================= */
+
+var SUBSCRIPTION_FREQUENCIES = ['weekly', 'monthly', 'yearly'];
+
+/**
+ * The next due date after `dateKey`, clamped to real calendar days.
+ *
+ * Naive month arithmetic overflows: 31 Jan + 1 month lands on 3 Mar because
+ * February has no 31st. Anchoring to the last day of the target month keeps a
+ * month-end bill on the month end, which is how billing actually behaves.
+ */
+function advanceDueDate_(dateKey, frequency) {
+  var parts = String(dateKey || '').split('-');
+  var year = Number(parts[0]);
+  var monthIndex = Number(parts[1]) - 1;
+  var day = Number(parts[2]);
+
+  if (!isFinite(year) || !isFinite(monthIndex) || !isFinite(day)) {
+    throw bad_('Cannot advance an invalid due date: "' + dateKey + '"');
+  }
+
+  if (frequency === 'weekly') {
+    return toDateKey_(new Date(year, monthIndex, day + 7));
+  }
+
+  var step = frequency === 'yearly' ? 12 : 1;
+  var target = monthIndex + step;
+  var targetYear = year + Math.floor(target / 12);
+  var targetMonth = ((target % 12) + 12) % 12;
+
+  // Day 0 of the following month is the last day of the target month.
+  var lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return toDateKey_(new Date(targetYear, targetMonth, Math.min(day, lastDay)));
+}
+
+function parseSubscription_(userId, body) {
+  var walletId = str_(body.walletId, 'walletId');
+  ownedWallet_(userId, walletId);
+
+  return {
+    name: str_(body.name, 'name', { max: 80 }),
+    amount: num_(body.amount, 'amount', { min: 0 }),
+    walletId: walletId,
+    category: str_(body.category, 'category', { max: 60 }),
+    frequency: oneOf_(body.frequency, 'frequency', SUBSCRIPTION_FREQUENCIES, 'monthly'),
+    nextDueDate: isoDate_(body.nextDueDate || toDateKey_(new Date()), 'nextDueDate'),
+    note: str_(body.note, 'note', { required: false, max: 300 })
+  };
+}
+
+/** Soonest due first — the order the timeline renders in. */
+function subscriptionsList_(user) {
+  return userRows_('Subscriptions', user.id)
+    .map(function (row) {
+      var copy = {};
+      for (var k in row) if (k !== '_row') copy[k] = row[k];
+      return copy;
+    })
+    .sort(function (a, b) {
+      return String(a.nextDueDate).localeCompare(String(b.nextDueDate)) ||
+        String(a.name).localeCompare(String(b.name));
+    });
+}
+
+function subscriptionsCreate_(user, body) {
+  var parsed = parseSubscription_(user.id, body);
+
+  var subscription = {
+    id: uuid_(), userId: user.id,
+    name: parsed.name, amount: parsed.amount, walletId: parsed.walletId,
+    category: parsed.category, frequency: parsed.frequency,
+    nextDueDate: parsed.nextDueDate, note: parsed.note,
+    createdAt: new Date().toISOString()
+  };
+
+  insertRow_('Subscriptions', subscription);
+  return subscription;
+}
+
+function subscriptionsUpdate_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Subscriptions', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Subscription not found', 404, 'NOT_FOUND');
+  }
+
+  var merged = {};
+  for (var k in existing) if (k !== '_row') merged[k] = existing[k];
+  for (var j in body) merged[j] = body[j];
+
+  var parsed = parseSubscription_(user.id, merged);
+  var updated = updateRow_('Subscriptions', id, parsed);
+  delete updated._row;
+  return updated;
+}
+
+function subscriptionsDelete_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Subscriptions', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Subscription not found', 404, 'NOT_FOUND');
+  }
+  deleteRow_('Subscriptions', id);
+  return { ok: true, id: id };
+}
+
+/**
+ * Confirm a payment: write the expense, then roll the cycle.
+ *
+ * The transaction is dated today rather than on the due date — the money left
+ * the wallet when the user confirmed, so that is the month it belongs to under
+ * cash accounting. Pass `date` to override for a payment being recorded late.
+ */
+function subscriptionsPay_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var subscription = findById_('Subscriptions', id);
+  if (!subscription || subscription.userId !== user.id) {
+    throw apiError_('Subscription not found', 404, 'NOT_FOUND');
+  }
+
+  // Re-check now rather than trusting the row: the wallet may have been
+  // deleted since the subscription was set up.
+  ownedWallet_(user.id, subscription.walletId);
+
+  var amount = num_(subscription.amount, 'amount', { min: 0 });
+  if (!(amount > 0)) throw bad_('This subscription has no amount to pay', 'ZERO_AMOUNT');
+
+  var paidOn = isoDate_((body && body.date) || toDateKey_(new Date()), 'date');
+
+  var tx = {
+    id: uuid_(), userId: user.id,
+    walletId: subscription.walletId, toWalletId: '', type: 'expense',
+    amount: amount,
+    category: subscription.category,
+    note: (body && body.note) ? str_(body.note, 'note', { required: false, max: 300 })
+                              : subscription.name,
+    date: paidOn,
+    createdAt: new Date().toISOString()
+  };
+  insertRow_('Transactions', tx);
+
+  var nextDue = advanceDueDate_(subscription.nextDueDate, subscription.frequency);
+  var updated = updateRow_('Subscriptions', id, { nextDueDate: nextDue });
+  delete updated._row;
+
+  // Both halves, so the client can reconcile its optimistic patch exactly
+  // rather than guessing what the server decided.
+  return { ok: true, subscription: updated, transaction: tx };
+}
+
 /* Must stay in step with ThemeName in the frontend types: settingsSave_ runs
    every incoming theme through oneOf_(), so a name missing here is rejected
    with a 400 and the picker silently rolls back. */
@@ -1962,6 +2148,52 @@ function setup() {
     Logger.log('Setup OK. ' + JSON.stringify(health_().rowCounts));
   }
   return problems;
+}
+
+/**
+ * Creates any sheet in SHEETS that the workbook does not have yet, with the
+ * exact header row readTable_() expects, and adds any column missing from a
+ * sheet that already exists.
+ *
+ * Run this once after pulling a version that adds a table — Subscriptions, for
+ * instance. Existing data is never touched: it only ever appends.
+ */
+function createMissingSheets() {
+  var ss = spreadsheet_();
+  var created = [];
+  var patched = [];
+
+  Object.keys(SHEETS).forEach(function (name) {
+    var def = SHEETS[name];
+    var headers = def.columns.map(function (col) { return col.header; });
+    var sheet = ss.getSheetByName(name);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      created.push(name);
+      return;
+    }
+
+    var existing = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn()))
+      .getValues()[0]
+      .map(function (h) { return String(h || '').trim().toLowerCase(); });
+
+    var missing = headers.filter(function (header) {
+      return existing.indexOf(header.toLowerCase()) === -1;
+    });
+
+    if (missing.length) {
+      sheet.getRange(1, sheet.getLastColumn() + 1, 1, missing.length).setValues([missing]);
+      patched.push(name + ' (+' + missing.join(', ') + ')');
+    }
+  });
+
+  Logger.log(created.length ? 'Created: ' + created.join(', ') : 'No sheets needed creating.');
+  if (patched.length) Logger.log('Added columns to: ' + patched.join('; '));
+  return { created: created, patched: patched };
 }
 
 /**

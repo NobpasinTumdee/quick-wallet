@@ -6,7 +6,15 @@ import { useEffect, useState } from 'react';
  * something that only ever runs locally.
  */
 
-export const ROUTES = ['dashboard', 'wallets', 'transactions', 'investments', 'budgets', 'settings'] as const;
+export const ROUTES = [
+  'dashboard',
+  'wallets',
+  'transactions',
+  'investments',
+  'budgets',
+  'subscriptions',
+  'settings',
+] as const;
 export type Route = (typeof ROUTES)[number];
 
 const DEFAULT_ROUTE: Route = 'dashboard';

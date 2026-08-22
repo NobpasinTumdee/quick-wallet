@@ -4,6 +4,7 @@ export type WalletMode = 'expense' | 'investment';
 export type WalletKind = 'cash' | 'bank' | 'ewallet' | 'credit' | 'brokerage' | 'other';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type InvestmentStatus = 'hold' | 'sold';
+export type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly';
 export type BudgetScope = 'category' | 'wallet' | 'global';
 export type BudgetMode = 'amount' | 'percent';
 export type ThemeName =
@@ -62,6 +63,27 @@ export interface Transaction {
   note: string;
   date: string;
   createdAt: string;
+}
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  name: string;
+  amount: number;
+  walletId: string;
+  category: string;
+  frequency: SubscriptionFrequency;
+  /** `YYYY-MM-DD`. Due once today reaches it. */
+  nextDueDate: string;
+  note: string;
+  createdAt: string;
+}
+
+/** What subscriptions.pay returns — both halves, so the client can reconcile. */
+export interface SubscriptionPayment {
+  ok: boolean;
+  subscription: Subscription;
+  transaction: Transaction;
 }
 
 export interface Investment {

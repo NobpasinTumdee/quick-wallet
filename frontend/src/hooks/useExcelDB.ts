@@ -65,6 +65,20 @@ const RESOURCES: Record<string, ResourceConfig> = {
   budgets: {
     invalidates: ['/api/budgets', '/api/dashboard'],
   },
+  subscriptions: {
+    // Paying one writes a real expense, so balances, budget progress and the
+    // dashboard are all downstream of it.
+    invalidates: [
+      '/api/subscriptions',
+      '/api/transactions',
+      '/api/wallets',
+      '/api/budgets',
+      '/api/dashboard',
+    ],
+    // Soonest due first — the opposite of every other resource here, because
+    // a timeline reads forwards while a ledger reads backwards.
+    sort: (a, b) => String(a.nextDueDate ?? '').localeCompare(String(b.nextDueDate ?? '')),
+  },
 };
 
 function configFor(resource: string): ResourceConfig {
