@@ -1822,88 +1822,284 @@ tr:hover .row-actions,
   color: var(--text-muted);
 }
 
-/* ---- Trend chart ---- */
-.trend {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-3);
-  min-height: 190px;
-  padding-top: var(--space-3);
-}
+/* ---- Income vs spending ----
+   The Recharts cash-flow card. Every mark it draws is coloured from here
+   rather than from a prop: `fill="var(--positive)"` is not something an SVG
+   presentation attribute can resolve, but a stylesheet rule beats one, so a
+   class on the series is how the thirteen themes reach the chart. */
 
 /* Lets a chart stretch to match the height of its row neighbour instead of
-   leaving dead space above the bars. */
+   leaving dead space above the plot. */
 .card--chart .card-body {
   display: flex;
   flex-direction: column;
 }
 
-.card--chart .trend {
-  flex: 1;
+/* Reserves the card's footprint while the Recharts chunk loads, so the bento
+   grid does not jump when it arrives. */
+.ischart-placeholder {
+  min-height: 520px;
 }
 
-.trend-col {
+.ischart {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+/* Refetch holds the previous render instead of flashing a skeleton. */
+.ischart.is-stale {
+  opacity: 0.55;
+}
+
+/* Zero-size carrier for the gradient defs. Kept out of the flow entirely —
+   `display: none` would stop the gradients resolving in some engines. */
+.ischart-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---- Statistical summary ----
+   Max, mean and min for each series, above the plot. Glass rather than solid
+   so the badges read as annotation on the card, not as a second card. */
+
+.ischart-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: var(--space-3);
+}
+
+.ischart-stat-group {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--space-2);
-  height: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-subtle);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* An inset hairline in the series colour: the group is identifiable before
+   the eye reaches its label, without a filled plate competing with the plot. */
+.ischart-stat-group--income {
+  box-shadow: inset 2px 0 0 var(--positive);
+}
+
+.ischart-stat-group--expense {
+  box-shadow: inset 2px 0 0 var(--negative);
+}
+
+.ischart-stat-series {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ischart-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.ischart-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.trend-bars {
-  flex: 1;
+.ischart-stat-label {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 4px;
-  width: 100%;
-  justify-content: center;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
 }
 
-.trend-bar {
-  position: relative;
-  width: 42%;
-  min-height: 4px;
-  border-radius: var(--radius-xs) var(--radius-xs) 2px 2px;
-  transform-origin: bottom;
-  animation: grow-up var(--dur-slow) var(--ease-out) both;
-  transition: filter var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+/* The shared Icon scale starts at 15px, which is heavy against an 11px label. */
+.ischart-stat-label svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
 }
 
-.trend-col:hover .trend-bar {
-  filter: brightness(1.12);
-  transform: scaleY(1.02);
+.ischart-stat-value {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.trend-bar--income {
-  background: linear-gradient(180deg, var(--positive), color-mix(in srgb, var(--positive) 55%, transparent));
-}
-
-.trend-bar--expense {
-  background: linear-gradient(180deg, var(--negative), color-mix(in srgb, var(--negative) 55%, transparent));
-}
-
-.trend-label {
+.ischart-stat-meta {
   font-size: var(--text-2xs);
   color: var(--text-faint);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.legend {
+/* ---- Scrollable plot ----
+   A year does not fit in a half-width card at a legible density, so the plot
+   keeps a fixed width per month and this box scrolls. The card's own width is
+   unchanged, so the bento grid never reflows and the page never scrolls
+   sideways. It bleeds to the card's padding edge so the oldest month runs to
+   the border rather than stopping short of it. */
+
+.ischart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-inline: calc(var(--space-5) * -1);
+  padding-inline: var(--space-5);
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 20%, transparent) transparent;
+}
+
+.ischart-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ischart-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ischart-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-pill);
+}
+
+.ischart-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+/* Remounted on every chart-type switch, so the new mark fades in rather than
+   snapping — the three views read as one chart changing shape. */
+.ischart-plot {
+  animation: chart-swap var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes chart-swap {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Marks ---- */
+
+.ischart-stop--income {
+  stop-color: var(--positive);
+}
+
+.ischart-stop--expense {
+  stop-color: var(--negative);
+}
+
+.ischart-grid line {
+  stroke: var(--divider);
+}
+
+/* Recharts names its axis text itself and takes no CSS-variable prop, so its
+   own class is the only hook for theming the ticks. */
+.ischart .recharts-cartesian-axis-tick-value {
+  fill: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+}
+
+/* Compact amounts printed on the marks. The halo keeps them readable where a
+   label sits over its own bar or a neighbouring curve. */
+.ischart-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Bars and area bodies are filled by the gradients above; only the curves and
+   their dots need the flat series colour. The area body is excluded by name —
+   a stroke on it would outline the whole filled shape, baseline included. */
+.ischart-series--income .recharts-line-curve,
+.ischart-series--income .recharts-area-curve {
+  stroke: var(--positive);
+}
+
+.ischart-series--expense .recharts-line-curve,
+.ischart-series--expense .recharts-area-curve {
+  stroke: var(--negative);
+}
+
+.ischart-series .recharts-area-area {
+  stroke: none;
+}
+
+.ischart-series--income .recharts-dot {
+  fill: var(--surface);
+  stroke: var(--positive);
+}
+
+.ischart-series--expense .recharts-dot {
+  fill: var(--surface);
+  stroke: var(--negative);
+}
+
+/* ---- Legend ---- */
+
+.ischart-foot {
   display: flex;
-  gap: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
-.legend-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  margin-right: 6px;
+.ischart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ischart-foot-note {
+  margin-left: auto;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* Exact amount in the tooltip, opposite its series name. */
+.ischart-tip-amount {
+  margin-left: auto;
+  padding-left: var(--space-3);
+  color: var(--text);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Category share ---- */
@@ -3634,17 +3830,6 @@ tr:hover .row-actions,
   }
   to {
     background-position: -200% 0;
-  }
-}
-
-@keyframes grow-up {
-  from {
-    transform: scaleY(0);
-    opacity: 0;
-  }
-  to {
-    transform: scaleY(1);
-    opacity: 1;
   }
 }
 

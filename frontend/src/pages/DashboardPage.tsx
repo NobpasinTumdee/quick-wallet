@@ -1,11 +1,12 @@
 import { Receipt, Target, Wallet } from 'lucide-react';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useMemo } from 'react';
 
 import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
+import { periodRange } from '../lib/cashflow';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -21,6 +22,13 @@ const CashFlowSankey = lazy(() =>
   import('../components/CashFlowSankey').then((m) => ({ default: m.CashFlowSankey })),
 );
 
+const IncomeSpendingChart = lazy(() =>
+  import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
+);
+
+/** How far back the cash-flow chart looks. One year of scrollable history. */
+const HISTORY_MONTHS = 12;
+
 export function DashboardPage({ period, onNavigate }: { period: string; onNavigate: (route: Route) => void }) {
   const { settings } = useSettings();
   const { locale } = settings;
@@ -34,6 +42,19 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   // the Sankey needs every transaction in the month. Same cache key the Activity
   // tab uses when its filters are clear, so the two share one request.
   const monthTransactions = useExcelDB<Transaction>('transactions', { period });
+
+  // A year of rows for the cash-flow chart, which groups them by month itself
+  // rather than taking the server's fixed six-month rollup. Its own cache key,
+  // so it neither disturbs the shared `{ period }` request above nor refetches
+  // when the user pages between months inside the window.
+  const historyWindow = useMemo(() => periodRange(period, HISTORY_MONTHS), [period]);
+  const history = useExcelDB<Transaction>('transactions', {
+    from: historyWindow.from,
+    to: historyWindow.to,
+    // The server caps at 5000 and returns newest first, so an account busier
+    // than this loses its oldest months — the ones already off the left edge.
+    limit: 5000,
+  });
 
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
@@ -63,7 +84,6 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     ? data.netWorth - portfolio.totalCost + portfolio.totalValue
     : data.netWorth;
 
-  const maxTrend = Math.max(1, ...data.trend.map((t) => Math.max(t.income, t.expense)));
   const isEmpty = data.walletCount === 0;
 
   // Presentational grouping only — the wallets themselves are unchanged.
@@ -268,41 +288,19 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
-        <Card className="bento-item--half card--chart" title="Income vs spending" subtitle="Last 6 months">
-          <div className="trend">
-            {data.trend.map((point, index) => (
-              <div key={point.period} className="trend-col">
-                <div className="trend-bars">
-                  <div
-                    className="trend-bar trend-bar--income"
-                    style={{
-                      height: `${(point.income / maxTrend) * 100}%`,
-                      animationDelay: `${index * 60}ms`,
-                    }}
-                    title={`Income ${money(point.income)}`}
-                  />
-                  <div
-                    className="trend-bar trend-bar--expense"
-                    style={{
-                      height: `${(point.expense / maxTrend) * 100}%`,
-                      animationDelay: `${index * 60 + 30}ms`,
-                    }}
-                    title={`Spent ${money(point.expense)}`}
-                  />
-                </div>
-                <span className="trend-label">{point.period.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="legend" style={{ marginTop: 'var(--space-4)' }}>
-            <span>
-              <i className="legend-dot" style={{ background: 'var(--positive)' }} /> Income
-            </span>
-            <span>
-              <i className="legend-dot" style={{ background: 'var(--negative)' }} /> Spending
-            </span>
-          </div>
-        </Card>
+        <Suspense
+          fallback={<div className="card bento-item--half ischart-placeholder" aria-hidden="true" />}
+        >
+          <IncomeSpendingChart
+            className="bento-item--half"
+            transactions={history.items}
+            trend={data.trend}
+            period={period}
+            months={HISTORY_MONTHS}
+            loading={history.initialLoading}
+            stale={history.isValidating}
+          />
+        </Suspense>
 
         <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
