@@ -15,6 +15,7 @@ import { useCallback, useState } from 'react';
 
 import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelQuery } from '../hooks/useExcelDB';
+import { useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -128,6 +129,11 @@ export function AppShell() {
   const { settings, reload: reloadSettings } = useSettings();
   const money = useMoneyFormatter();
   const [period, setPeriod] = useState(currentPeriod());
+
+  /* Raises the "you have unpaid subscriptions" toast once per app open. Lives
+     here rather than on the Recurring page precisely because the point is to
+     catch bills the user has not gone looking for. */
+  useOverdueSubscriptionAlert();
 
   /**
    * Re-fetches whatever the current screen is showing. Settings keeps its row

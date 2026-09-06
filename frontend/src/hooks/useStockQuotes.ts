@@ -1,25 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { LotValuation } from '../lib/positions';
 import { clearQuoteCache, fetchQuotes, hasLiveQuotes, providerName } from '../services/stockApi';
 import { useSettings } from '../state/SettingsContext';
 import { Investment, Quote } from '../types';
 import { useFxRate } from './useFxRate';
 
-export interface PositionValuation extends Investment {
-  quote: Quote | null;
-  /** Price in the market's own currency, e.g. 210.00 USD. */
-  nativePrice: number;
-  nativeCurrency: string;
+/**
+ * One lot, priced.
+ *
+ * The valuation fields live in `lib/positions.ts` as `LotValuation` so the
+ * grouping code can name the shape it needs without importing this hook —
+ * hooks import lib, never the reverse. Extending it here means the two can
+ * never drift apart.
+ */
+export interface PositionValuation extends Investment, LotValuation {
+  /** Shares × the market's own price, before conversion. */
   nativeValue: number;
-  /** Multiplier applied to reach the bookkeeping currency. 1 when they match. */
-  fxRate: number;
-  converted: boolean;
-  /** Price in the bookkeeping currency, e.g. 210.00 × 33.1 = 6,951 THB. */
-  marketPrice: number;
-  marketValue: number;
-  unrealizedPnl: number;
-  /** The headline number: unrealised P&L as a % of cost basis. */
-  unrealizedPnlPercent: number;
 }
 
 export interface PortfolioValuation {

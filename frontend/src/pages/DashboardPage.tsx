@@ -8,6 +8,7 @@ import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
 import { periodRange } from '../lib/cashflow';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
+import { positionKeyOf } from '../lib/positions';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Investment, Transaction, WalletBalance } from '../types';
@@ -58,6 +59,15 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
 
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
+
+  /* `positions` is one row per *purchase*, so a dollar-cost-averaged ticker
+     appears several times. The headline counts holdings instead — three buys of
+     Apple is one position, and saying "3 positions" would overstate how spread
+     out the portfolio is. Totals below are unaffected: they sum money, not rows. */
+  const holdingCount = useMemo(
+    () => new Set(positions.map((row) => positionKeyOf(row))).size,
+    [positions],
+  );
 
   const money = (value: number, compact = false) => format(value, { compact });
 
@@ -149,8 +159,8 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </Badge>
             {hasPositions && (
               <span>
-                {money(portfolio.totalValue, true)} in {portfolio.positions.length} position
-                {portfolio.positions.length === 1 ? '' : 's'} · {portfolio.provider} prices
+                {money(portfolio.totalValue, true)} in {holdingCount} position
+                {holdingCount === 1 ? '' : 's'} · {portfolio.provider} prices
               </span>
             )}
             {!hasPositions && (

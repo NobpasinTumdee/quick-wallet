@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
  * from inside a rollback, where there is no component to read a context from.
  */
 
-export type ToastTone = 'error' | 'success' | 'info';
+export type ToastTone = 'error' | 'warning' | 'success' | 'info';
 
 export interface Toast {
   id: number;
@@ -19,6 +19,9 @@ export interface Toast {
 const DURATIONS: Record<ToastTone, number> = {
   // Errors need long enough to read and act on; confirmations don't.
   error: 7000,
+  // Warnings are advisory rather than blocking — long enough to read a
+  // sentence and glance at the tab it points to, then out of the way.
+  warning: 6000,
   success: 3200,
   info: 4500,
 };
@@ -47,6 +50,7 @@ function push(tone: ToastTone, message: string, title?: string): number {
 
 export const toast = {
   error: (message: string, title?: string) => push('error', message, title),
+  warning: (message: string, title?: string) => push('warning', message, title),
   success: (message: string, title?: string) => push('success', message, title),
   info: (message: string, title?: string) => push('info', message, title),
 };

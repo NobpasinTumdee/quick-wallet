@@ -102,6 +102,16 @@ export interface Investment {
   note: string;
   createdAt: string;
   /* computed server-side */
+  /**
+   * `<walletId>::<SYMBOL>` — the identity of the *holding* this lot belongs to.
+   *
+   * Several rows share one key when the same ticker is bought repeatedly, which
+   * is what makes dollar-cost averaging work: the sheet keeps every purchase,
+   * and `lib/positions.ts` groups on this to produce the blended average cost.
+   * Scoped to the wallet because the same symbol in two brokerages is two
+   * positions. Mirrors `positionKey_` in Code.gs.
+   */
+  positionKey: string;
   costBasis: number;
   avgCost: number;
   realizedPnl: number;

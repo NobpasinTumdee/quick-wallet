@@ -1136,6 +1136,25 @@ function computeBudgetProgress_(userId, period) {
     .sort(function (a, b) { return b.percentUsed - a.percentUsed; });
 }
 
+/**
+ * The identity of a *holding* — the thing a user thinks of as "my Apple
+ * position" — as opposed to a lot, which is one purchase of it.
+ *
+ * Dollar-cost averaging means one holding is many rows: buy AAPL in January,
+ * again in March, again in June. Those are three Investments rows and must
+ * stay three rows (each has its own price, date and fees, and each is sold
+ * independently), but every screen wants them presented as one line with a
+ * blended average cost.
+ *
+ * The grouping key is computed here rather than on the client so that the
+ * definition of "same position" lives in exactly one place. It is scoped to the
+ * wallet as well as the symbol: the same ticker held in two brokerages is two
+ * holdings, because selling one does not touch the other.
+ */
+function positionKey_(inv) {
+  return String(inv.walletId || '') + '::' + String(inv.symbol || '').toUpperCase();
+}
+
 /** Adds the figures the client shouldn't recompute. Unrealised P&L needs a
  *  live price and stays on the client. */
 function decorateInvestment_(inv) {
@@ -1149,6 +1168,7 @@ function decorateInvestment_(inv) {
     quantity: inv.quantity, buyPrice: inv.buyPrice, fees: inv.fees, buyDate: inv.buyDate,
     tags: inv.tags, status: inv.status, sellPrice: inv.sellPrice, sellDate: inv.sellDate,
     note: inv.note, createdAt: inv.createdAt,
+    positionKey: positionKey_(inv),
     costBasis: costBasis,
     avgCost: inv.quantity > 0 ? money_(costBasis / inv.quantity) : 0,
     realizedPnl: realizedPnl,
@@ -1461,8 +1481,24 @@ function parseInvestment_(userId, body) {
   };
 }
 
+/**
+ * Every lot, never aggregated.
+ *
+ * Grouping into holdings deliberately stays on the client: a holding's headline
+ * figures (market value, unrealised P&L) need a live quote, and this script has
+ * no price feed. Aggregating cost basis here and P&L there would put the two
+ * halves of the same number in two places — the mistake `computeWalletBalances_`
+ * exists to avoid. The server owns the grouping *key* (`positionKey`) and the
+ * per-lot maths; the client owns the roll-up. See `lib/positions.ts`.
+ */
 function investmentsList_(user, query) {
   var rows = userRows_('Investments', user.id);
+
+  // `?positionKey=<walletId>::<SYMBOL>` fetches one holding's lots — the
+  // purchase-history view, without pulling the whole portfolio.
+  if (query.positionKey) {
+    rows = rows.filter(function (i) { return positionKey_(i) === String(query.positionKey); });
+  }
 
   if (query.walletId) rows = rows.filter(function (i) { return i.walletId === query.walletId; });
   if (query.status) rows = rows.filter(function (i) { return i.status === query.status; });

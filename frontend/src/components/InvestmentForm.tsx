@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { formatMoney, formatNumber, todayKey } from '../lib/format';
+import { Holding, projectAverageCost } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, InvestmentStatus, WalletBalance } from '../types';
 import {
@@ -59,10 +60,17 @@ interface FormState {
 
 const SUGGESTED_TAGS = ['growth', 'dividend', 'core', 'speculative', 'long-term', 'etf'];
 
-function initialState(wallets: WalletBalance[], investment?: Investment): FormState {
+function initialState(
+  wallets: WalletBalance[],
+  investment?: Investment,
+  addTo?: Holding | null,
+): FormState {
   return {
-    walletId: investment?.walletId ?? wallets[0]?.id ?? '',
-    symbol: investment?.symbol ?? '',
+    // Adding to a position pins both — a "new buy" of AAPL in the ISA is not a
+    // new buy of AAPL in the taxable account, and letting either drift would
+    // silently create a second holding instead of a second lot.
+    walletId: investment?.walletId ?? addTo?.walletId ?? wallets[0]?.id ?? '',
+    symbol: investment?.symbol ?? addTo?.symbol ?? '',
     quantity: decimalToInput(investment?.quantity),
     buyPrice: decimalToInput(investment?.buyPrice),
     fees: decimalToInput(investment?.fees),
@@ -91,6 +99,7 @@ export function InvestmentForm({
   open,
   wallets,
   investment,
+  addTo,
   quoteCurrency = 'USD',
   fxRate = 1,
   fxAvailable = false,
@@ -103,6 +112,15 @@ export function InvestmentForm({
   /** Investment-mode wallets only. */
   wallets: WalletBalance[];
   investment?: Investment;
+  /**
+   * The holding this purchase is being added to, when the user pressed "Buy
+   * more" on an existing position rather than "New position".
+   *
+   * It does two things: pins the symbol and wallet so the lot lands in the
+   * right holding, and turns on the blended-average preview — the number a
+   * dollar-cost-averaging buy is actually judged against.
+   */
+  addTo?: Holding | null;
   /** Currency the broker quotes in, e.g. USD. */
   quoteCurrency?: string;
   /** Multiplier from `quoteCurrency` into the bookkeeping currency. */
@@ -117,7 +135,7 @@ export function InvestmentForm({
   const money = useMoneyFormatter();
   const { settings } = useSettings();
   const locale = settings.locale;
-  const [form, setForm] = useState<FormState>(() => initialState(wallets, investment));
+  const [form, setForm] = useState<FormState>(() => initialState(wallets, investment, addTo));
   const [localError, setLocalError] = useState<string | null>(null);
 
   /* Reset only when the sheet opens, or when it opens onto a different record.
@@ -126,13 +144,16 @@ export function InvestmentForm({
   const walletsRef = useRef(wallets);
   walletsRef.current = wallets;
 
+  const addToRef = useRef(addTo);
+  addToRef.current = addTo;
+
   useEffect(() => {
     if (open) {
-      setForm(initialState(walletsRef.current, investment));
+      setForm(initialState(walletsRef.current, investment, addToRef.current));
       setLocalError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, investment?.id]);
+  }, [open, investment?.id, addTo?.key]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -179,6 +200,13 @@ export function InvestmentForm({
     usingOverride && quoteTotal > 0 ? (costBasis - fees) / quoteTotal : 0;
   const spreadPercent =
     effectiveRate > 0 && fxRate > 0 ? ((effectiveRate - fxRate) / fxRate) * 100 : 0;
+
+  /* ---- Where this buy leaves the average ----
+     Only meaningful when topping up an existing holding. A DCA purchase is
+     judged against the blended average, not the price paid: buying under the
+     average pulls it down, which is the entire point of averaging in. */
+  const projected = projectAverageCost(addTo, quantity, buyPriceBase, usingOverride ? 0 : fees);
+  const averageFalls = projected.delta < 0;
 
   /** Switching the unit converts what's already typed, like any unit toggle. */
   function switchEntryMode(next: EntryMode) {
@@ -257,7 +285,13 @@ export function InvestmentForm({
   return (
     <Modal
       open={open}
-      title={investment ? `Edit ${investment.symbol}` : 'New position'}
+      title={
+        investment
+          ? `Edit ${investment.symbol}`
+          : addTo
+            ? `Buy more ${addTo.symbol}`
+            : 'New position'
+      }
       onClose={onClose}
       footer={
         <>
@@ -265,14 +299,23 @@ export function InvestmentForm({
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} loading={busy}>
-            {investment ? 'Save' : 'Add position'}
+            {investment ? 'Save' : addTo ? 'Add purchase' : 'Add position'}
           </Button>
         </>
       }
     >
       <form className="form-grid" onSubmit={submit}>
-        <Field label="Investment wallet" className="span-2">
-          <Select value={form.walletId} onChange={(e) => patch('walletId', e.target.value)} required>
+        <Field
+          label="Investment wallet"
+          className="span-2"
+          hint={addTo ? 'Fixed: this purchase joins the position held in this wallet.' : undefined}
+        >
+          <Select
+            value={form.walletId}
+            onChange={(e) => patch('walletId', e.target.value)}
+            disabled={Boolean(addTo)}
+            required
+          >
             {wallets.length === 0 && <option value="">No investment wallet yet</option>}
             {wallets.map((wallet) => (
               <option key={wallet.id} value={wallet.id}>
@@ -282,14 +325,25 @@ export function InvestmentForm({
           </Select>
         </Field>
 
-        <Field label="Symbol" hint="Ticker as the stock API expects it, e.g. AAPL.">
+        <Field
+          label="Symbol"
+          hint={
+            addTo
+              ? `Adding a ${addTo.lots.length === 1 ? '2nd' : `${addTo.lots.length + 1}th`} purchase to this position.`
+              : 'Ticker as the stock API expects it, e.g. AAPL.'
+          }
+        >
           <Input
             value={form.symbol}
             onChange={(e) => patch('symbol', e.target.value.toUpperCase())}
             placeholder="AAPL"
             maxLength={20}
+            /* Editable here would move the lot to a different holding, which is
+               never what "buy more" means. */
+            readOnly={Boolean(addTo)}
             required
-            autoFocus
+            /* Focus the first field the user actually has to fill in. */
+            autoFocus={!addTo}
           />
         </Field>
 
@@ -299,6 +353,7 @@ export function InvestmentForm({
             onChange={(raw) => patch('quantity', raw)}
             placeholder="0.00000000"
             required
+            autoFocus={Boolean(addTo)}
           />
         </Field>
 
@@ -365,6 +420,9 @@ export function InvestmentForm({
           />
         </Field>
 
+        {/* A "buy more" is a purchase by definition — offering to record it as
+            already sold would only be a way to file it in the wrong place. */}
+        {!addTo && (
         <Field label="Status">
           <Segmented<InvestmentStatus>
             value={form.status}
@@ -382,6 +440,7 @@ export function InvestmentForm({
             ]}
           />
         </Field>
+        )}
 
         {form.status === 'sold' && (
           <Field
@@ -443,6 +502,45 @@ export function InvestmentForm({
                 ≈ {formatMoney(costBasis, entryCurrency, locale)}
               </span>
             </div>
+
+            {/* The DCA readout. Shown only when there is an existing average to
+                move, because "your new average is the price you just paid" is
+                not information. */}
+            {addTo && addTo.quantity > 0 && (
+              <>
+                <div className="calc-row calc-row--average">
+                  <span className="section-label">Average cost after this buy</span>
+                  <span className="calc-value">
+                    <span className="calc-was">
+                      {formatMoney(projected.previousAvgCost, entryCurrency, locale)}
+                    </span>
+                    <span className="calc-arrow" aria-hidden="true">
+                      →
+                    </span>
+                    <strong className="calc-value--strong">
+                      {formatMoney(projected.avgCost, entryCurrency, locale)}
+                    </strong>
+                  </span>
+                </div>
+
+                <p className="calc-note">
+                  {formatNumber(addTo.quantity, 8, locale)} →{' '}
+                  <strong>{formatNumber(projected.quantity, 8, locale)}</strong> shares
+                  {projected.delta !== 0 && (
+                    <>
+                      {' · '}
+                      <strong className={averageFalls ? 'text-positive' : 'text-negative'}>
+                        {averageFalls ? '↓' : '↑'}{' '}
+                        {formatMoney(Math.abs(projected.delta), entryCurrency, locale)} /share
+                      </strong>{' '}
+                      {averageFalls
+                        ? '— you are buying below your average.'
+                        : '— you are buying above your average.'}
+                    </>
+                  )}
+                </p>
+              </>
+            )}
 
             <p className="calc-note">
               {quantity > 0 ? formatNumber(quantity, 8, locale) : '0'} ×{' '}

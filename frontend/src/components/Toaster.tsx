@@ -3,6 +3,7 @@ import { cx } from '../lib/format';
 
 const ICONS = {
   error: '✕',
+  warning: '!',
   success: '✓',
   info: 'i',
 } as const;
@@ -24,7 +25,7 @@ export function Toaster() {
         <div
           key={item.id}
           className={cx('toast', `toast--${item.tone}`)}
-          role={item.tone === 'error' ? 'alert' : 'status'}
+          role={item.tone === 'error' || item.tone === 'warning' ? 'alert' : 'status'}
         >
           <span className={cx('toast-icon', `toast-icon--${item.tone}`)} aria-hidden="true">
             {ICONS[item.tone]}
