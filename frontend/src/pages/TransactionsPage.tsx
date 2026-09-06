@@ -2,27 +2,59 @@ import { Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { TransactionForm, TransactionPayload } from '../components/TransactionForm';
+import { TransactionFilters } from '../components/TransactionFilters';
 import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
-import { Alert, Badge, Button, Card, EmptyState, Input, RefreshButton, Select } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx, formatDate, formatPeriod } from '../lib/format';
+import { EMPTY_FILTERS, TxFilters, fetchScope, filterTransactions } from '../lib/txFilters';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Transaction, TransactionType, WalletBalance } from '../types';
+import { Transaction, WalletBalance } from '../types';
+
+/** `createdAt` as a local wall clock, for the Date column. */
+function recordedClock(tx: Transaction, locale: string): string {
+  if (!tx.createdAt) return '—';
+  const at = new Date(tx.createdAt);
+  if (Number.isNaN(at.getTime())) return '—';
+  return at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Shown beside the title, so the header describes what is actually on screen. */
+function rangeLabel(filters: TxFilters, period: string, locale: string): string {
+  switch (filters.datePreset) {
+    case 'today':
+      return 'Today';
+    case 'yesterday':
+      return 'Yesterday';
+    case 'last7':
+      return 'Last 7 days';
+    case 'last30':
+      return 'Last 30 days';
+    case 'custom':
+      return filters.from || filters.to
+        ? `${filters.from || 'the start'} → ${filters.to || 'today'}`
+        : 'Custom range';
+    default:
+      return formatPeriod(period, locale);
+  }
+}
 
 export function TransactionsPage({ period }: { period: string }) {
   const { settings } = useSettings();
-  const [walletFilter, setWalletFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'' | TransactionType>('');
-  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<TxFilters>(EMPTY_FILTERS);
+
+  const patchFilters = (patch: Partial<TxFilters>) =>
+    setFilters((current) => ({ ...current, ...patch }));
 
   const wallets = useExcelDB<WalletBalance>('wallets', { includeArchived: true });
-  const transactions = useExcelDB<Transaction>('transactions', {
-    period,
-    walletId: walletFilter || undefined,
-    type: typeFilter || undefined,
-    search: search.trim() || undefined,
-  });
+
+  /* Only the date range reaches the server, because only it decides which rows
+     exist locally at all. Every other filter runs over the cached array below,
+     so changing a wallet or typing in the search box costs nothing — it used to
+     mint a new cache key and a fresh 1–3s round trip each time. */
+  const scope = useMemo(() => fetchScope(filters, period), [filters, period]);
+  const transactions = useExcelDB<Transaction>('transactions', scope);
 
   const [editing, setEditing] = useState<Transaction | undefined>();
   const [formOpen, setFormOpen] = useState(false);
@@ -30,11 +62,16 @@ export function TransactionsPage({ period }: { period: string }) {
   const money = useMoneyFormatter();
   const walletName = (id: string) => wallets.items.find((w) => w.id === id)?.name ?? '—';
 
+  const visible = useMemo(
+    () => filterTransactions(transactions.items, filters),
+    [transactions.items, filters],
+  );
+
   const totals = useMemo(() => {
-    const income = transactions.items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const expense = transactions.items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const income = visible.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const expense = visible.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     return { income, expense, net: income - expense };
-  }, [transactions.items]);
+  }, [visible]);
 
   /**
    * Optimistic submit.
@@ -65,7 +102,7 @@ export function TransactionsPage({ period }: { period: string }) {
   return (
     <>
       <Card
-        title={`Activity · ${formatPeriod(period, settings.locale)}`}
+        title={`Activity · ${rangeLabel(filters, period, settings.locale)}`}
         subtitle={`${money(totals.income)} in · ${money(totals.expense)} out · net ${money(totals.net)}`}
         actions={
           <>
@@ -88,32 +125,14 @@ export function TransactionsPage({ period }: { period: string }) {
           </>
         }
       >
-        <div className="toolbar">
-          <Select value={walletFilter} onChange={(e) => setWalletFilter(e.target.value)} style={{ width: 'auto' }}>
-            <option value="">All wallets</option>
-            {wallets.items.map((wallet) => (
-              <option key={wallet.id} value={wallet.id}>
-                {wallet.icon} {wallet.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as '' | TransactionType)}
-            style={{ width: 'auto' }}
-          >
-            <option value="">All types</option>
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-            <option value="transfer">Transfer</option>
-          </Select>
-          <Input
-            placeholder="Search note or category…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ maxWidth: 260 }}
-          />
-        </div>
+        <TransactionFilters
+          filters={filters}
+          onChange={patchFilters}
+          wallets={wallets.items}
+          categories={settings.categories}
+          matched={visible.length}
+          total={transactions.items.length}
+        />
       </Card>
 
       <Card padded={false}>
@@ -131,17 +150,25 @@ export function TransactionsPage({ period }: { period: string }) {
           <div className="card-body">
             <Alert tone="error">{transactions.error}</Alert>
           </div>
-        ) : transactions.items.length === 0 ? (
+        ) : visible.length === 0 ? (
           <EmptyState
             icon={<Icon icon={Receipt} size="xl" />}
-            title="Nothing recorded here"
+            /* "Nothing here" and "nothing matches" are different problems with
+               different fixes, so they get different words and different
+               buttons — offering "add a transaction" to someone whose filters
+               are too narrow is the wrong advice. */
+            title={transactions.items.length ? 'No matches' : 'Nothing recorded here'}
             description={
               wallets.items.length === 0
                 ? 'Create a wallet first, then start adding transactions.'
-                : 'No transactions match this month and these filters.'
+                : transactions.items.length
+                  ? `All ${transactions.items.length} transactions in this range were filtered out. Widen the range, or clear a filter above.`
+                  : 'Nothing was recorded in this range yet.'
             }
             action={
-              wallets.items.length > 0 ? (
+              transactions.items.length ? (
+                <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>
+              ) : wallets.items.length > 0 ? (
                 <Button variant="primary" onClick={() => setFormOpen(true)}>
                   Add a transaction
                 </Button>
@@ -163,10 +190,18 @@ export function TransactionsPage({ period }: { period: string }) {
                 </tr>
               </thead>
               <tbody>
-                {transactions.items.map((tx) => (
+                {visible.map((tx) => (
                   // Dimmed until the server confirms it.
                   <tr key={tx.id} className={cx(isOptimistic(tx) && 'is-pending')}>
-                    <td>{formatDate(tx.date, settings.locale)}</td>
+                    <td>
+                      {formatDate(tx.date, settings.locale)}
+                      {/* The clock the time filter actually matches on. Shown
+                          only while that filter is live, so the column stays
+                          quiet the rest of the time. */}
+                      {(filters.timeFrom || filters.timeTo) && (
+                        <div className="list-item-sub">{recordedClock(tx, settings.locale)}</div>
+                      )}
+                    </td>
                     <td>
                       <Badge
                         tone={tx.type === 'income' ? 'positive' : tx.type === 'expense' ? 'negative' : 'accent'}

@@ -3516,6 +3516,202 @@ table.data.data--nested td {
   }
 }
 
+/* ==========================================================================
+   Activity filters
+   --------------------------------------------------------------------------
+   Two layers. The bar is always visible and carries the *state* — which
+   filters are on, and how many rows survived them. The body is where filters
+   get changed, and it collapses.
+
+   The split matters: a hidden filter is a filter the user forgets they set,
+   and then a correctly-filtered list looks like a broken one.
+   ========================================================================== */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.filters-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.filters-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.filters-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.filters.is-open .filters-toggle {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.filters-caret {
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.filters-caret.is-open {
+  transform: rotate(180deg);
+}
+
+/* ---- Active-filter chips ----
+   Each one removes exactly its own filter. Deliberately not a single "clear
+   all" only: undoing one facet at a time is how people actually narrow down. */
+
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2) 3px var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.filter-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.filter-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* `.spacer` is scoped to `.toolbar` elsewhere; the filter bar needs its own. */
+.filters-bar .spacer {
+  flex: 1;
+}
+
+.filters-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.filters-count strong {
+  color: var(--text);
+}
+
+/* ---- The drawer ---- */
+
+.filters-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  /* Height is unknown (the custom-range fields appear and disappear), so the
+     reveal animates opacity and a small lift instead of a height it would have
+     to measure. Both are compositor-only. */
+  animation: filters-open var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes filters-open {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.filter-group--wide {
+  grid-column: 1 / -1;
+}
+
+.filter-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.filter-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Two fields that belong together — from/to, min/max. Collapses to one column
+   rather than squeezing two date inputs into 110px each. */
+.filter-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .filters-body {
+    padding: var(--space-3);
+    gap: var(--space-4);
+  }
+
+  /* The count is the least useful thing on a narrow bar and the first to go. */
+  .filters-count {
+    order: 3;
+  }
+}
+
 /* ---- Brand mark ---- */
 .logo {
   flex: none;
@@ -3650,6 +3846,407 @@ table.data.data--nested td {
     right: var(--space-5);
     bottom: var(--space-5);
     width: min(400px, calc(100vw - var(--space-6)));
+  }
+}
+
+/* ==========================================================================
+   Quick add — hold & drag
+   --------------------------------------------------------------------------
+   A floating button that opens a cascading menu under the finger. Everything
+   here is subordinate to one requirement: the gesture must never be
+   interrupted by the browser's own behaviours.
+
+   That is what the `touch-action: none` and `user-select: none` below are for.
+   Without them a long press on mobile starts a text selection or a context
+   menu, the page scrolls out from under the menu, and the drag is dead.
+
+   Layout: anchored bottom-right, above the mobile tab bar. Columns grow
+   leftward from the button (`row-reverse`) so the first choice is the shortest
+   travel from the thumb and each subsequent one moves in one predictable
+   direction.
+   ========================================================================== */
+
+.qa {
+  position: fixed;
+  z-index: 80;
+  right: var(--space-4);
+  /* Clears the mobile tab bar, matching the toaster's offset. */
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  /* The wrapper must not eat taps meant for the page behind it. */
+  pointer-events: none;
+}
+
+.qa > * {
+  pointer-events: auto;
+}
+
+.qa-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: qa-fade var(--dur-fast) var(--ease-out) both;
+}
+
+/* While the finger is still down the backdrop must be invisible to hit-testing:
+   `elementFromPoint` returns the topmost element, and a backdrop over the menu
+   would make every option unreachable. */
+.qa-backdrop.is-passthrough {
+  pointer-events: none;
+}
+
+@keyframes qa-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- The button ---- */
+
+.qa-fab {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  /* The three that make a long-press drag possible at all. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.qa-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-lg), var(--ring);
+}
+
+/* Held, but not yet armed. The shrink is the only feedback available during
+   the 280ms before the menu appears, so it has to read instantly. */
+.qa-fab.is-pressing {
+  transform: scale(0.9);
+}
+
+.qa-fab.is-armed {
+  transform: rotate(45deg);
+  background: var(--negative);
+}
+
+/* ---- The cascading menu ---- */
+
+.qa-menu {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: calc(100vw - var(--space-6));
+  animation: qa-rise var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes qa-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.qa-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* Narrow enough that three columns fit a 360px phone, wide enough for a
+     category name. */
+  flex: 0 1 132px;
+  max-height: min(46vh, 320px);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  /* Scrollable by touch once the finger is up — a long category list would
+     otherwise be stuck in sticky mode. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  animation: qa-rise var(--dur-fast) var(--ease-out) both;
+}
+
+/* ...but not during the drag. There, `autoScroll` moves the column from the
+   pointer handler, and letting the browser pan at the same time would fight it
+   and cancel the gesture. */
+.qa-menu.is-dragging .qa-column {
+  touch-action: none;
+}
+
+.qa-column-title {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.qa-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.qa-option:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* The finger is over this one. Scaled slightly so it is legible past the
+   fingertip covering it — the single most common failure of touch menus. */
+.qa-option.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  transform: scale(1.02);
+}
+
+.qa-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-emoji {
+  flex: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* ---- The amount pad ---- */
+
+.qa-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(280px, calc(100vw - var(--space-6)));
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  animation: qa-rise var(--dur-base) var(--ease-spring) both;
+}
+
+.qa-pad-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* What the gesture picked. Kept visible so the only remaining question — the
+   amount — is answered in context. */
+.qa-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-path strong {
+  color: var(--text);
+}
+
+.qa-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.qa-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.qa-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.qa-currency {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-wide);
+}
+
+.qa-amount-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: var(--weight-semi);
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qa-amount-value.is-empty {
+  color: var(--text-faint);
+}
+
+.qa-amount-converted {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.qa-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.qa-key {
+  display: grid;
+  place-items: center;
+  /* Comfortably past the 44px minimum touch target, because this grid is
+     operated one-handed at speed. */
+  height: 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.qa-key:hover {
+  background: var(--surface-hover);
+}
+
+.qa-key:active {
+  transform: scale(0.94);
+  background: var(--accent-soft);
+}
+
+.qa-key--back {
+  color: var(--text-muted);
+}
+
+.qa-save {
+  height: 46px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.qa-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.qa-save:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+/* ---- Desktop ----
+   No tab bar to clear, and the sidebar means there is room to sit lower. */
+@media (min-width: 640px) {
+  .qa {
+    right: var(--space-5);
+    bottom: var(--space-5);
+  }
+}
+
+/* The toaster shares this corner. Lift it clear of the button on both
+   breakpoints, so a rollback message never lands under the control that caused
+   it — 68px is the 56px button plus its gap. */
+.toaster {
+  bottom: calc(84px + 68px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 640px) {
+  .toaster {
+    bottom: calc(var(--space-5) + 68px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qa-fab.is-armed {
+    transform: none;
+  }
+
+  .qa-option.is-active {
+    transform: none;
   }
 }
 

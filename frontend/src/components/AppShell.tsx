@@ -14,7 +14,7 @@ import {
 import { useCallback, useState } from 'react';
 
 import { refreshPrefixes } from '../api/cache';
-import { prefetch, useExcelQuery } from '../hooks/useExcelDB';
+import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
@@ -27,9 +27,11 @@ import { TransactionsPage } from '../pages/TransactionsPage';
 import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DbHealth } from '../types';
+import { DbHealth, Transaction, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
+import { QuickTransactionWidget } from './QuickTransactionWidget';
+import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
 
 const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
@@ -134,6 +136,27 @@ export function AppShell() {
      here rather than on the Recurring page precisely because the point is to
      catch bills the user has not gone looking for. */
   useOverdueSubscriptionAlert();
+
+  /* ---- Quick add ----
+     The floating button lives at the shell level so it is reachable from every
+     route, which means the full-form fallback has to live here too.
+
+     `enabled: false` on the transactions collection is deliberate: this mount
+     only ever *writes*. Subscribing would fetch an unscoped 500-row list on
+     every app open for data nothing on screen is showing. Writes still reach
+     every cached copy — `mutateMatching` patches by key prefix, so a row added
+     from the Overview page appears in Activity's month-scoped list too. */
+  const [quickFormOpen, setQuickFormOpen] = useState(false);
+  const quickWallets = useExcelDB<WalletBalance>('wallets');
+  const quickTransactions = useExcelDB<Transaction>('transactions', undefined, { enabled: false });
+
+  function saveQuickTransaction(payload: TransactionPayload) {
+    // Optimistic, like every other write: the row is cached before this
+    // resolves, so the sheet closes now and a failure toasts and rolls back.
+    quickTransactions.create(payload).catch(() => undefined);
+    setQuickFormOpen(false);
+    return Promise.resolve();
+  }
 
   /**
    * Re-fetches whatever the current screen is showing. Settings keeps its row
@@ -251,6 +274,23 @@ export function AppShell() {
           {route === 'settings' && <SettingsPage />}
         </main>
       </div>
+
+      <QuickTransactionWidget
+        wallets={quickWallets.items}
+        onOpenFullForm={() => setQuickFormOpen(true)}
+      />
+
+      <TransactionForm
+        open={quickFormOpen}
+        wallets={quickWallets.items.filter((w) => !w.archived)}
+        busy={quickTransactions.mutating}
+        error={quickTransactions.mutationError}
+        onClose={() => {
+          setQuickFormOpen(false);
+          quickTransactions.clearMutationError();
+        }}
+        onSubmit={saveQuickTransaction}
+      />
 
       <nav className="tabbar" aria-label="Main navigation">
         {NAV.map((item) => (
