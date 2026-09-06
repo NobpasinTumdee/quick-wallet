@@ -4251,6 +4251,500 @@ table.data.data--nested td {
 }
 
 /* ==========================================================================
+   Tax estimate
+   --------------------------------------------------------------------------
+   A receipt, not a dashboard. The layout follows the arithmetic top to bottom
+   — income, two deductions, a rule, the net — because that is the order the
+   Revenue Department's own form works in, and a reader checking the number
+   needs to be able to follow it line by line.
+
+   The restraint is the same one the boot screen makes: this is a figure
+   someone may act on, so nothing here decorates. One accent, one rule, and a
+   single moment of emphasis on the total.
+   ========================================================================== */
+
+.tax-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Range picker ---- */
+
+.tax-range {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tax-range-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-bottom: 2px;
+}
+
+/* ---- Before the first run ----
+   Deliberately says nothing has happened yet. The calculation is on demand, and
+   an empty receipt skeleton would imply it was already trying. */
+
+.tax-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.tax-idle svg {
+  color: var(--text-faint);
+}
+
+.tax-idle p {
+  max-width: 42ch;
+  margin: 0;
+}
+
+/* ---- The receipt ---- */
+
+.tax-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.tax-receipt-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    var(--glass-bg)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.tax-total {
+  margin-top: var(--space-1);
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-receipt-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.tax-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tax-block-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+/* Sits beside the heading, in sentence case — it is a note, not a label. */
+.tax-block-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: var(--weight-normal);
+  font-size: var(--text-xs);
+}
+
+/* ---- One line of the calculation ---- */
+
+.tax-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.tax-line-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* The Thai term and the plain-English gloss under each label. Both matter: the
+   Thai is what the form says, the English is what it means. */
+.tax-line-label em {
+  font-style: normal;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.tax-line-value {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.tax-line-value--minus {
+  color: var(--text-muted);
+}
+
+/* The subtotal the bands are applied to. Heavier rule above, no rule below —
+   it closes the block rather than continuing it. */
+.tax-line--net {
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 0;
+}
+
+.tax-line--net .tax-line-label {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.tax-line--net .tax-line-value {
+  font-size: var(--text-md);
+}
+
+/* ---- The ladder ---- */
+
+.tax-bands td,
+.tax-bands th {
+  white-space: nowrap;
+}
+
+/* Bands the income never reached. Kept on screen rather than hidden: seeing the
+   whole ladder is what makes a marginal system legible — it is the difference
+   between "I am taxed 25%" and "25% applies to my last 40,000". */
+.tax-bands tbody tr.is-dim td {
+  color: var(--text-faint);
+}
+
+.tax-bands tbody tr.is-marginal {
+  background: var(--accent-softer);
+}
+
+.tax-bands tbody tr.is-marginal > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tax-marginal {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- The answer ---- */
+
+.tax-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.tax-summary-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tax-summary-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.tax-summary-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tax-summary-stats strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Assumptions ----
+   Quiet, but present and unabridged. A tax figure without its caveats invites
+   someone to file on it. */
+
+.tax-assumptions ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.tax-assumptions li {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+
+/* ---- Additional deductions ----
+   Collapsed by default. The four statutory steps *are* the calculation; these
+   are refinements, and putting them in front of everyone would imply the
+   estimate is incomplete without them.
+
+   The header always states how many are filled in, so a closed panel can never
+   hide a figure that is quietly changing the answer. */
+
+.tax-deductions {
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.tax-deductions.is-open {
+  border-color: var(--border-strong);
+}
+
+.tax-deductions-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.tax-deductions-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.tax-deductions-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tax-deductions-toggle > span:first-child {
+  flex: 1;
+}
+
+.tax-deductions-state {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+}
+
+.tax-deductions.is-open .tax-deductions-state {
+  color: var(--accent);
+}
+
+.tax-deductions-caret {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.tax-deductions-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.tax-deductions-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--divider);
+  /* Height is unknown, so the reveal animates opacity and a small lift rather
+     than a height it would have to measure. Both are compositor-only. */
+  animation: filters-open var(--dur-base) var(--ease-out) both;
+}
+
+/* ---- Settlement ----
+   Tax due, less what was already withheld, equals what is actually owed. It
+   sits inside the summary panel rather than beside it, because the three lines
+   only mean anything read together. */
+
+.tax-settle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.tax-settle-row,
+.tax-settle-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.tax-settle-row > span:first-child,
+.tax-settle-total > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+/* The Thai term under each label, matching the receipt lines above. */
+.tax-settle-row em,
+.tax-settle-total em {
+  font-style: normal;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.tax-settle-total {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong);
+}
+
+.tax-settle-total > span:first-child {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.tax-settle-total strong {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Money coming back is the one genuinely good outcome this screen can report,
+   and it is worth colouring. Money owed stays neutral — it is not a failure. */
+.tax-settle-total.is-refund > span:first-child,
+.tax-settle-total.is-refund strong {
+  color: var(--positive);
+}
+
+/* ---- The Dashboard trigger ---- */
+
+.tax-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.tax-cta:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tax-cta:active {
+  transform: scale(0.98);
+}
+
+.tax-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+@media (max-width: 640px) {
+  .tax-receipt-meta {
+    text-align: left;
+  }
+
+  .tax-total {
+    font-size: 1.5rem;
+  }
+}
+
+/* ==========================================================================
    14  Keyframes
    ========================================================================== */
 

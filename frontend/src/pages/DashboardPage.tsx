@@ -1,5 +1,5 @@
-import { Receipt, Target, Wallet } from 'lucide-react';
-import { Suspense, lazy, useMemo } from 'react';
+import { Calculator, Receipt, Target, Wallet } from 'lucide-react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
@@ -25,6 +25,13 @@ const CashFlowSankey = lazy(() =>
 
 const IncomeSpendingChart = lazy(() =>
   import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
+);
+
+/* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
+   belongs in the Dashboard's chunk when most visits never open it — and this
+   is the default route, so its chunk is the one everybody pays for. */
+const TaxCalculatorModal = lazy(() =>
+  import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
 );
 
 /** How far back the cash-flow chart looks. One year of scrollable history. */
@@ -59,6 +66,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
 
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
+
+  /* The tax estimate is expensive and entirely on demand, so all that lives up
+     here is a boolean. The modal fetches nothing until its own button is
+     pressed — see the note at the top of TaxCalculatorModal. */
+  const [taxOpen, setTaxOpen] = useState(false);
 
   /* `positions` is one row per *purchase*, so a dollar-cost-averaged ticker
      appears several times. The headline counts holdings instead — three buys of
@@ -169,6 +181,15 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
               </span>
             )}
           </div>
+
+          {/* Sits under the headline figure rather than in the card actions:
+              it opens a different kind of thing — a document you take away —
+              and it is the one control here that runs work rather than
+              refreshing a view. */}
+          <button type="button" className="tax-cta" onClick={() => setTaxOpen(true)}>
+            <Icon icon={Calculator} size="sm" />
+            Calculate Thai income tax
+          </button>
         </div>
 
         <div className="hero-metrics">
@@ -401,6 +422,15 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
       </div>
+
+      {/* The chunk is only fetched once the button is pressed, and the
+          component itself holds no subscription and issues no request until
+          its own Run calculation button is pressed. */}
+      {taxOpen && (
+        <Suspense fallback={null}>
+          <TaxCalculatorModal open onClose={() => setTaxOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 }
