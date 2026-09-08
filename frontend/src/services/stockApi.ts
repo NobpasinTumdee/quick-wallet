@@ -109,9 +109,9 @@ interface FinnhubQuote {
   pc: number; // previous close
 }
 
-async function fetchFinnhub(symbol: string, signal?: AbortSignal): Promise<Quote> {
+async function fetchFinnhub(symbol: string): Promise<Quote> {
   const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(API_KEY)}`;
-  const response = await fetch(url, { signal });
+  const response = await fetch(url);
   if (response.status === 429) throw new Error('Rate limit reached — try again in a minute');
   if (!response.ok) throw new Error(`Finnhub responded ${response.status}`);
 
@@ -141,9 +141,9 @@ interface TwelveDataQuote {
   message?: string;
 }
 
-async function fetchTwelveData(symbol: string, signal?: AbortSignal): Promise<Quote> {
+async function fetchTwelveData(symbol: string): Promise<Quote> {
   const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(API_KEY)}`;
-  const response = await fetch(url, { signal });
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`Twelve Data responded ${response.status}`);
 
   const data = (await response.json()) as TwelveDataQuote;
@@ -162,6 +162,101 @@ async function fetchTwelveData(symbol: string, signal?: AbortSignal): Promise<Qu
     fetchedAt: Date.now(),
     source: 'live',
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Rate limiting                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Requests per minute the quote provider allows on its free tier.
+ *
+ * Finnhub has no batch endpoint on the free plan — `/quote` takes exactly one
+ * symbol — so a watchlist of fifteen names is fifteen requests, and the only
+ * honest lever is pacing rather than batching.
+ *
+ * This budget is separate from the candle API's, which talks to a different
+ * vendor on a different key and enforces its own 8/min cooldown. Mixing the two
+ * would have one screen's chart starve the other screen's prices.
+ */
+const RATE_LIMIT_PER_MINUTE: Record<Provider, number> = {
+  finnhub: 60,
+  twelvedata: 8,
+  mock: Number.POSITIVE_INFINITY,
+};
+
+/** Leaves headroom: hitting the documented ceiling exactly still trips 429s. */
+const RATE_BUDGET = Math.floor(RATE_LIMIT_PER_MINUTE[PROVIDER] * 0.8);
+const WINDOW_MS = 60_000;
+
+/** Timestamps of calls that actually reached the network, newest last. */
+let recentCalls: number[] = [];
+
+/**
+ * Blocks until there is room in the sliding window.
+ *
+ * A sliding window rather than a fixed one: with a fixed 60s bucket, 15 calls
+ * at 0:59 and 15 more at 1:01 both "fit" while actually being 30 calls in two
+ * seconds, which is exactly what a 429 is for.
+ *
+ * Callers wait rather than fail. Every call site here is a background refresh
+ * whose result is cached, so a two-second delay is invisible and a dropped
+ * quote is not.
+ */
+async function takeRateSlot(): Promise<void> {
+  if (!Number.isFinite(RATE_BUDGET)) return;
+
+  for (;;) {
+    const now = Date.now();
+    recentCalls = recentCalls.filter((at) => now - at < WINDOW_MS);
+    if (recentCalls.length < RATE_BUDGET) {
+      recentCalls.push(now);
+      return;
+    }
+    // Wait for the oldest call to age out of the window, plus a little.
+    const wait = WINDOW_MS - (now - recentCalls[0]) + 50;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+}
+
+/** Roughly how many calls are still available this minute. For diagnostics. */
+export function quoteBudgetRemaining(): number {
+  if (!Number.isFinite(RATE_BUDGET)) return Number.POSITIVE_INFINITY;
+  const now = Date.now();
+  return Math.max(0, RATE_BUDGET - recentCalls.filter((at) => now - at < WINDOW_MS).length);
+}
+
+/* ------------------------------------------------------------------ */
+/* In-flight de-duplication                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One network request per symbol at a time, shared by every caller.
+ *
+ * The Holdings table and the Watchlist can both want AAPL in the same tick —
+ * one because it is owned, one because it is watched. Without this they would
+ * each spend a request on it. With it, the second caller waits on the first
+ * promise and the symbol costs one slot no matter how many screens ask.
+ *
+ * The shared request deliberately carries no AbortSignal: one component
+ * unmounting must not cancel a fetch another component is still waiting on. The
+ * caller's signal is honoured after the fact instead, which also means an
+ * aborted request still lands in the cache rather than wasting the rate slot.
+ */
+const inflight = new Map<string, Promise<Quote>>();
+
+function fetchLive(ticker: string): Promise<Quote> {
+  const existing = inflight.get(ticker);
+  if (existing) return existing;
+
+  const request = takeRateSlot()
+    .then(() => (PROVIDER === 'twelvedata' ? fetchTwelveData(ticker) : fetchFinnhub(ticker)))
+    .finally(() => {
+      inflight.delete(ticker);
+    });
+
+  inflight.set(ticker, request);
+  return request;
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,11 +290,16 @@ export async function fetchQuote(
   }
 
   try {
-    const quote =
-      PROVIDER === 'twelvedata'
-        ? await fetchTwelveData(ticker, signal)
-        : await fetchFinnhub(ticker, signal);
+    // Paced and de-duplicated — see the two blocks above. One symbol is one
+    // request no matter how many screens want it, and the provider's per-minute
+    // budget is respected across all of them.
+    const quote = await fetchLive(ticker);
     writeCache(quote);
+
+    // The shared request ignores caller signals so it can be reused; honour
+    // this caller's own abort now that the result is safely cached.
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
     return { quote, error: null };
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err;

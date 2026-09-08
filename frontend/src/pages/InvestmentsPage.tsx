@@ -1,4 +1,15 @@
-import { ChartColumn, ChevronDown, Flag, Plus, Receipt, TrendingUp } from 'lucide-react';
+import {
+  ChartColumn,
+  ChevronDown,
+  Eye,
+  Flag,
+  Maximize2,
+  Minimize2,
+  Plus,
+  Receipt,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 
 import { Icon } from '../components/Icon';
@@ -6,6 +17,7 @@ import type { ChartReadout } from '../components/StockCandlestickChart';
 import { useCandles } from '../hooks/useCandles';
 import { candleProviderName } from '../services/candleApi';
 import { InvestmentForm, InvestmentPayload } from '../components/InvestmentForm';
+import { WatchlistForm, WatchlistPayload } from '../components/WatchlistForm';
 import {
   Alert,
   Badge,
@@ -23,7 +35,10 @@ import {
   parseDecimal,
 } from '../components/ui';
 import { useExcelDB } from '../hooks/useExcelDB';
+import { useFullscreen } from '../hooks/useFullscreen';
 import { PositionValuation, useStockQuotes } from '../hooks/useStockQuotes';
+import { useSymbolQuotes } from '../hooks/useSymbolQuotes';
+import { targetProximity, useWatchlist } from '../hooks/useWatchlist';
 import {
   cx,
   formatDate,
@@ -35,7 +50,7 @@ import {
 } from '../lib/format';
 import { ValuedHolding, groupValuedHoldings } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Investment, WalletBalance } from '../types';
+import { Investment, WalletBalance, WatchlistItem } from '../types';
 
 /* lightweight-charts is ~180kB and only this one card uses it, so it loads
    alongside the positions request rather than blocking every other route. */
@@ -66,8 +81,21 @@ export function InvestmentsPage() {
   const wallets = useExcelDB<WalletBalance>('wallets');
   const investments = useExcelDB<Investment>('investments');
 
-  /** Which holding the chart is drawing. Defaults to the first open one. */
+  /** Holdings vs Watchlist. The chart below is shared by both. */
+  const [tab, setTab] = useState<'holdings' | 'watchlist'>('holdings');
+
+  /** Which holding is selected. Drives the row highlight and the history row. */
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  /**
+   * The symbol the candle chart is drawing.
+   *
+   * Split out from `selectedKey` so a watched symbol — which has no holding and
+   * therefore no key — can drive the same chart. Holdings selection still sets
+   * it, so the existing behaviour is unchanged; the watchlist simply becomes a
+   * second thing that can point it somewhere.
+   */
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
   /** Which holding has its purchase history open. Usually the selected one. */
   const [historyKey, setHistoryKey] = useState<string | null>(null);
   /** O/H/L/C under the crosshair; null falls back to the latest bar. */
@@ -84,6 +112,12 @@ export function InvestmentsPage() {
   const [sellCurrency, setSellCurrency] = useState<'quote' | 'base'>('base');
 
   const portfolio = useStockQuotes(investments.items);
+  const watchlist = useWatchlist();
+  /* Watched names re-price every three minutes rather than every minute, and
+     share stockApi's cache, rate limiter and per-symbol de-duplication with the
+     holdings hook — so a symbol that is both owned and watched costs exactly
+     one request. See hooks/useSymbolQuotes.ts. */
+  const watchQuotes = useSymbolQuotes(watchlist.symbols);
   const money = useMoneyFormatter();
 
   const investmentWallets = wallets.items.filter((w) => w.mode === 'investment' && !w.archived);
@@ -132,8 +166,36 @@ export function InvestmentsPage() {
     setHistoryKey((current) => (current && holdingKeys.includes(current) ? current : null));
   }, [holdingKeys]);
 
-  const selected = holdings.find((h) => h.key === selectedKey) ?? null;
-  const chart = useCandles(selected?.symbol ?? null, 12);
+  /* Everything the chart is allowed to draw: owned or watched. Kept as a sorted
+     string so a background quote refresh — which rebuilds `holdings` — does not
+     restart the effect below on identity alone. */
+  const firstHoldingSymbol = holdings[0]?.symbol ?? null;
+  const chartableKey = useMemo(
+    () => [...new Set([...holdings.map((h) => h.symbol), ...watchlist.symbols])].sort().join(','),
+    [holdings, watchlist.symbols],
+  );
+
+  /**
+   * Keeps the chart pointed at something real.
+   *
+   * Only fills a blank or repairs a stale pick — it never tracks the holding
+   * selection, because that would yank the chart back off a watched symbol on
+   * the next background revalidation.
+   */
+  useEffect(() => {
+    const available = chartableKey ? chartableKey.split(',') : [];
+    setChartSymbol((current) =>
+      current && available.includes(current)
+        ? current
+        : firstHoldingSymbol ?? available[0] ?? null,
+    );
+  }, [chartableKey, firstHoldingSymbol]);
+
+  const chart = useCandles(chartSymbol, 12);
+  /** True when the charted symbol is watched but not owned. */
+  const chartedIsWatched = Boolean(
+    chartSymbol && !holdings.some((h) => h.symbol === chartSymbol),
+  );
 
   /* The crosshair bar when hovering, else the most recent one, so the readout
      always shows real numbers instead of blanking when the pointer leaves. */
@@ -260,9 +322,105 @@ export function InvestmentsPage() {
     await investments.remove(lot.id);
   }
 
+  /* ---- Watchlist ---- */
+
+  const [watchFormOpen, setWatchFormOpen] = useState(false);
+  const [editingWatch, setEditingWatch] = useState<WatchlistItem | undefined>();
+  /** Pre-fills the category when adding from inside a section header. */
+  const [watchCategory, setWatchCategory] = useState('');
+  /** Category names the user has folded away. Empty = everything open. */
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
+
+  /* A watchlist is a scanning surface — the longer it gets, the more it wants
+     the whole screen. The card itself does the expanding; the hook adds the
+     browser-chrome removal and the ways back out. */
+  const watchFullscreen = useFullscreen();
+
+  /* The chart gets its own, because the two are never expanded together and
+     each needs its own collapse target. */
+  const chartFullscreen = useFullscreen();
+
+  /**
+   * lightweight-charts is sized in pixels, not by CSS, so a full-screen chart
+   * has to be told how tall to be. Entering native fullscreen removes the
+   * browser chrome and therefore changes `innerHeight`, which is why this
+   * listens rather than measuring once.
+   */
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  );
+
+  useEffect(() => {
+    if (!chartFullscreen.expanded) return undefined;
+    const measure = () => setViewportHeight(window.innerHeight);
+    measure();
+    window.addEventListener('resize', measure);
+    // Mobile browsers move their toolbars without firing a window resize.
+    window.visualViewport?.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('resize', measure);
+    };
+  }, [chartFullscreen.expanded]);
+
+  /** Viewport less the card padding and the symbol/OHLC row above the canvas. */
+  const chartHeight = chartFullscreen.expanded
+    ? Math.max(320, viewportHeight - 150)
+    : 340;
+
+  /* The expanded card covers the tab bar, so this is not reachable by mouse —
+     but a keyboard user can still tab to it behind the overlay. Without this,
+     switching tabs would unmount the card and leave the browser in fullscreen
+     with the page scroll locked and nothing on screen explaining why. */
+  const collapseWatchFullscreen = watchFullscreen.collapse;
+  useEffect(() => {
+    if (tab !== 'watchlist') collapseWatchFullscreen();
+  }, [tab, collapseWatchFullscreen]);
+
+  /* Same guard for the chart. `chartSymbol` can go null underneath an expanded
+     card — every position sold on another device, say — and the card would
+     unmount while the browser was still in fullscreen with the scroll locked. */
+  const collapseChartFullscreen = chartFullscreen.collapse;
+  useEffect(() => {
+    if (!chartSymbol) collapseChartFullscreen();
+  }, [chartSymbol, collapseChartFullscreen]);
+
+  function openWatchForm(item?: WatchlistItem, category = '') {
+    setEditingWatch(item);
+    setWatchCategory(category);
+    setWatchFormOpen(true);
+  }
+
+  function closeWatchForm() {
+    setWatchFormOpen(false);
+    setEditingWatch(undefined);
+    setWatchCategory('');
+    watchlist.clearMutationError();
+  }
+
+  async function saveWatch(payload: WatchlistPayload) {
+    if (editingWatch) await watchlist.update(editingWatch.id, payload);
+    else await watchlist.create(payload);
+    closeWatchForm();
+  }
+
+  async function removeWatch(item: WatchlistItem) {
+    if (!window.confirm(`Remove ${item.symbol} from your watchlist?`)) return;
+    await watchlist.remove(item.id);
+  }
+
+  function toggleCategory(category: string) {
+    setCollapsedCategories((current) =>
+      current.includes(category)
+        ? current.filter((name) => name !== category)
+        : [...current, category],
+    );
+  }
+
   /** Clicking a holding charts it and opens its history; clicking again closes. */
   function toggleHolding(key: string) {
     setSelectedKey(key);
+    setChartSymbol(holdings.find((holding) => holding.key === key)?.symbol ?? null);
     setHistoryKey((current) => (current === key ? null : key));
   }
 
@@ -364,13 +522,24 @@ export function InvestmentsPage() {
         </Alert>
       )}
 
-      {/* ---- Price history for the selected position ---- */}
-      {selected && (
-        <Card className="card--glass">
+      {/* ---- Price history for whatever is charted ----
+          Fed by `chartSymbol`, which either tab can set. The candle provider
+          and its 8/min cooldown are untouched by the watchlist: switching to a
+          watched symbol is the same single request switching holdings was. */}
+      {chartSymbol && !watchFullscreen.expanded && (
+        <Card className={cx('card--glass', chartFullscreen.expanded && 'card--fullscreen')}>
           <div className="candle-card-head">
             <div>
               <span className="candle-symbol">
-                {selected.symbol}
+                {chartSymbol}
+                {chartedIsWatched && (
+                  <Badge tone="accent">
+                    <span className="watch-badge">
+                      <Icon icon={Eye} size="sm" />
+                      watching
+                    </span>
+                  </Badge>
+                )}
                 <span className="candle-symbol-meta">
                   daily · 12 months · {candleProviderName()}
                   {chart.fromCache && ' · cached'}
@@ -378,27 +547,47 @@ export function InvestmentsPage() {
               </span>
             </div>
 
-            {shown && (
-              <div className="candle-ohlc">
-                <span>O<b>{shown.open.toFixed(2)}</b></span>
-                <span>H<b>{shown.high.toFixed(2)}</b></span>
-                <span>L<b>{shown.low.toFixed(2)}</b></span>
-                <span>
-                  C
-                  <b className={shown.change >= 0 ? 'is-up' : 'is-down'}>{shown.close.toFixed(2)}</b>
-                </span>
-                <span className={shown.change >= 0 ? 'is-up' : 'is-down'}>
-                  {shown.change >= 0 ? '+' : ''}
-                  {shown.change.toFixed(2)}
-                </span>
-              </div>
-            )}
+            <div className="candle-head-tools">
+              {shown && (
+                <div className="candle-ohlc">
+                  <span>O<b>{shown.open.toFixed(2)}</b></span>
+                  <span>H<b>{shown.high.toFixed(2)}</b></span>
+                  <span>L<b>{shown.low.toFixed(2)}</b></span>
+                  <span>
+                    C
+                    <b className={shown.change >= 0 ? 'is-up' : 'is-down'}>
+                      {shown.close.toFixed(2)}
+                    </b>
+                  </span>
+                  <span className={shown.change >= 0 ? 'is-up' : 'is-down'}>
+                    {shown.change >= 0 ? '+' : ''}
+                    {shown.change.toFixed(2)}
+                  </span>
+                </div>
+              )}
+
+              <Button
+                size="sm"
+                variant="ghost"
+                className="card-expand"
+                onClick={chartFullscreen.toggle}
+                aria-pressed={chartFullscreen.expanded}
+                title={
+                  chartFullscreen.expanded
+                    ? 'Exit full screen (Esc)'
+                    : `Expand the ${chartSymbol} chart to full screen`
+                }
+                aria-label={chartFullscreen.expanded ? 'Exit full screen' : 'Full screen'}
+              >
+                <Icon icon={chartFullscreen.expanded ? Minimize2 : Maximize2} size="sm" />
+              </Button>
+            </div>
           </div>
 
-          <Suspense fallback={<div className="candle-frame" style={{ height: 340 }} />}>
+          <Suspense fallback={<div className="candle-frame" style={{ height: chartHeight }} />}>
           <StockCandlestickChart
             candles={chart.candles}
-            height={340}
+            height={chartHeight}
             loading={chart.loading}
             refreshing={chart.refreshing}
             error={chart.error}
@@ -410,6 +599,35 @@ export function InvestmentsPage() {
         </Card>
       )}
 
+      {/* ---- Holdings / Watchlist ----
+          One tab bar over two lists that share the chart above. The holdings
+          side below is unchanged. */}
+      <div className="invest-tabs" role="tablist" aria-label="Investment view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'holdings'}
+          className={cx('invest-tab', tab === 'holdings' && 'is-active')}
+          onClick={() => setTab('holdings')}
+        >
+          <Icon icon={TrendingUp} size="sm" />
+          Holdings
+          <span className="invest-tab-count">{holdings.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'watchlist'}
+          className={cx('invest-tab', tab === 'watchlist' && 'is-active')}
+          onClick={() => setTab('watchlist')}
+        >
+          <Icon icon={Eye} size="sm" />
+          Watchlist
+          <span className="invest-tab-count">{watchlist.items.length}</span>
+        </button>
+      </div>
+
+      {tab === 'holdings' && (
       <Card
         title="Positions"
         actions={
@@ -851,6 +1069,229 @@ export function InvestmentsPage() {
           </div>
         )}
       </Card>
+      )}
+
+      {/* Only one card is ever expanded. Unmounting the other is what makes
+          that true rather than merely likely: a control hidden behind a
+          full-screen overlay is still keyboard-reachable, and two panels each
+          holding a native-fullscreen request would fight over it. */}
+      {tab === 'watchlist' && !chartFullscreen.expanded && (
+        <Card
+          className={cx(watchFullscreen.expanded && 'card--fullscreen')}
+          title={
+            <span className="watch-card-title">
+              Watchlist
+              {watchFullscreen.expanded && (
+                <span className="watch-card-count">
+                  {watchlist.items.length} symbol{watchlist.items.length === 1 ? '' : 's'} ·{' '}
+                  {watchlist.groups.length} categor
+                  {watchlist.groups.length === 1 ? 'y' : 'ies'}
+                </span>
+              )}
+            </span>
+          }
+          actions={
+            <>
+              <RefreshButton
+                onRefresh={() => Promise.all([watchlist.refresh(), watchQuotes.refresh()])}
+                busy={watchlist.isValidating || watchQuotes.loading}
+                label="Refresh watchlist"
+              />
+              <Button size="sm" variant="primary" onClick={() => openWatchForm()}>
+                + Add to watchlist
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="card-expand"
+                onClick={watchFullscreen.toggle}
+                aria-pressed={watchFullscreen.expanded}
+                title={
+                  watchFullscreen.expanded
+                    ? 'Exit full screen (Esc)'
+                    : 'Expand the watchlist to full screen'
+                }
+                aria-label={watchFullscreen.expanded ? 'Exit full screen' : 'Full screen'}
+              >
+                <Icon icon={watchFullscreen.expanded ? Minimize2 : Maximize2} size="sm" />
+              </Button>
+            </>
+          }
+          padded={false}
+        >
+          {watchlist.mutationError && (
+            <div style={{ padding: 'var(--space-4) var(--space-4) 0' }}>
+              <Alert tone="error" onDismiss={watchlist.clearMutationError}>
+                {watchlist.mutationError}
+              </Alert>
+            </div>
+          )}
+
+          {watchlist.initialLoading ? (
+            <div className="card-body">
+              <Skeleton rows={4} />
+            </div>
+          ) : watchlist.items.length === 0 ? (
+            <EmptyState
+              icon={<Icon icon={Eye} size="xl" />}
+              title="Nothing on the watchlist"
+              description="Track symbols you do not own yet. Group them however you think — sectors, conviction, a shortlist — set a target price, and click any row to chart it."
+              action={
+                <Button variant="primary" onClick={() => openWatchForm()}>
+                  Add a symbol
+                </Button>
+              }
+            />
+          ) : (
+            <div className="watch-groups">
+              {watchlist.groups.map((group) => {
+                const collapsed = collapsedCategories.includes(group.category);
+
+                return (
+                  <section key={group.category} className="watch-group">
+                    <header className="watch-group-head">
+                      <button
+                        type="button"
+                        className="watch-group-toggle"
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleCategory(group.category)}
+                      >
+                        <Icon
+                          icon={ChevronDown}
+                          size="sm"
+                          className={cx('watch-caret', !collapsed && 'is-open')}
+                        />
+                        {group.category}
+                        <Badge>{group.items.length}</Badge>
+                      </button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title={`Add a symbol to ${group.category}`}
+                        onClick={() => openWatchForm(undefined, group.category)}
+                      >
+                        <Icon icon={Plus} size="sm" />
+                      </Button>
+                    </header>
+
+                    {!collapsed && (
+                      <ul className="watch-rows">
+                        {group.items.map((item) => {
+                          const quote = watchQuotes.quotes[item.symbol.toUpperCase()] ?? null;
+                          const proximity = targetProximity(quote?.price ?? 0, item.targetPrice);
+                          const charted = chartSymbol === item.symbol;
+
+                          return (
+                            <li key={item.id}>
+                              {/* The whole row is the chart trigger — that is
+                                  the primary thing you do with a watched name,
+                                  so it gets the whole hit area rather than a
+                                  small link inside it. */}
+                              <div
+                                className={cx('watch-row', charted && 'is-charted')}
+                                role="button"
+                                tabIndex={0}
+                                aria-pressed={charted}
+                                aria-label={`Chart ${item.symbol}`}
+                                onClick={() => setChartSymbol(item.symbol)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    setChartSymbol(item.symbol);
+                                  }
+                                }}
+                              >
+                                <div className="watch-main">
+                                  <span className="watch-symbol">{item.symbol}</span>
+                                  {item.note && <span className="watch-note">{item.note}</span>}
+                                </div>
+
+                                {/* Target, and how far the market is from it. */}
+                                <div className="watch-target">
+                                  {item.targetPrice > 0 ? (
+                                    <>
+                                      <span className="watch-target-price">
+                                        <Icon icon={Target} size="sm" />
+                                        {formatMoney(item.targetPrice, 'USD', settings.locale)}
+                                      </span>
+                                      {proximity.state !== 'none' && (
+                                        <span
+                                          className={cx(
+                                            'watch-proximity',
+                                            `is-${proximity.state}`,
+                                          )}
+                                        >
+                                          {proximity.state === 'near'
+                                            ? 'at target'
+                                            : `${formatPercent(proximity.distancePercent, 1, true)}`}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-faint">no target</span>
+                                  )}
+                                </div>
+
+                                {/* Live price, in the market's own currency —
+                                    the same convention the holdings table uses. */}
+                                <div className="watch-price">
+                                  {quote ? (
+                                    <>
+                                      <span className="price-native">
+                                        {formatMoney(quote.price, quote.currency, settings.locale)}
+                                      </span>
+                                      <span
+                                        className={cx(
+                                          'watch-change',
+                                          quote.changePercent >= 0
+                                            ? 'text-positive'
+                                            : 'text-negative',
+                                        )}
+                                      >
+                                        {formatPercent(quote.changePercent, 2, true)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-faint">
+                                      {watchQuotes.loading ? '…' : '—'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* stopPropagation: the row itself is a button. */}
+                                <div
+                                  className="row-actions"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => openWatchForm(item)}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    aria-label={`Remove ${item.symbol} from the watchlist`}
+                                    onClick={() => void removeWatch(item)}
+                                  >
+                                    ✕
+                                  </Button>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       <InvestmentForm
         open={formOpen}
@@ -866,6 +1307,18 @@ export function InvestmentsPage() {
         error={investments.mutationError}
         onClose={closeForm}
         onSubmit={save}
+      />
+
+      <WatchlistForm
+        open={watchFormOpen}
+        entry={editingWatch}
+        categories={watchlist.categories}
+        defaultCategory={watchCategory}
+        findBySymbol={watchlist.findBySymbol}
+        busy={watchlist.mutating}
+        error={watchlist.mutationError}
+        onClose={closeWatchForm}
+        onSubmit={saveWatch}
       />
 
       <Modal

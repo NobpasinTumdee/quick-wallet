@@ -4251,6 +4251,417 @@ table.data.data--nested td {
 }
 
 /* ==========================================================================
+   Watchlist
+   --------------------------------------------------------------------------
+   Two lists under one chart. Holdings answers "what do I own"; the watchlist
+   answers "what am I waiting for". They share the candle chart above, so the
+   tab bar has to read as switching the *list*, not the whole screen — hence a
+   quiet inline control rather than a full-width banner.
+   ========================================================================== */
+
+.invest-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.invest-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.invest-tab:hover {
+  color: var(--text);
+}
+
+.invest-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The active tab is a raised surface rather than a coloured fill: it reads as
+   the sheet in front, which is what a tab is. */
+.invest-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.invest-tab-count {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.invest-tab.is-active .invest-tab-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Marks the chart as showing something watched rather than owned. */
+.watch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+
+/* ---- Full-screen card ----
+   A watchlist is a scanning surface: the longer it gets, the more it wants the
+   whole viewport. The class does all the real work, which is why it is plain
+   CSS rather than the Fullscreen API — this behaves identically everywhere,
+   including iOS Safari, where `requestFullscreen()` on a non-video element is
+   simply refused. The hook layers the browser-chrome removal on top.
+
+   z-index 50 is chosen, not arbitrary: above the sidebar (20) and tab bar (30)
+   so it genuinely covers the app, but below the modal backdrop (60) and the
+   toaster (90) so "Add to watchlist" and any error still land on top of it. */
+
+.card--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  /* Opaque rather than glass: there is nothing behind it worth showing
+     through, and a blurred backdrop over a full screen of scrolling rows is
+     expensive for no benefit. */
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: card-fullscreen-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes card-fullscreen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The header stays put; only the list moves. */
+.card--fullscreen > .card-head {
+  flex: none;
+  padding-top: max(var(--space-5), env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: var(--space-4);
+}
+
+.card--fullscreen > .card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The chart card builds its own header inside the body rather than using the
+   Card's `title`/`actions` slots, so there is no `.card-head` to carry the
+   safe-area inset — the body is the first child and takes it instead. */
+.card--fullscreen > .card-body:first-child {
+  padding-top: max(var(--space-5), env(safe-area-inset-top, 0px));
+}
+
+/* `.card-head + .card-body--flush` adds a top margin that reads as a gap under
+   a border it now sits directly beneath. */
+.card--fullscreen > .card-head + .card-body--flush {
+  margin-top: 0;
+}
+
+/* On a wide monitor a row stretched to 2500px puts the symbol and its price at
+   opposite ends of the desk. Cap the column and centre it, the way a document
+   would. */
+.card--fullscreen .watch-groups {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+/* The right-hand cluster of the chart header: the O/H/L/C readout and the
+   expand toggle. Grouped so the readout does not get pushed onto its own line
+   the moment a button joins the row. */
+.candle-head-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.watch-card-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Only shown expanded, where the card head is the sole remaining context. */
+.watch-card-count {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+  letter-spacing: normal;
+}
+
+/* Shared by the watchlist card and the chart card. The toggle is a utility,
+   not an action — it sits quietly beside the controls that actually change
+   something. */
+.card-expand {
+  padding-inline: var(--space-3);
+}
+
+/* ---- Category sections ---- */
+
+.watch-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.watch-group + .watch-group {
+  border-top: 1px solid var(--divider);
+}
+
+.watch-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface-2);
+}
+
+.watch-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-group-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
+
+.watch-caret {
+  flex: none;
+  color: var(--text-faint);
+  /* Points right when closed, down when open — the rotation is the affordance. */
+  transform: rotate(-90deg);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.watch-caret.is-open {
+  transform: none;
+}
+
+/* ---- Rows ---- */
+
+.watch-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-row {
+  display: grid;
+  /* symbol+note | target | price | actions. The first column takes the slack so
+     a long note wraps instead of squeezing the numbers. */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.watch-rows > li:last-child .watch-row {
+  border-bottom: 0;
+}
+
+.watch-row:hover {
+  background: var(--surface-hover);
+}
+
+.watch-row:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The charted row, marked the same way the holdings table marks its own — the
+   two lists feed one chart, so they should agree on what "selected" looks like. */
+.watch-row.is-charted {
+  background: var(--accent-softer);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.watch-row.is-charted:hover {
+  background: var(--accent-soft);
+}
+
+.watch-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.watch-symbol {
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.watch-note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Target ---- */
+
+.watch-target {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-target-price {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.watch-target-price svg {
+  color: var(--text-faint);
+}
+
+/**
+ * How far the market is from the target.
+ *
+ * Only "near" is coloured, and it is coloured with the accent rather than
+ * green or red. A target above the market is someone waiting for a breakout; a
+ * target below it is someone waiting for a dip. Only the user knows which they
+ * meant, so the UI reports the distance and refuses to grade it.
+ */
+.watch-proximity {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-faint);
+}
+
+.watch-proximity.is-near {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- Live price ---- */
+
+.watch-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 92px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-change {
+  font-size: var(--text-xs);
+}
+
+/* ---- Narrow screens ----
+   The four-column grid collapses to two: identity over on the left, numbers
+   stacked on the right. Actions drop under them rather than being squeezed. */
+@media (max-width: 640px) {
+  .watch-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .watch-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .watch-price {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .watch-target {
+    grid-column: 1;
+    grid-row: 2;
+    align-items: flex-start;
+  }
+
+  .watch-row .row-actions {
+    grid-column: 2;
+    grid-row: 2;
+    justify-content: flex-end;
+  }
+
+  .watch-group-head,
+  .watch-row {
+    padding-inline: var(--space-4);
+  }
+}
+
+/* ==========================================================================
    Tax estimate
    --------------------------------------------------------------------------
    A receipt, not a dashboard. The layout follows the arithmetic top to bottom

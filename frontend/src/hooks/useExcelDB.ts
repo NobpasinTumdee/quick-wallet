@@ -79,6 +79,17 @@ const RESOURCES: Record<string, ResourceConfig> = {
     // a timeline reads forwards while a ledger reads backwards.
     sort: (a, b) => String(a.nextDueDate ?? '').localeCompare(String(b.nextDueDate ?? '')),
   },
+  watchlist: {
+    // Nothing is derived from a watched symbol — it has no cost, no balance and
+    // no effect on any total — so this is the one resource whose writes do not
+    // touch the dashboard.
+    invalidates: ['/api/watchlist'],
+    // Same order the server returns, so an optimistic row lands in the section
+    // it will still be in once the write comes back.
+    sort: (a, b) =>
+      String(a.category ?? '').localeCompare(String(b.category ?? '')) ||
+      String(a.symbol ?? '').localeCompare(String(b.symbol ?? '')),
+  },
 };
 
 function configFor(resource: string): ResourceConfig {

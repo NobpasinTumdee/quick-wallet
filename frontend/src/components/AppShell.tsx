@@ -74,6 +74,7 @@ function warmRoute(route: Route, period: string): void {
     case 'investments':
       prefetch('/api/investments');
       prefetch('/api/wallets');
+      prefetch('/api/watchlist');
       break;
     case 'budgets':
       prefetch('/api/budgets', { period });
@@ -100,7 +101,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   dashboard: ['/api/dashboard'],
   wallets: ['/api/wallets'],
   transactions: ['/api/transactions', '/api/wallets'],
-  investments: ['/api/investments', '/api/wallets'],
+  investments: ['/api/investments', '/api/wallets', '/api/watchlist'],
   budgets: ['/api/budgets', '/api/wallets'],
   subscriptions: ['/api/subscriptions', '/api/wallets'],
   settings: ['/api/health'],

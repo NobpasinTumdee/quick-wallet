@@ -119,6 +119,26 @@ export interface Investment {
   tagList: string[];
 }
 
+/**
+ * A symbol being tracked but not owned.
+ *
+ * Deliberately its own table rather than a flag on `Investment`: a watchlist
+ * row has no quantity, no cost basis and no wallet, so folding the two together
+ * would mean every P&L figure, DCA roll-up and wallet balance had to filter it
+ * back out again. Mirrors the `Watchlist` sheet in Code.gs.
+ */
+export interface WatchlistItem {
+  id: string;
+  userId: string;
+  symbol: string;
+  /** Free text, never empty — the server defaults it to "Watching". */
+  category: string;
+  /** 0 means no target set. */
+  targetPrice: number;
+  note: string;
+  createdAt: string;
+}
+
 export interface Budget {
   id: string;
   userId: string;
