@@ -156,6 +156,18 @@ var SHEETS = {
       { key: 'createdAt', header: 'Created At', type: 'date' }
     ]
   },
+  Watchlist: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'symbol', header: 'Symbol', type: 'string' },
+      { key: 'category', header: 'Category', type: 'string' },
+      { key: 'targetPrice', header: 'Target Price', type: 'number' },
+      { key: 'note', header: 'Note', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -245,7 +257,7 @@ function dispatch_(action, method, query, body, token) {
   var handlers = {
     'health': function () { return health_(); },
 
-    'auth.users': function () { return authUsers_(); },
+    'auth.status': function () { return authStatus_(); },
     'auth.register': function () { return authRegister_(body); },
     'auth.login': function () { return authLogin_(body); },
     'auth.me': function () { return { user: publicUser_(requireAuth_(token)) }; },
@@ -287,6 +299,11 @@ function dispatch_(action, method, query, body, token) {
     'subscriptions.update': function () { return subscriptionsUpdate_(requireAuth_(token), query, body); },
     'subscriptions.delete': function () { return subscriptionsDelete_(requireAuth_(token), query); },
     'subscriptions.pay': function () { return subscriptionsPay_(requireAuth_(token), query, body); },
+
+    'watchlist.list': function () { return watchlistList_(requireAuth_(token), query); },
+    'watchlist.create': function () { return watchlistCreate_(requireAuth_(token), body); },
+    'watchlist.update': function () { return watchlistUpdate_(requireAuth_(token), query, body); },
+    'watchlist.delete': function () { return watchlistDelete_(requireAuth_(token), query); },
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
@@ -852,13 +869,24 @@ function defaultSettings_(userId) {
 
 /* ---- auth actions ---- */
 
-function authUsers_() {
-  var users = readTable_('Users')
-    .filter(function (u) { return u.active !== false; })
-    .map(function (u) {
-      return { id: u.id, username: u.username, displayName: u.displayName };
-    });
-  return { users: users, needsSetup: users.length === 0 };
+/**
+ * Whether this workbook has any profile yet — and nothing else.
+ *
+ * This replaces an `auth.users` action that returned every active user's id,
+ * username and display name. It runs before authentication, by necessity: the
+ * sign-in screen has to know whether to show "create the first profile" or
+ * "sign in". But that single bit is the entire legitimate need, and the old
+ * shape handed anyone holding the /exec URL a complete list of who banks here,
+ * plus half of every credential pair.
+ *
+ * So the answer is one boolean. Enumerating accounts is not something a finance
+ * app should let an unauthenticated caller do, and the fix has to be here
+ * rather than in the client — hiding the list in the UI would have left the
+ * endpoint answering the same question to anyone who asked it directly.
+ */
+function authStatus_() {
+  var count = readTable_('Users').filter(function (u) { return u.active !== false; }).length;
+  return { needsSetup: count === 0 };
 }
 
 function authRegister_(body) {
@@ -1736,8 +1764,119 @@ function budgetsCopy_(user, body) {
 }
 
 /* =========================================================================
- * Settings
+ * Watchlist
+ * -------------------------------------------------------------------------
+ * Symbols the user is tracking but does not own. Deliberately a separate table
+ * from Investments rather than a status on it: a watchlist row has no quantity,
+ * no cost basis and no wallet, so folding it into Investments would mean every
+ * P&L calculation, every DCA roll-up and every wallet balance would first have
+ * to filter it back out. The two tables answer different questions.
  * ========================================================================= */
+
+/** Free text, but never empty — an unlabelled row still needs a bucket to sit in. */
+var WATCHLIST_DEFAULT_CATEGORY = 'Watching';
+
+function parseWatchlist_(body) {
+  var symbol = str_(body.symbol, 'symbol', { max: 20 }).toUpperCase();
+
+  var category = str_(body.category, 'category', { required: false, max: 40 }).trim();
+
+  return {
+    symbol: symbol,
+    category: category || WATCHLIST_DEFAULT_CATEGORY,
+    // 0 means "no target", which is why this is not required. The client shows
+    // the proximity indicator only when it is above zero.
+    targetPrice: num_(body.targetPrice, 'targetPrice', { min: 0 }),
+    note: str_(body.note, 'note', { required: false, max: 300 })
+  };
+}
+
+/**
+ * Guards against the same ticker being watched twice.
+ *
+ * Two rows for AAPL would show up as two rows in two different categories with
+ * the same live price, and deleting one would look like it did nothing. Scoped
+ * per user, and `exceptId` lets an update re-save its own row.
+ */
+function assertWatchlistUnique_(userId, symbol, exceptId) {
+  var clash = userRows_('Watchlist', userId).filter(function (row) {
+    return String(row.symbol).toUpperCase() === symbol && row.id !== exceptId;
+  })[0];
+
+  if (clash) {
+    throw apiError_(
+      symbol + ' is already on your watchlist under "' + clash.category + '"',
+      409,
+      'DUPLICATE_SYMBOL'
+    );
+  }
+}
+
+/** Grouped the way the UI reads it: category, then symbol. */
+function watchlistList_(user, query) {
+  var rows = userRows_('Watchlist', user.id);
+
+  if (query && query.category) {
+    rows = rows.filter(function (row) {
+      return String(row.category).toLowerCase() === String(query.category).toLowerCase();
+    });
+  }
+
+  return rows
+    .map(function (row) {
+      var copy = {};
+      for (var k in row) if (k !== '_row') copy[k] = row[k];
+      return copy;
+    })
+    .sort(function (a, b) {
+      return String(a.category).localeCompare(String(b.category)) ||
+        String(a.symbol).localeCompare(String(b.symbol));
+    });
+}
+
+function watchlistCreate_(user, body) {
+  var parsed = parseWatchlist_(body);
+  assertWatchlistUnique_(user.id, parsed.symbol, null);
+
+  var entry = {
+    id: uuid_(), userId: user.id,
+    symbol: parsed.symbol, category: parsed.category,
+    targetPrice: parsed.targetPrice, note: parsed.note,
+    createdAt: new Date().toISOString()
+  };
+
+  insertRow_('Watchlist', entry);
+  return entry;
+}
+
+function watchlistUpdate_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Watchlist', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Watchlist entry not found', 404, 'NOT_FOUND');
+  }
+
+  var merged = {};
+  for (var k in existing) if (k !== '_row') merged[k] = existing[k];
+  for (var j in body) merged[j] = body[j];
+
+  var parsed = parseWatchlist_(merged);
+  assertWatchlistUnique_(user.id, parsed.symbol, id);
+
+  var updated = updateRow_('Watchlist', id, parsed);
+  delete updated._row;
+  return updated;
+}
+
+function watchlistDelete_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Watchlist', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Watchlist entry not found', 404, 'NOT_FOUND');
+  }
+  deleteRow_('Watchlist', id);
+  return { ok: true, id: id };
+}
 
 /* =========================================================================
  * Subscriptions & recurring bills

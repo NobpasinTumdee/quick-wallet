@@ -3,6 +3,8 @@ import {
   ChevronRight,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Receipt,
   Repeat2,
   Settings,
@@ -16,6 +18,7 @@ import { useCallback, useState } from 'react';
 import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
+import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -147,6 +150,10 @@ export function AppShell() {
      every app open for data nothing on screen is showing. Writes still reach
      every cached copy — `mutateMatching` patches by key prefix, so a row added
      from the Overview page appears in Activity's month-scoped list too. */
+  /* Rail mode. Read synchronously from localStorage on first render, so the
+     sidebar never paints wide and then snaps shut. */
+  const [railed, , toggleRail] = useStoredBoolean('quick-wallet.sidebar-railed', false);
+
   const [quickFormOpen, setQuickFormOpen] = useState(false);
   const quickWallets = useExcelDB<WalletBalance>('wallets');
   const quickTransactions = useExcelDB<Transaction>('transactions', undefined, { enabled: false });
@@ -174,11 +181,27 @@ export function AppShell() {
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
 
   return (
-    <div className="shell">
+    <div className={cx('shell', railed && 'is-railed')}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <Logo size={30} /> Quick Wallet
+          <Logo size={30} />
+          <span className="sidebar-label">Quick Wallet</span>
         </div>
+
+        {/* Only rendered where the sidebar exists at all — below 1000px the tab
+            bar takes over and there is nothing to collapse. */}
+        <button
+          type="button"
+          className="sidebar-rail-toggle"
+          onClick={toggleRail}
+          aria-expanded={!railed}
+          aria-label={railed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={railed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <Icon icon={railed ? PanelLeftOpen : PanelLeftClose} size="sm" />
+          <span className="sidebar-label">Collapse</span>
+        </button>
+
         <nav className="sidebar-nav">
           {NAV.map((item) => (
             <button
@@ -186,22 +209,33 @@ export function AppShell() {
               type="button"
               className={cx('sidebar-item', route === item.route && 'is-active')}
               aria-current={route === item.route ? 'page' : undefined}
+              /* The label is hidden visually in rail mode but stays in the DOM,
+                 so the accessible name never depends on the width. `title`
+                 gives the same thing to a mouse. */
+              title={railed ? item.label : undefined}
               onMouseEnter={() => warmRoute(item.route, period)}
               onFocus={() => warmRoute(item.route, period)}
               onClick={() => go(item.route)}
             >
               <Icon icon={item.icon} />
-              {item.label}
+              <span className="sidebar-label">{item.label}</span>
             </button>
           ))}
         </nav>
+
         <div className="sidebar-foot">
-          <div>
+          <div className="sidebar-label">
             Signed in as <strong>{user?.displayName}</strong>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            title={railed ? 'Sign out' : undefined}
+            aria-label="Sign out"
+          >
             <Icon icon={LogOut} size="sm" />
-            Sign out
+            <span className="sidebar-label">Sign out</span>
           </Button>
         </div>
       </aside>

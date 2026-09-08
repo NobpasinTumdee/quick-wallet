@@ -141,7 +141,7 @@ interface ResolvedCall {
 const NAMED_ACTIONS: Record<string, string> = {
   'health': 'health',
   'flush': 'flush',
-  'auth/users': 'auth.users',
+  'auth/status': 'auth.status',
   'auth/me': 'auth.me',
   'auth/login': 'auth.login',
   'auth/register': 'auth.register',

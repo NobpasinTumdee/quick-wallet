@@ -142,7 +142,7 @@ POST /api/investments/:id/sell           ->  { action: "investments.sell", query
 
 ```
 health                    flush
-auth.users                auth.register        auth.login
+auth.status               auth.register        auth.login
 auth.me                   auth.changePassword  auth.resetPassword
 wallets.list              wallets.get          wallets.create       wallets.update      wallets.delete
 transactions.list         transactions.get     transactions.create  transactions.update transactions.delete
@@ -150,11 +150,14 @@ investments.list          investments.get      investments.symbols  investments.
 investments.update        investments.sell     investments.delete
 budgets.list              budgets.get          budgets.create       budgets.update
 budgets.delete            budgets.copy
+subscriptions.list        subscriptions.get    subscriptions.create subscriptions.update
+subscriptions.delete      subscriptions.pay
+watchlist.list            watchlist.create     watchlist.update     watchlist.delete
 settings.get              settings.save
 dashboard.get             dashboard.periods
 ```
 
-Everything except `health`, `flush`, `auth.users`, `auth.login`, `auth.register`
+Everything except `health`, `flush`, `auth.status`, `auth.login`, `auth.register`
 and `auth.resetPassword` requires a valid token, and every query is scoped to the
 user that token resolves to.
 
@@ -169,9 +172,13 @@ user that token resolves to.
 | `Transactions` | `ID` | A transfer is **one** row: source `Wallet ID` + `To Wallet ID`. |
 | `Investments` | `ID` | Cost basis lives here; live price comes from the stock API. |
 | `Budgets` | `ID` | One row per period + scope + target. |
+| `Subscriptions` | `ID` | `Next Due Date` rolls forward when a payment is confirmed. |
+| `Watchlist` | `ID` | Symbols tracked but not owned — no quantity, no cost basis. |
 | `Settings` | `User ID` | Theme, accent, custom CSS vars, currency, display currency + FX rate, locale, categories. |
 
-Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this.
+Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this,
+and `createMissingSheets()` creates any table a newer version of `Code.gs` adds
+without touching existing data.
 
 **Balances** are derived, never stored:
 

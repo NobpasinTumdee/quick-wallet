@@ -103,6 +103,8 @@
   /* ---------- layout ---------- */
   --header-height: 68px;
   --sidebar-width: 252px;
+  /* Rail mode: wide enough for a 40px icon target plus breathing room. */
+  --sidebar-width-rail: 68px;
   --page-max: 1320px;
 
   /* ---------- motion ----------

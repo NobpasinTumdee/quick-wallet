@@ -23,6 +23,44 @@
   <meta name="description" content="Local, offline-first personal finance and investment tracker." />
   <meta name="theme-color" content="#0d1220" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
+
+  <!--
+    Anti-FOUC. Blocking, inline, and in <head> on purpose: the palette lives in
+    the user's Settings row behind an Apps Script round trip, so without this
+    the app paints the hard-coded dark default and repaints one to three
+    seconds later in whatever the user actually chose.
+
+    This cannot be a module — `type="module"` is deferred and runs after the
+    document has already painted once. It is therefore a deliberate duplicate
+    of `applyTheme` in src/lib/themeStorage.ts; the two share the storage key
+    and the shape it holds, and must be kept in step.
+  -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('quick-wallet.theme');
+        if (!raw) return;
+        var cached = JSON.parse(raw);
+        if (!cached || typeof cached !== 'object') return;
+
+        var root = document.documentElement;
+        if (typeof cached.theme === 'string' && cached.theme) {
+          root.setAttribute('data-theme', cached.theme);
+        }
+        if (cached.theme === 'custom' && cached.customVars) {
+          for (var key in cached.customVars) {
+            if (key.indexOf('--') === 0) root.style.setProperty(key, cached.customVars[key]);
+          }
+        }
+        if (typeof cached.accent === 'string' && cached.accent) {
+          root.style.setProperty('--accent', cached.accent);
+        }
+      } catch (error) {
+        /* Private mode, disabled storage, or a corrupt value. The markup's own
+           data-theme stands, which is exactly the old behaviour. */
+      }
+    })();
+  </script>
 </head>
 
 <body>

@@ -27,6 +27,12 @@ const IncomeSpendingChart = lazy(() =>
   import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
 );
 
+/* Recharts again, plus the projection maths. Lazy for the same reason the two
+   above are: the widget is below the fold and most visits never scroll to it. */
+const NetWorthProjection = lazy(() =>
+  import('../components/NetWorthProjection').then((m) => ({ default: m.NetWorthProjection })),
+);
+
 /* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
    belongs in the Dashboard's chunk when most visits never open it — and this
    is the default route, so its chunk is the one everybody pays for. */
@@ -319,11 +325,14 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
+        {/* Twelve months of paired bars. At half width each month gets ~40px,
+            which is why the component scrolls horizontally; given the full row
+            it mostly does not have to. */}
         <Suspense
-          fallback={<div className="card bento-item--half ischart-placeholder" aria-hidden="true" />}
+          fallback={<div className="card bento-item--full ischart-placeholder" aria-hidden="true" />}
         >
           <IncomeSpendingChart
-            className="bento-item--half"
+            className="bento-item--full"
             transactions={history.items}
             trend={data.trend}
             period={period}
@@ -332,6 +341,28 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             stale={history.isValidating}
           />
         </Suspense>
+
+        {/* Sits beside the cash-flow chart: one card looks back at what was
+            saved, the next asks what that rate becomes. `netWorthLive` and the
+            dashboard's own trend are reused, so the widget costs no request. */}
+        <Card
+          /* Full row, not `--wide`. A span-4 card between two span-3 cards
+             cannot tile a 6-column grid — 4 + 3 = 7 — so it wrapped and left a
+             three-column hole behind it. It also wants the width: a ten-year
+             curve plus two sliders is cramped at four columns. */
+          className="bento-item--full"
+          title="Where this is heading"
+          subtitle="Projected net worth if today's savings rate holds"
+        >
+          <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
+            <NetWorthProjection
+              startingNetWorth={netWorthLive}
+              trend={data.trend}
+              money={format}
+              locale={locale}
+            />
+          </Suspense>
+        </Card>
 
         <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
@@ -364,7 +395,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           />
         </Suspense>
 
+        {/* Half width so it pairs with "Where it went" — dense packing lifts it
+            into that row's empty half rather than leaving one there. */}
         <Card
+          className="bento-item--half"
           title="Recent activity"
           actions={
             <Button size="sm" onClick={() => onNavigate('transactions')}>

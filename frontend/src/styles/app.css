@@ -245,7 +245,10 @@ body::after {
   min-height: 100%;
 }
 
-.sidebar {
+.sidebar,
+/* The rail toggle only means anything where the sidebar exists. Below 1000px
+   the tab bar takes over and there is nothing to collapse. */
+.sidebar-rail-toggle {
   display: none;
 }
 
@@ -522,6 +525,13 @@ body::after {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
+}
+
+/* Always the whole row, at every breakpoint. For widgets whose content needs
+   the width — a twelve-month chart, a ten-year projection — rather than ones
+   that merely look nicer wide. */
+.bento-item--full {
+  grid-column: 1 / -1;
 }
 
 .bento > * {
@@ -2209,13 +2219,6 @@ tr:hover .row-actions,
 
 .auth-switch button:hover {
   opacity: 0.75;
-}
-
-.user-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: var(--space-4);
 }
 
 .user-chip {
@@ -4250,6 +4253,263 @@ table.data.data--nested td {
   }
 }
 
+
+/* ==========================================================================
+   Net worth projection
+   --------------------------------------------------------------------------
+   Two stacked bands: contributions as recessive context, growth as the one
+   coloured mark. The gap between them is the whole point of the widget, so
+   everything else here recedes — grid, axes and the base band included.
+
+   Every colour is a token. Thirteen themes and a user-settable accent mean a
+   hard-coded hex is a bug waiting for someone to switch palette.
+   ========================================================================== */
+
+.proj {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.proj--loading {
+  min-height: 300px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+
+/* ---- Headline ----
+   The figures are here as text on purpose. The band fills sit below 3:1
+   against the card, which is legible as a shape but not as a value, so the
+   values are never colour-only. */
+
+.proj-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.proj-total {
+  margin-top: var(--space-1);
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.proj-figures {
+  display: flex;
+  gap: var(--space-5);
+  margin: 0;
+}
+
+.proj-figures > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.proj-figures dt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.proj-figures dd {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.proj-share {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+}
+
+/* ---- Marks ----
+   The base band is a neutral: it is money you already had or put in, and it is
+   not the subject. The growth band carries the only hue. */
+
+.proj-area--contributed {
+  fill: color-mix(in srgb, var(--text) 12%, transparent);
+  stroke: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* Stroked in the token itself so the boundary between the bands stays crisp at
+   any fill opacity — this doubles as the 2px separator between stacked fills. */
+.proj-area--growth {
+  stroke: var(--positive);
+}
+
+/* 0.65 at the top, fading down. Composited on both the light and dark card
+   surfaces this lands inside the OKLCH band a mark should occupy; the raw dark
+   `--positive` on its own is too light for it. */
+.proj-stop--growth-top {
+  stop-color: var(--positive);
+  stop-opacity: 0.65;
+}
+
+.proj-stop--growth-bottom {
+  stop-color: var(--positive);
+  stop-opacity: 0.14;
+}
+
+/* Legend and tooltip swatches. */
+.proj-key--growth {
+  background: var(--positive);
+}
+
+.proj-key--contributed {
+  background: color-mix(in srgb, var(--text) 32%, transparent);
+}
+
+.proj-axis {
+  font-size: var(--text-2xs);
+  fill: var(--text-faint);
+}
+
+.proj-cursor {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.proj-plot {
+  margin-inline: calc(-1 * var(--space-2));
+}
+
+/* ---- Controls ---- */
+
+.proj-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.proj-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.proj-control-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.proj-control-head strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A range input is one of the few controls browsers still style themselves, so
+   it gets reset explicitly rather than inheriting three different looks. */
+.proj-control input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  cursor: pointer;
+}
+
+.proj-control input[type='range']:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.proj-control input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.proj-control input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.proj-horizon {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---- Provenance ----
+   Where the contribution figure came from, and what the projection is not.
+   A ten-year number without its caveats is a promise. */
+
+.proj-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.proj-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.proj-reset {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .proj-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .proj-figures {
+    gap: var(--space-4);
+  }
+}
+
 /* ==========================================================================
    Watchlist
    --------------------------------------------------------------------------
@@ -5295,6 +5555,22 @@ table.data.data--nested td {
 
   .bento {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* Matches the vertical rhythm of `.page`, which uses --space-5. The grid
+       previously sat at --space-4, so the gap between cards was tighter than
+       the gap above them. */
+    gap: var(--space-5);
+
+    /* Cards are their own height instead of being stretched to the tallest in
+       the row. A short list stretched to match a tall chart is dead space
+       *inside* a card, which reads as a hole just as much as a missing track. */
+    align-items: start;
+
+    /* Insurance, not the fix. The spans below already tile exactly; `dense`
+       means that if a future card is sized wrong, a later smaller one backfills
+       the gap instead of leaving a ragged row. It can place a card earlier than
+       its DOM position — acceptable here because these panels are independent
+       and each carries its own heading. */
+    grid-auto-flow: row dense;
   }
 
   .bento > * {
@@ -5307,8 +5583,12 @@ table.data.data--nested td {
 }
 
 @media (min-width: 1000px) {
+  /* `auto` rather than a fixed track: the column is sized by the sidebar's own
+     width, so animating that one property drives the whole layout. Transitioning
+     `grid-template-columns` directly would work in current browsers but not in
+     Safari before 16, and the result here is identical. */
   .shell {
-    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-columns: auto 1fr;
   }
 
   .sidebar {
@@ -5318,6 +5598,9 @@ table.data.data--nested td {
     position: sticky;
     top: 0;
     height: 100vh;
+    width: var(--sidebar-width);
+    overflow: hidden;
+    transition: width 0.3s ease;
     padding: var(--space-5) var(--space-3) var(--space-4);
     background: var(--glass-bg-subtle);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -5402,6 +5685,91 @@ table.data.data--nested td {
     color: var(--text-muted);
   }
 
+  /* ---- Rail toggle ----
+     Quiet by default. It is a layout control, not a destination, so it must not
+     compete with the six nav items directly beneath it. */
+  .sidebar-rail-toggle {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: var(--space-2);
+    padding: 8px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+    transition: color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out);
+  }
+
+  .sidebar-rail-toggle:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .sidebar-rail-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  /* ---- Rail mode ----
+     Labels are hidden but never removed: the accessible name of a nav item must
+     not depend on how wide the window is. This is `.sr-only`'s clip technique,
+     applied conditionally. */
+  .shell.is-railed .sidebar {
+    width: var(--sidebar-width-rail);
+    padding-inline: var(--space-2);
+  }
+
+  .shell.is-railed .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Everything centres on the icon once the text is gone. */
+  .shell.is-railed .sidebar-brand,
+  .shell.is-railed .sidebar-item,
+  .shell.is-railed .sidebar-rail-toggle,
+  .shell.is-railed .sidebar-foot .btn {
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .shell.is-railed .sidebar-brand {
+    padding-bottom: var(--space-5);
+  }
+
+  .shell.is-railed .sidebar-foot {
+    padding-inline: 0;
+    align-items: center;
+  }
+
+  /* The active rail would sit under a centred icon rather than beside it. */
+  .shell.is-railed .sidebar-item::before {
+    display: none;
+  }
+
+  .shell.is-railed .sidebar-item.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* The hover nudge reads as a wobble when there is no label to slide. */
+  .shell.is-railed .sidebar-item:hover {
+    transform: none;
+  }
+
   .tabbar,
   .topbar-logo {
     display: none;
@@ -5415,7 +5783,18 @@ table.data.data--nested td {
     padding: var(--space-3) var(--space-6);
   }
 
+  /* ---- The page fills the space the sidebar leaves ----
+     `.page` caps at --page-max and centres itself, which is right on a phone
+     where the cap never binds. Beside a 252px sidebar on a desktop monitor it
+     is not: the content sits centred in what is left, so the eye reads
+     sidebar -> a wide empty gutter -> content, and the gutter looks like a
+     layout bug rather than a margin.
+
+     Released here because the sidebar already provides the left edge and the
+     grid below provides the rhythm. A card is a container, not a paragraph, so
+     it has no reading width to protect. */
   .page {
+    max-width: none;
     padding: var(--space-6) var(--space-6) var(--space-8);
     gap: var(--space-5);
   }
@@ -5438,6 +5817,16 @@ table.data.data--nested td {
 
   .hero-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Beyond about 2200px the grid stops being generous and starts being sparse -
+   a two-column row of cards 1000px wide each, with list rows whose label and
+   amount sit a foot apart. This is the only cap left, and it is far outside
+   any normal desktop. */
+@media (min-width: 2200px) {
+  .page {
+    max-width: 2040px;
   }
 }
 

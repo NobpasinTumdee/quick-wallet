@@ -5,8 +5,29 @@ import { Logo } from '../components/Logo';
 import { Alert, Button, Field, Input } from '../components/ui';
 import { useAuth } from '../state/AuthContext';
 
-interface UserListResponse {
-  users: { id: string; username: string; displayName: string }[];
+/**
+ * Sign in.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THERE IS NO LIST OF PROFILES
+ * ---------------------------------------------------------------------------
+ * There used to be. This screen fetched every registered user and rendered them
+ * as clickable chips, which made signing in one tap faster and handed anyone who
+ * opened the page the display name of every person who banks in this workbook —
+ * plus, since the chips filled in the username field, half of every credential
+ * pair. On a shared machine that is a stranger learning who else uses it; on a
+ * deployed URL it is account enumeration.
+ *
+ * The screen now asks who you are and takes your word for nothing. The only
+ * thing it still fetches before sign-in is a single boolean — whether the
+ * workbook has any profile at all — because it has to know whether to offer
+ * "sign in" or "create the first profile". That is served by `auth.status`,
+ * which was rewritten to return nothing but that bit; deleting the chips alone
+ * would have left the endpoint answering the same question to anyone who
+ * called it directly.
+ */
+
+interface AuthStatusResponse {
   needsSetup: boolean;
 }
 
@@ -14,7 +35,8 @@ export function LoginPage() {
   const { login, register } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [knownUsers, setKnownUsers] = useState<UserListResponse['users']>([]);
+  /** Null until the status check answers — drives the copy, nothing else. */
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -25,12 +47,11 @@ export function LoginPage() {
   useEffect(() => {
     let cancelled = false;
     api
-      .get<UserListResponse>('/api/auth/users')
+      .get<AuthStatusResponse>('/api/auth/status')
       .then((data) => {
         if (cancelled) return;
-        setKnownUsers(data.users);
+        setNeedsSetup(data.needsSetup);
         if (data.needsSetup) setMode('register');
-        else if (data.users.length === 1) setUsername(data.users[0].username);
       })
       .catch((err) => !cancelled && setError(err.message));
     return () => {
@@ -52,7 +73,7 @@ export function LoginPage() {
     }
   }
 
-  const isFirstRun = knownUsers.length === 0;
+  const isFirstRun = needsSetup === true;
 
   return (
     <div className="auth">
@@ -62,26 +83,11 @@ export function LoginPage() {
         </div>
         <p className="auth-sub">
           {mode === 'login'
-            ? 'Everything stays in database.xlsx on this machine.'
+            ? 'Sign in to your workbook.'
             : isFirstRun
               ? 'Create the first profile for this workbook.'
               : 'Add another profile to this workbook.'}
         </p>
-
-        {mode === 'login' && knownUsers.length > 0 && (
-          <div className="user-chips">
-            {knownUsers.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                className={`user-chip${username === user.username ? ' is-active' : ''}`}
-                onClick={() => setUsername(user.username)}
-              >
-                {user.displayName}
-              </button>
-            ))}
-          </div>
-        )}
 
         <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
           <Field label="Username">
@@ -91,7 +97,11 @@ export function LoginPage() {
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
+              /* Nothing is pre-filled and nothing is suggested by the app. The
+                 browser's own password manager may still offer a saved entry,
+                 which is the right place for that to come from. */
               required
+              autoFocus
             />
           </Field>
 
@@ -118,7 +128,10 @@ export function LoginPage() {
           </Button>
         </div>
 
-        {!isFirstRun && (
+        {/* Hidden until the status check answers. Offering "create profile" on a
+            workbook that turns out to need setup, or vice versa, is a worse
+            first impression than a beat of nothing. */}
+        {needsSetup === false && (
           <p className="auth-switch">
             {mode === 'login' ? 'Need another profile?' : 'Already have one?'}{' '}
             <button
