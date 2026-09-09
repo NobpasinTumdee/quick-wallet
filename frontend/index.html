@@ -24,6 +24,14 @@
   <meta name="theme-color" content="#0d1220" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
 
+  <!-- Static, and above the boot script on purpose: the TLS handshakes start
+       while the parser is still here, so the font stylesheet the script may be
+       about to inject is not also paying for connection setup. Harmless for
+       users on the system face — a preconnect that goes unused costs one idle
+       socket that the browser closes on its own. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
   <!--
     Anti-FOUC. Blocking, inline, and in <head> on purpose: the palette lives in
     the user's Settings row behind an Apps Script round trip, so without this
@@ -34,6 +42,13 @@
     document has already painted once. It is therefore a deliberate duplicate
     of `applyTheme` in src/lib/themeStorage.ts; the two share the storage key
     and the shape it holds, and must be kept in step.
+
+    The typeface is handled here too, and matters more than the colours: a font
+    that swaps in late does not merely recolour the page, it re-measures every
+    line and shifts the layout under the reader. The cache holds the *resolved*
+    stack and stylesheet URL rather than the catalogue id precisely so this
+    script needs no copy of src/lib/fonts.ts — it applies two strings and
+    injects one link, and the catalogue stays in one file.
   -->
   <script>
     (function () {
@@ -54,6 +69,25 @@
         }
         if (typeof cached.accent === 'string' && cached.accent) {
           root.style.setProperty('--accent', cached.accent);
+        }
+
+        /* Body and heading faces move together; --font-mono is left alone so
+           figures stay monospaced. */
+        if (typeof cached.fontStack === 'string' && cached.fontStack) {
+          root.style.setProperty('--font-sans', cached.fontStack);
+          root.style.setProperty('--font-display', cached.fontStack);
+        }
+
+        /* Requested from inside <head>, so the download overlaps parsing the
+           rest of the document instead of starting after first paint. The id
+           is the same one ensureFontLoaded() looks for, so the module layer
+           finds this link already present and does not fetch it twice. */
+        if (typeof cached.fontHref === 'string' && cached.fontHref.indexOf('https://fonts.googleapis.com/') === 0) {
+          var link = document.createElement('link');
+          link.id = 'qw-font-' + cached.fontId;
+          link.rel = 'stylesheet';
+          link.href = cached.fontHref;
+          document.head.appendChild(link);
         }
       } catch (error) {
         /* Private mode, disabled storage, or a corrupt value. The markup's own

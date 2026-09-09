@@ -182,7 +182,32 @@ var SHEETS = {
       { key: 'locale', header: 'Locale', type: 'string' },
       { key: 'monthlyIncome', header: 'Monthly Income', type: 'number' },
       { key: 'categories', header: 'Categories', type: 'list' },
-      { key: 'updatedAt', header: 'Updated At', type: 'date' }
+      { key: 'updatedAt', header: 'Updated At', type: 'date' },
+      /* The theme library. A JSON array of
+           { id, name, colors: { '--bg': '#…', … }, createdAt, updatedAt }
+         held in one cell rather than in a CustomThemes sheet of its own.
+
+         Apps Script bills per Sheets call, not per byte: a separate sheet would
+         cost an extra getDataRange() on every settings read plus a userId filter,
+         to store a handful of ~400-byte rows. This column rides along with the
+         Settings row the client already fetches on boot, so the whole library
+         arrives in the request that was happening anyway and a library write is
+         one setValues() on a row we had already located. A cell holds 50,000
+         characters — roughly 100 themes — which is far past what anyone will make,
+         and MAX_CUSTOM_THEMES below keeps it well under that.
+
+         Appended after updatedAt on purpose: insertRow_/updateRow_ write columns
+         positionally in schema order, so new columns are only safe at the end,
+         where createMissingSheets() also appends their headers. */
+      { key: 'customThemes', header: 'Custom Themes (JSON)', type: 'jsonlist' },
+      /* Which library entry `theme: 'custom'` is currently showing. Empty when a
+         built-in preset is active or the custom slot is being edited ad hoc. */
+      { key: 'activeCustomThemeId', header: 'Active Custom Theme ID', type: 'string' },
+      /* The typeface, as a FONTS id ('sarabun') rather than a CSS font stack.
+         Storing a name from a closed list keeps arbitrary CSS out of the sheet
+         and out of the custom property it ends up in; the client resolves the
+         id to a stack. Empty = the system face. */
+      { key: 'fontFamily', header: 'Font Family', type: 'string' }
     ]
   }
 };
@@ -307,6 +332,14 @@ function dispatch_(action, method, query, body, token) {
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
+
+    /* Saved palettes. Every write answers with the whole Settings row so the
+       client can swap its settings in one round trip. */
+    'themes.list': function () { return themesList_(requireAuth_(token)); },
+    'themes.create': function () { return themesCreate_(requireAuth_(token), body); },
+    'themes.update': function () { return themesUpdate_(requireAuth_(token), query, body); },
+    'themes.delete': function () { return themesDelete_(requireAuth_(token), query); },
+    'themes.activate': function () { return themesActivate_(requireAuth_(token), query); },
 
     'dashboard.get': function () { return dashboardGet_(requireAuth_(token), query); },
     'dashboard.periods': function () { return dashboardPeriods_(requireAuth_(token)); },
@@ -538,6 +571,23 @@ function coerce_(value, type) {
         return {};
       }
     }
+    /* Like 'json', but the empty cell coerces to [] rather than {}.
+       That difference is not cosmetic: the client calls .map() on this value,
+       and an object arriving where an array was declared is an unhandled
+       TypeError that unmounts the whole React tree. 'json' answers {} for an
+       empty cell, which is right for a map like customVars and wrong for a
+       list, so a list gets its own type rather than a normaliser bolted onto
+       every handler that returns one. */
+    case 'jsonlist': {
+      if (Object.prototype.toString.call(value) === '[object Array]') return value;
+      if (!value) return [];
+      try {
+        var list = JSON.parse(String(value));
+        return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+      } catch (err) {
+        return [];
+      }
+    }
     case 'list': {
       if (Object.prototype.toString.call(value) === '[object Array]') {
         return value.map(function (v) { return String(v).trim(); }).filter(String);
@@ -569,6 +619,10 @@ function serialize_(value, type) {
       return Boolean(value);
     case 'json':
       return JSON.stringify(value || {});
+    case 'jsonlist':
+      return JSON.stringify(
+        Object.prototype.toString.call(value) === '[object Array]' ? value : []
+      );
     case 'list':
       return Object.prototype.toString.call(value) === '[object Array]'
         ? value.join(', ')
@@ -863,7 +917,10 @@ function defaultSettings_(userId) {
     locale: 'en-US',
     monthlyIncome: 0,
     categories: DEFAULT_CATEGORIES.slice(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    customThemes: [],
+    activeCustomThemeId: '',
+    fontFamily: ''
   };
 }
 
@@ -2048,6 +2105,15 @@ var THEMES = [
   'midnight', 'dracula', 'nord', 'solarized', 'amethyst'
 ];
 
+/* Must stay in step with FONTS in frontend/src/lib/fonts.ts. An id not listed
+   here is rejected with a 400 rather than written through to a stylesheet. */
+var FONTS = ['system', 'inter', 'prompt', 'sarabun', 'noto-sans-thai', 'sans-serif'];
+
+/** '' (the system face) or a known id. Anything else is a 400. */
+function fontId_(value) {
+  return oneOf_(value, 'fontFamily', FONTS, '');
+}
+
 /** CSS custom properties the client may override in the `custom` theme. */
 var ALLOWED_CUSTOM_VARS = [
   '--bg', '--surface', '--surface-2', '--border', '--text', '--text-muted',
@@ -2087,17 +2153,38 @@ function settingsGet_(user) {
   var existing = getSettingsRow_(user.id);
   if (existing) {
     delete existing._row;
+    /* The library goes out through the same validator the write path uses.
+       The column type already guarantees an array, but the *entries* are
+       whatever was in the cell — including whatever a hand-edit left there —
+       and the client renders them directly. Validating on the way out means
+       one malformed row cannot take the screen down. */
+    existing.customThemes = themeLibrary_(existing);
     return existing;
   }
   return insertRow_('Settings', defaultSettings_(user.id));
 }
 
+/** The one place a Settings row is written. Stamps updatedAt and upserts. */
+function persistSettings_(userId, next) {
+  next.userId = userId;
+  next.updatedAt = new Date().toISOString();
+
+  var saved = findById_('Settings', userId)
+    ? updateRow_('Settings', userId, next)
+    : insertRow_('Settings', next);
+
+  delete saved._row;
+  return saved;
+}
+
 function settingsSave_(user, body) {
   var current = getSettingsRow_(user.id) || defaultSettings_(user.id);
 
+  var theme = body.theme !== undefined ? oneOf_(body.theme, 'theme', THEMES) : current.theme;
+
   var next = {
     userId: user.id,
-    theme: body.theme !== undefined ? oneOf_(body.theme, 'theme', THEMES) : current.theme,
+    theme: theme,
     accent: body.accent !== undefined ? str_(body.accent, 'accent', { max: 20 }) : current.accent,
     customVars: body.customVars !== undefined
       ? sanitizeCustomVars_(body.customVars)
@@ -2119,15 +2206,202 @@ function settingsSave_(user, body) {
     categories: body.categories !== undefined
       ? normalizeCategories_(body.categories)
       : current.categories,
-    updatedAt: new Date().toISOString()
+    /* The library itself is only ever written through the themes.* handlers — a
+       settings.save that happened to carry a stale copy must not roll it back. */
+    customThemes: themeLibrary_(current),
+    /* Selecting a built-in preset unlinks whatever library entry was worn, so
+       the picker cannot show two things active at once. */
+    activeCustomThemeId: theme === 'custom'
+      ? (body.activeCustomThemeId !== undefined
+          ? str_(body.activeCustomThemeId, 'activeCustomThemeId', { required: false, max: 40 })
+          : current.activeCustomThemeId || '')
+      : '',
+    /* Not forced to '' outside the custom theme the way activeCustomThemeId is.
+       That field is a reference into the library and would dangle; a typeface is
+       a standalone scalar, so whether a preset keeps or clears it is the
+       client's call, not a correctness constraint. */
+    fontFamily: body.fontFamily !== undefined ? fontId_(body.fontFamily) : (current.fontFamily || '')
   };
 
-  var saved = findById_('Settings', user.id)
-    ? updateRow_('Settings', user.id, next)
-    : insertRow_('Settings', next);
+  return persistSettings_(user.id, next);
+}
 
-  delete saved._row;
-  return saved;
+/* =========================================================================
+ * Theme library
+ * -------------------------------------------------------------------------
+ * Saved palettes live as a JSON array in Settings.customThemes — see the note
+ * on that column for why there is no CustomThemes sheet.
+ *
+ * Activating an entry *materialises* it into the plain `theme: 'custom'` +
+ * `customVars` fields the app has always used. That redundancy is the point:
+ * the client's anti-FOUC boot script reads only those two, so a saved theme
+ * paints before first paint on the next load without the boot script having to
+ * learn what a library is.
+ *
+ * Every write here answers with the whole Settings row, so the client replaces
+ * its settings in one round trip instead of writing and then re-reading.
+ * ========================================================================= */
+
+/** Plenty for a person, and keeps the cell far under the 50k character limit. */
+var MAX_CUSTOM_THEMES = 24;
+
+/**
+ * The library as an array, whatever the cell actually held.
+ *
+ * coerce_('json') answers `{}` for an empty cell and for anything unparseable,
+ * so an array is never guaranteed — every read goes through here.
+ */
+function themeLibrary_(settings) {
+  var raw = settings && settings.customThemes;
+  if (Object.prototype.toString.call(raw) !== '[object Array]') return [];
+
+  var out = [];
+  raw.forEach(function (entry) {
+    if (!entry || typeof entry !== 'object') return;
+    var id = String(entry.id || '').trim();
+    if (!id) return;
+    out.push({
+      id: id,
+      name: String(entry.name || 'Untitled').trim().slice(0, 40) || 'Untitled',
+      colors: sanitizeCustomVars_(entry.colors),
+      /* Tolerant, unlike the create/update path: a theme saved before fonts
+         existed, or one naming a face since retired, must still open rather
+         than 400 the whole library read. */
+      fontFamily: FONTS.indexOf(String(entry.fontFamily || '')) === -1
+        ? ''
+        : String(entry.fontFamily),
+      createdAt: String(entry.createdAt || ''),
+      updatedAt: String(entry.updatedAt || '')
+    });
+  });
+  return out;
+}
+
+function findTheme_(library, id) {
+  for (var i = 0; i < library.length; i += 1) {
+    if (library[i].id === id) return { theme: library[i], index: i };
+  }
+  return null;
+}
+
+/**
+ * Copies a library entry into the fields that actually paint the app.
+ *
+ * `accent` is lifted out of the palette so the accent picker and the theme
+ * agree; without it SettingsContext's inline --accent would override the
+ * palette's own accent and every saved theme would wear the same blue.
+ */
+function wearTheme_(next, theme) {
+  next.theme = 'custom';
+  next.customVars = theme.colors;
+  next.activeCustomThemeId = theme.id;
+  next.fontFamily = theme.fontFamily || '';
+  if (theme.colors['--accent']) next.accent = theme.colors['--accent'];
+  return next;
+}
+
+/** The mutable half of a Settings row, ready to be patched and persisted. */
+function settingsDraft_(user) {
+  var current = getSettingsRow_(user.id) || defaultSettings_(user.id);
+  return {
+    userId: user.id,
+    theme: current.theme,
+    accent: current.accent,
+    customVars: current.customVars,
+    currency: current.currency,
+    displayCurrency: current.displayCurrency,
+    fxRate: current.fxRate,
+    fxRateUpdatedAt: current.fxRateUpdatedAt,
+    locale: current.locale,
+    monthlyIncome: current.monthlyIncome,
+    categories: current.categories,
+    customThemes: themeLibrary_(current),
+    activeCustomThemeId: current.activeCustomThemeId || '',
+    fontFamily: current.fontFamily || ''
+  };
+}
+
+function themesList_(user) {
+  var current = getSettingsRow_(user.id) || defaultSettings_(user.id);
+  return {
+    themes: themeLibrary_(current),
+    activeCustomThemeId: current.activeCustomThemeId || ''
+  };
+}
+
+function themesCreate_(user, body) {
+  var next = settingsDraft_(user);
+
+  if (next.customThemes.length >= MAX_CUSTOM_THEMES) {
+    throw bad_('You can keep up to ' + MAX_CUSTOM_THEMES + ' saved themes. Delete one first.');
+  }
+
+  var name = str_(body.name, 'name', { max: 40 });
+  var colors = sanitizeCustomVars_(body.colors);
+  if (!Object.keys(colors).length) throw bad_('A theme needs at least one colour');
+
+  var now = new Date().toISOString();
+  var theme = {
+    id: uuid_(),
+    name: name,
+    colors: colors,
+    fontFamily: fontId_(body.fontFamily),
+    createdAt: now,
+    updatedAt: now
+  };
+  next.customThemes.push(theme);
+
+  // Saving a palette you have been previewing and *not* wearing it would be a
+  // surprise, so activation is the default and is only opted out of explicitly.
+  if (body.activate !== false) wearTheme_(next, theme);
+
+  return persistSettings_(user.id, next);
+}
+
+function themesUpdate_(user, query, body) {
+  var next = settingsDraft_(user);
+  var found = findTheme_(next.customThemes, str_(query.id, 'id', { max: 40 }));
+  if (!found) throw apiError_('Theme not found', 404, 'NOT_FOUND');
+
+  var theme = found.theme;
+  if (body.name !== undefined) theme.name = str_(body.name, 'name', { max: 40 });
+  if (body.colors !== undefined) {
+    var colors = sanitizeCustomVars_(body.colors);
+    if (!Object.keys(colors).length) throw bad_('A theme needs at least one colour');
+    theme.colors = colors;
+  }
+  if (body.fontFamily !== undefined) theme.fontFamily = fontId_(body.fontFamily);
+  theme.updatedAt = new Date().toISOString();
+
+  // Editing the theme you are wearing has to repaint it, or the screen would
+  // keep the old colours until the next activate.
+  if (body.activate === true || next.activeCustomThemeId === theme.id) wearTheme_(next, theme);
+
+  return persistSettings_(user.id, next);
+}
+
+function themesDelete_(user, query) {
+  var next = settingsDraft_(user);
+  var found = findTheme_(next.customThemes, str_(query.id, 'id', { max: 40 }));
+  if (!found) throw apiError_('Theme not found', 404, 'NOT_FOUND');
+
+  next.customThemes.splice(found.index, 1);
+
+  /* Deleting the theme you are wearing unlinks it but leaves the colours on
+     screen. Snapping back to the stock palette mid-click would read as the app
+     losing your work rather than as the list losing a row. */
+  if (next.activeCustomThemeId === found.theme.id) next.activeCustomThemeId = '';
+
+  return persistSettings_(user.id, next);
+}
+
+function themesActivate_(user, query) {
+  var next = settingsDraft_(user);
+  var found = findTheme_(next.customThemes, str_(query.id, 'id', { max: 40 }));
+  if (!found) throw apiError_('Theme not found', 404, 'NOT_FOUND');
+
+  wearTheme_(next, found.theme);
+  return persistSettings_(user.id, next);
 }
 
 /* =========================================================================

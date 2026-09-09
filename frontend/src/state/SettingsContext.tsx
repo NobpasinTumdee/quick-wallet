@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   accent: '#4f8cff',
   customVars: {},
+  customThemes: [],
+  activeCustomThemeId: '',
+  fontFamily: '',
   currency: 'USD',
   displayCurrency: '',
   fxRate: 1,
@@ -40,6 +43,15 @@ interface SettingsContextValue {
   save: (patch: Partial<Settings>) => Promise<void>;
   setTheme: (theme: ThemeName) => Promise<void>;
   reload: () => Promise<void>;
+  /**
+   * Swap in a whole Settings row the server has already saved.
+   *
+   * The themes.* endpoints answer with the complete row, so the theme library
+   * writes with them and then lands the result here — one round trip instead of
+   * a write followed by a re-read. Everything downstream (applyTheme, the
+   * localStorage mirror) is driven by state, so it all follows for free.
+   */
+  replace: (settings: Settings) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -59,6 +71,7 @@ const SEEDED_SETTINGS: Settings = (() => {
     theme: cached.theme ?? DEFAULT_SETTINGS.theme,
     accent: cached.accent ?? DEFAULT_SETTINGS.accent,
     customVars: cached.customVars ?? DEFAULT_SETTINGS.customVars,
+    fontFamily: cached.fontId ?? DEFAULT_SETTINGS.fontFamily,
   };
 })();
 
@@ -108,7 +121,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     writeCachedTheme(settings);
-  }, [user, settings.theme, settings.accent, settings.customVars]);
+  }, [user, settings.theme, settings.accent, settings.customVars, settings.fontFamily]);
 
   const save = useCallback(
     async (patch: Partial<Settings>) => {
@@ -132,9 +145,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((theme: ThemeName) => save({ theme }), [save]);
 
+  const replace = useCallback((next: Settings) => {
+    setSettings(next);
+    setError(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ settings, loading, error, save, setTheme, reload }),
-    [settings, loading, error, save, setTheme, reload],
+    () => ({ settings, loading, error, save, setTheme, reload, replace }),
+    [settings, loading, error, save, setTheme, reload, replace],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

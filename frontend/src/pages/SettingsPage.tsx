@@ -1,8 +1,7 @@
-import { Check, RotateCcw } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 
 import { api } from '../api/client';
-import { Icon } from '../components/Icon';
+import { ThemeSettings } from '../components/ThemeSettings';
 import {
   Alert,
   Badge,
@@ -18,30 +17,15 @@ import {
 } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
-import { THEME_PRESETS, themePreset } from '../lib/themes';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
 
-const ACCENTS = ['#3b6fff', '#5b8cff', '#46c2a4', '#0f9d6b', '#d98324', '#dc3a56', '#8b5cf6', '#ec4899'];
-
-/** The subset of CSS variables the custom theme exposes. */
-const CUSTOM_VARS: { key: string; label: string; fallback: string }[] = [
-  { key: '--bg', label: 'Page background', fallback: '#0f1a1c' },
-  { key: '--surface', label: 'Card surface', fallback: '#16262a' },
-  { key: '--surface-2', label: 'Input surface', fallback: '#1d3237' },
-  { key: '--border', label: 'Borders', fallback: '#26414a' },
-  { key: '--text', label: 'Text', fallback: '#e6f4f1' },
-  { key: '--text-muted', label: 'Muted text', fallback: '#9ab5b5' },
-  { key: '--positive', label: 'Positive', fallback: '#4fd1a5' },
-  { key: '--negative', label: 'Negative', fallback: '#ff7a8a' },
-];
-
 export function SettingsPage() {
   const { user } = useAuth();
-  const { settings, save, error, reload: reloadSettings } = useSettings();
+  const { settings, save, reload: reloadSettings } = useSettings();
   const health = useExcelQuery<DbHealth>('/api/health', undefined, { refreshInterval: 30_000 });
 
   const [currency, setCurrency] = useState(settings.currency);
@@ -131,131 +115,9 @@ export function SettingsPage() {
     }
   }
 
-  const customVars = settings.customVars ?? {};
-  const activePreset = themePreset(settings.theme);
-
   return (
     <>
-      <Card
-        title="Appearance"
-        subtitle="Themes are plain CSS variables on :root — saved to the Settings sheet."
-      >
-        {/* Grouped by scheme so a light theme is never a surprise, and capped
-            in height so thirteen options do not push the rest of the page down. */}
-        <div className="theme-grid" role="radiogroup" aria-label="Theme">
-          {(['light', 'dark'] as const).map((scheme) => (
-            <fieldset key={scheme} className="theme-group">
-              <legend className="section-label">{scheme === 'light' ? 'Light' : 'Dark'}</legend>
-              <div className="theme-row">
-                {THEME_PRESETS.filter((preset) => preset.scheme === scheme).map((preset) => {
-                  const active = settings.theme === preset.value;
-                  return (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      className={cx('theme-card', active && 'is-active')}
-                      // The theme's own accent rides along: SettingsContext
-                      // writes settings.accent inline as --accent, which would
-                      // otherwise leave every palette wearing the old colour.
-                      onClick={() => void save({ theme: preset.value, accent: preset.accent })}
-                      title={preset.blurb}
-                    >
-                      <span
-                        className="theme-card-preview"
-                        style={{ background: preset.swatches[0], borderColor: preset.swatches[1] }}
-                        aria-hidden="true"
-                      >
-                        <span className="theme-card-dot" style={{ background: preset.swatches[2] }} />
-                        <span className="theme-card-surface" style={{ background: preset.swatches[1] }}>
-                          <span className="theme-card-bar" style={{ background: preset.swatches[3] }} />
-                          <span
-                            className="theme-card-bar theme-card-bar--short"
-                            style={{ background: preset.swatches[3] }}
-                          />
-                        </span>
-                      </span>
-                      <span className="theme-card-name">
-                        <Icon icon={preset.icon} size="sm" />
-                        {preset.label}
-                      </span>
-                      <span className="theme-card-blurb truncate">{preset.blurb}</span>
-                      {active && (
-                        <span className="theme-card-check" aria-hidden="true">
-                          <Icon icon={Check} size="sm" />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          ))}
-        </div>
-
-        <Field
-          label="Accent colour"
-          className="span-2"
-          hint="Applied on top of whichever theme is active. Picking a theme resets it to that theme's own accent."
-        >
-          <div className="swatches" style={{ marginTop: 4 }}>
-            {ACCENTS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className={cx('swatch', settings.accent === color && 'is-active')}
-                style={{ background: color }}
-                onClick={() => void save({ accent: color })}
-                aria-label={`Accent ${color}`}
-              />
-            ))}
-            <input
-              type="color"
-              className="control swatch"
-              style={{ width: 44 }}
-              value={settings.accent}
-              onChange={(e) => void save({ accent: e.target.value })}
-              aria-label="Custom accent colour"
-            />
-            <Button size="sm" variant="ghost" onClick={() => void save({ accent: activePreset.accent })}>
-              <Icon icon={RotateCcw} size="sm" />
-              Match theme
-            </Button>
-          </div>
-        </Field>
-
-        {settings.theme === 'custom' && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <h3 style={{ fontSize: '0.9rem', marginBottom: 8 }}>Custom palette</h3>
-            <div className="form-grid">
-              {CUSTOM_VARS.map((variable) => (
-                <Field key={variable.key} label={variable.label} hint={variable.key}>
-                  <input
-                    type="color"
-                    className="control"
-                    value={customVars[variable.key] ?? variable.fallback}
-                    onChange={(e) =>
-                      void save({ customVars: { ...customVars, [variable.key]: e.target.value } })
-                    }
-                  />
-                </Field>
-              ))}
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <Button size="sm" onClick={() => void save({ customVars: {} })}>
-                Reset custom palette
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div style={{ marginTop: 12 }}>
-            <Alert tone="error">{error}</Alert>
-          </div>
-        )}
-      </Card>
+      <ThemeSettings />
 
       <Card title="Preferences">
         <form className="form-grid" onSubmit={savePreferences}>

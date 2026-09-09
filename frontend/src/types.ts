@@ -173,11 +173,51 @@ export interface BudgetResponse {
   };
 }
 
+/**
+ * One saved palette from the user's theme library.
+ *
+ * Stored server-side as a JSON array in the Settings row rather than in a sheet
+ * of its own — see the `customThemes` column note in Code.gs.
+ */
+export interface CustomTheme {
+  id: string;
+  name: string;
+  /** CSS custom properties, e.g. `{ '--bg': '#071413' }`. */
+  colors: Record<string, string>;
+  /**
+   * A `FONTS` id from `lib/fonts.ts` — 'sarabun', not a CSS font stack.
+   *
+   * The stack is resolved client-side from this id, so the stored value is a
+   * name from a closed list rather than arbitrary CSS. Empty means the system
+   * face.
+   */
+  fontFamily: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Settings {
   userId: string;
   theme: ThemeName;
   accent: string;
+  /**
+   * The colours currently painted for `theme: 'custom'`.
+   *
+   * When a library theme is active this is a materialised copy of its `colors`.
+   * The duplication is deliberate: the anti-FOUC boot script in index.html reads
+   * only `theme` + `customVars`, so a saved theme paints before first paint
+   * without that script needing to understand the library.
+   */
   customVars: Record<string, string>;
+  /** The user's saved palettes. */
+  customThemes: CustomTheme[];
+  /** Which library entry `customVars` was materialised from. Empty when none. */
+  activeCustomThemeId: string;
+  /**
+   * The typeface currently painted, as a `FONTS` id. Materialised from the
+   * active theme exactly like `customVars`, and empty for the system face.
+   */
+  fontFamily: string;
   /** Bookkeeping currency: what every stored amount is denominated in. */
   currency: string;
   /** Optional presentation currency. Empty or equal to `currency` = no conversion. */

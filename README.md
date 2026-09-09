@@ -174,11 +174,17 @@ user that token resolves to.
 | `Budgets` | `ID` | One row per period + scope + target. |
 | `Subscriptions` | `ID` | `Next Due Date` rolls forward when a payment is confirmed. |
 | `Watchlist` | `ID` | Symbols tracked but not owned — no quantity, no cost basis. |
-| `Settings` | `User ID` | Theme, accent, custom CSS vars, currency, display currency + FX rate, locale, categories. |
+| `Settings` | `User ID` | Theme, accent, custom CSS vars, **the saved theme library**, currency, display currency + FX rate, locale, categories. |
 
 Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this,
-and `createMissingSheets()` creates any table a newer version of `Code.gs` adds
-without touching existing data.
+and `createMissingSheets()` creates any table a newer version of `Code.gs` adds —
+and appends any column it adds — without touching existing data.
+
+> **Upgrading to the theme library:** run `createMissingSheets()` once from the
+> Apps Script editor. It appends `Custom Themes (JSON)`, `Active Custom Theme ID`
+> and `Font Family` to the existing `Settings` sheet. Until it has run, saving a
+> theme writes into columns the header row does not name yet and the library will
+> read back empty.
 
 **Balances** are derived, never stored:
 
@@ -223,10 +229,64 @@ back is lossless.
   `--accent-contrast`, `--positive`, `--negative`, `--warning`, `--radius`.
 - **Derived** — glass, tints, hover states, glows and shadows, all expressed as
   `color-mix()` over the primitives, so one colour change ripples through the whole UI.
+- **Typography** — `--font-sans` and `--font-display` are set from the theme's
+  chosen face (see below); `--font-mono` never is.
 
 Theme selection: `:root` (light) → OS preference → `[data-theme="dark"]` →
 `[data-theme="custom"]` plus inline overrides on `<html>`. `Code.gs` accepts only
 the allow-listed variable names and rejects any value containing `; { } < > ( )`.
+
+### The theme library
+
+Settings → Appearance keeps any number of named palettes (up to 24). They live as
+a JSON array in the `Settings` row rather than in a sheet of their own: Apps Script
+bills per Sheets call, so riding along with the settings read the client already
+does on boot is cheaper than an extra `getDataRange()` plus a `userId` filter.
+
+Activating one *materialises* its colours into the plain `theme: 'custom'` +
+`customVars` fields the app has always used, which is what lets the anti-FOUC boot
+script in `index.html` paint a saved theme before first paint without knowing that
+libraries exist.
+
+**Editing never touches the network.** The colour pickers write CSS custom
+properties straight onto `<html>` and keep the draft palette in a ref; React state
+is a mirror refreshed at most once per frame, and a single request goes out when
+you press **Save theme**. The previous build called `settings.save()` from each
+picker's `onChange`, which queued hundreds of Sheets writes per drag. See
+`hooks/useTheme.ts` for the whole rule, and `lib/themeStorage.ts` for the preview
+lock that stops an unrelated settings refresh from wiping a live draft.
+
+### Typography
+
+A theme carries a typeface as well as a palette. The catalogue is in
+`lib/fonts.ts` — System, Inter, Prompt, Sarabun, Noto Sans Thai and plain
+`sans-serif`; the four Thai-capable ones are marked as such in the picker, which
+sets every card in the face it offers.
+
+A theme stores the catalogue **id** (`sarabun`), never a CSS font stack. The stack
+is a CSS value that ends up in a custom property on `<html>`, so accepting free
+text there would be an injection surface — and `sanitizeCustomVars_` caps CSS
+values at 40 characters, shorter than any real stack. `Code.gs` validates the id
+against `FONTS`; the client resolves it to a stack. Selecting a font rewrites
+`--font-sans` and `--font-display`. `--font-mono` is left alone so figures and
+tickers stay column-aligned.
+
+Picking a built-in preset returns to the system face: the typeface belongs to the
+theme, so a font you want everywhere belongs in a saved theme.
+
+**Font FOUC is worse than colour FOUC** — a late swap re-measures every line and
+shifts the layout under the reader — so the boot script in `index.html` handles it
+too. `writeCachedTheme` stores the *resolved* stack and stylesheet URL next to the
+id, which is what lets that script apply the font and inject the Google Fonts
+`<link>` from inside `<head>` without carrying a copy of the catalogue. It only
+accepts an href on `fonts.googleapis.com`, and the link id it uses is the one
+`ensureFontLoaded` looks for, so the module layer finds it already present rather
+than fetching the same stylesheet twice.
+
+Opening the theme creator downloads the whole catalogue at four weights, which is
+a real one-time cost (the Thai families are not small). It buys a picker that shows
+each face truthfully instead of one that lies until you click; a user who never
+opens Settings downloads none of it.
 
 ### The logo
 

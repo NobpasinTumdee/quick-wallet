@@ -157,8 +157,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'custom',
-    label: 'Custom',
-    blurb: 'Midnight teal — edit every colour',
+    label: 'Custom base',
+    blurb: 'Midnight teal — the blank canvas',
     scheme: 'dark',
     icon: Palette,
     accent: '#3fd0aa',
@@ -177,4 +177,75 @@ export type __EveryThemeHasAPreset = AssertNever<
 
 export function themePreset(value: ThemeName): ThemePreset {
   return THEME_PRESETS.find((preset) => preset.value === value) ?? THEME_PRESETS[0];
+}
+
+/* ------------------------------------------------------------------ */
+/* The custom-theme editor's palette                                   */
+/* ------------------------------------------------------------------ */
+
+export interface ThemeVar {
+  key: string;
+  label: string;
+  /** Short line under the swatch. */
+  hint: string;
+  /** The `:root[data-theme='custom']` value, i.e. where a fresh theme starts. */
+  fallback: string;
+}
+
+/**
+ * The CSS custom properties the theme creator exposes, in the order they are
+ * shown.
+ *
+ * Deliberately a small set of *primitives*. Every other token in theme.css —
+ * glass, tints, elevation, hover states, ambient washes — is derived from these
+ * with `color-mix`, so eleven pickers recolour the entire app rather than a few
+ * boxes. Adding a key here also requires adding it to ALLOWED_CUSTOM_VARS in
+ * Code.gs, which drops anything it does not recognise.
+ *
+ * The fallbacks mirror the `:root[data-theme='custom']` block in theme.css;
+ * that block is what shows through for any variable the user has not set.
+ */
+export const THEME_VARS: readonly ThemeVar[] = [
+  { key: '--bg', label: 'Page', hint: 'Behind everything', fallback: '#071413' },
+  { key: '--surface', label: 'Surface', hint: 'Cards and panels', fallback: '#0f2523' },
+  { key: '--surface-2', label: 'Raised', hint: 'Inputs and wells', fallback: '#143230' },
+  { key: '--border', label: 'Border', hint: 'Hairlines and dividers', fallback: '#1d403d' },
+  { key: '--text', label: 'Text', hint: 'Headings and figures', fallback: '#e8f6f2' },
+  { key: '--text-muted', label: 'Muted text', hint: 'Labels and hints', fallback: '#86a8a2' },
+  { key: '--accent', label: 'Accent', hint: 'Buttons, links, focus', fallback: '#3fd0aa' },
+  { key: '--accent-contrast', label: 'On accent', hint: 'Text over the accent', fallback: '#032019' },
+  { key: '--positive', label: 'Positive', hint: 'Income and gains', fallback: '#4fd6a8' },
+  { key: '--negative', label: 'Negative', hint: 'Spending and losses', fallback: '#ff7a8a' },
+  { key: '--warning', label: 'Warning', hint: 'Overdue and over budget', fallback: '#efb45c' },
+] as const;
+
+/** A fresh palette: every editable variable at its `custom` theme default. */
+export function defaultThemeColors(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const variable of THEME_VARS) out[variable.key] = variable.fallback;
+  return out;
+}
+
+/**
+ * A stored palette filled out to a complete one.
+ *
+ * A theme saved by an older build, or one the server sanitised, can be missing
+ * keys; the pickers are `<input type="color">` and would fall back to black
+ * rather than to the theme's own default if handed `undefined`.
+ */
+export function completeThemeColors(colors: Record<string, string> | undefined): Record<string, string> {
+  const out = defaultThemeColors();
+  for (const variable of THEME_VARS) {
+    const value = colors?.[variable.key];
+    if (value) out[variable.key] = value;
+  }
+  return out;
+}
+
+/** The four swatches a theme card paints, in `ThemePreset.swatches` order. */
+export function customSwatches(
+  colors: Record<string, string>,
+): readonly [string, string, string, string] {
+  const full = completeThemeColors(colors);
+  return [full['--bg'], full['--surface'], full['--accent'], full['--text']];
 }
