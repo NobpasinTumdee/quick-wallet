@@ -53,8 +53,10 @@
 
 import { LayoutGrid, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cx } from '../lib/format';
+import { TranslationKey } from '../locales';
 import { Route } from '../lib/router';
 import { Icon } from './Icon';
 
@@ -90,7 +92,8 @@ const ARC_END_DEG = 30;
 
 export interface Shortcut {
   route: Route;
-  label: string;
+  /** Resolved at render, not at definition — see the note on NAV in AppShell. */
+  labelKey: TranslationKey;
   icon: LucideIcon;
 }
 
@@ -131,6 +134,7 @@ export function GestureNavWidget({
   activeRoute: Route;
   onNavigate: (route: Route) => void;
 }) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>('idle');
   /** Which item the finger is currently over, or null. */
   const [hovered, setHovered] = useState<Route | null>(null);
@@ -298,7 +302,7 @@ export function GestureNavWidget({
       )}
 
       <div className="gnav-anchor">
-        <div className="gnav-arc" role="menu" aria-label="More pages" aria-hidden={!open}>
+        <div className="gnav-arc" role="menu" aria-label={t('nav.more')} aria-hidden={!open}>
           {shortcuts.map((item, index) => {
             const { x, y } = arcOffset(index, shortcuts.length);
             return (
@@ -329,7 +333,7 @@ export function GestureNavWidget({
                 <span className="gnav-item-icon">
                   <Icon icon={item.icon} size="sm" />
                 </span>
-                <span className="gnav-item-label">{item.label}</span>
+                <span className="gnav-item-label">{t(item.labelKey)}</span>
               </button>
             );
           })}
@@ -345,8 +349,14 @@ export function GestureNavWidget({
           )}
           aria-haspopup="menu"
           aria-expanded={open}
+          /* Interpolated through i18next rather than assembled with template
+             literals: word order around the label is not the same in every
+             language, and a concatenation hard-codes English word order into
+             something a translator cannot reach. */
           aria-label={
-            activeShortcut ? `More pages — ${activeShortcut.label} is open` : 'More pages'
+            activeShortcut
+              ? t('nav.moreCurrent', { label: t(activeShortcut.labelKey) })
+              : t('nav.more')
           }
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

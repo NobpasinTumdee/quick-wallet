@@ -15,12 +15,15 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
+import { useLanguageSync } from '../hooks/useLanguage';
 import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
+import { TranslationKey } from '../locales';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
 import { CreditCardsPage } from '../pages/CreditCardsPage';
@@ -40,14 +43,39 @@ import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
 
-const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
-  { route: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-  { route: 'wallets', label: 'Wallets', icon: Wallet },
-  { route: 'cards', label: 'Cards', icon: CreditCard },
-  { route: 'transactions', label: 'Activity', icon: Receipt },
-  { route: 'investments', label: 'Invest', icon: TrendingUp },
-  { route: 'budgets', label: 'Budgets', icon: Target },
-  { route: 'subscriptions', label: 'Recurring', icon: Repeat2 },
+/**
+ * ---------------------------------------------------------------------------
+ * WHY THESE CARRY A KEY AND NOT A LABEL
+ * ---------------------------------------------------------------------------
+ * This array is module-level — it is built once, when the module is first
+ * imported, and never again. A translated string baked in here would therefore
+ * be the language that happened to be active at import time, and would keep
+ * that language for the rest of the session no matter what the user picked.
+ *
+ * Holding the *key* instead and resolving it with `t()` at render moves the
+ * lookup inside React's render cycle, where `useTranslation` has already
+ * subscribed the component to `languageChanged`. Switching language re-renders
+ * and every label follows.
+ *
+ * The payoff is that one change covers four surfaces: the desktop sidebar, the
+ * mobile tab bar, the gesture arc's shortcuts and the topbar title all read
+ * their text from this one list.
+ */
+interface NavItem {
+  route: Route;
+  /** A key into the dictionary — see `src/locales/en.ts`. */
+  labelKey: TranslationKey;
+  icon: LucideIcon;
+}
+
+const NAV: NavItem[] = [
+  { route: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { route: 'wallets', labelKey: 'nav.wallets', icon: Wallet },
+  { route: 'cards', labelKey: 'nav.cards', icon: CreditCard },
+  { route: 'transactions', labelKey: 'nav.transactions', icon: Receipt },
+  { route: 'investments', labelKey: 'nav.investments', icon: TrendingUp },
+  { route: 'budgets', labelKey: 'nav.budgets', icon: Target },
+  { route: 'subscriptions', labelKey: 'nav.subscriptions', icon: Repeat2 },
 ];
 
 /**
@@ -55,9 +83,9 @@ const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
  * breakpoint. Kept in the same shape as a NAV row so the topbar title lookup
  * below can treat it as one.
  */
-const SETTINGS_ITEM: { route: Route; label: string; icon: LucideIcon } = {
+const SETTINGS_ITEM: NavItem = {
   route: 'settings',
-  label: 'Settings',
+  labelKey: 'nav.settings',
   icon: Settings,
 };
 
@@ -81,7 +109,7 @@ const MOBILE_PRIMARY: Route[] = ['dashboard', 'wallets', 'investments', 'transac
 const MOBILE_SHORTCUTS: Route[] = ['cards', 'budgets', 'subscriptions', 'settings'];
 
 /** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
-function navItemFor(route: Route): { route: Route; label: string; icon: LucideIcon } {
+function navItemFor(route: Route): NavItem {
   return [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
 
@@ -170,6 +198,7 @@ function DbStatusBanner() {
 }
 
 export function AppShell() {
+  const { t } = useTranslation();
   const [route, go] = useRoute();
   const { user, logout } = useAuth();
   const { settings, reload: reloadSettings } = useSettings();
@@ -179,6 +208,10 @@ export function AppShell() {
   /* Raises the "you have unpaid subscriptions" toast once per app open. Lives
      here rather than on the Recurring page precisely because the point is to
      catch bills the user has not gone looking for. */
+  /* Adopts the account's saved locale once settings arrive, so signing in on a
+     device that has never seen this account still lands in their language. */
+  useLanguageSync();
+
   useOverdueSubscriptionAlert();
   /* And the same for card bills. Separate hook, separate latch: the two depend
      on different requests that resolve at different times, so sharing one would
@@ -224,7 +257,7 @@ export function AppShell() {
   const active = [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
 
   /** One tab-bar link. Shared by both sides of the centre button. */
-  const tab = (item: { route: Route; label: string; icon: LucideIcon }) => (
+  const tab = (item: NavItem) => (
     <button
       key={item.route}
       type="button"
@@ -238,7 +271,7 @@ export function AppShell() {
       <span className="tab-icon">
         <Icon icon={item.icon} />
       </span>
-      {item.label}
+      {t(item.labelKey)}
     </button>
   );
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
@@ -258,11 +291,11 @@ export function AppShell() {
           className="sidebar-rail-toggle"
           onClick={toggleRail}
           aria-expanded={!railed}
-          aria-label={railed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={railed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+          title={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         >
           <Icon icon={railed ? PanelLeftOpen : PanelLeftClose} size="sm" />
-          <span className="sidebar-label">Collapse</span>
+          <span className="sidebar-label">{t('nav.collapse')}</span>
         </button>
 
         <nav className="sidebar-nav">
@@ -275,30 +308,30 @@ export function AppShell() {
               /* The label is hidden visually in rail mode but stays in the DOM,
                  so the accessible name never depends on the width. `title`
                  gives the same thing to a mouse. */
-              title={railed ? item.label : undefined}
+              title={railed ? t(item.labelKey) : undefined}
               onMouseEnter={() => warmRoute(item.route, period)}
               onFocus={() => warmRoute(item.route, period)}
               onClick={() => go(item.route)}
             >
               <Icon icon={item.icon} />
-              <span className="sidebar-label">{item.label}</span>
+              <span className="sidebar-label">{t(item.labelKey)}</span>
             </button>
           ))}
         </nav>
 
         <div className="sidebar-foot">
           <div className="sidebar-label">
-            Signed in as <strong>{user?.displayName}</strong>
+            {t('nav.signedInAs')} <strong>{user?.displayName}</strong>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={logout}
-            title={railed ? 'Sign out' : undefined}
-            aria-label="Sign out"
+            title={railed ? t('nav.signOut') : undefined}
+            aria-label={t('nav.signOut')}
           >
             <Icon icon={LogOut} size="sm" />
-            <span className="sidebar-label">Sign out</span>
+            <span className="sidebar-label">{t('nav.signOut')}</span>
           </Button>
         </div>
       </aside>
@@ -308,7 +341,7 @@ export function AppShell() {
           {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
           <Logo size={30} className="topbar-logo" label="Quick Wallet" />
           <div className="topbar-title">
-            <h1>{active.label}</h1>
+            <h1>{t(active.labelKey)}</h1>
             <span>
               {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
               {formatPeriod(period, settings.locale)}
@@ -322,7 +355,7 @@ export function AppShell() {
                   size="sm"
                   variant="ghost"
                   onClick={() => setPeriod((p) => shiftPeriod(p, -1))}
-                  aria-label="Previous month"
+                  aria-label={t('common.previousMonth')}
                 >
                   <Icon icon={ChevronLeft} size="sm" />
                 </Button>
@@ -332,27 +365,27 @@ export function AppShell() {
                   onClick={() => setPeriod(currentPeriod())}
                   disabled={period === currentPeriod()}
                 >
-                  Today
+                  {t('common.today')}
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setPeriod((p) => shiftPeriod(p, 1))}
-                  aria-label="Next month"
+                  aria-label={t('common.nextMonth')}
                 >
                   <Icon icon={ChevronRight} size="sm" />
                 </Button>
               </div>
             )}
-            <RefreshButton onRefresh={refreshCurrentRoute} label="Refresh this page" />
+            <RefreshButton onRefresh={refreshCurrentRoute} label={t('common.refreshPage')} />
 
             <Button
               size="sm"
               variant="ghost"
               className={cx('topbar-settings', route === 'settings' && 'is-active')}
-              aria-label="Settings"
+              aria-label={t('nav.settings')}
               aria-current={route === 'settings' ? 'page' : undefined}
-              title="Settings"
+              title={t('nav.settings')}
               onClick={() => go('settings')}
             >
               <Icon icon={SETTINGS_ITEM.icon} size="sm" />
@@ -370,8 +403,8 @@ export function AppShell() {
               size="sm"
               variant="ghost"
               className="topbar-signout"
-              aria-label="Sign out"
-              title="Sign out"
+              aria-label={t('nav.signOut')}
+              title={t('nav.signOut')}
               onClick={logout}
             >
               <Icon icon={LogOut} size="sm" />
@@ -410,7 +443,7 @@ export function AppShell() {
         onSubmit={saveQuickTransaction}
       />
 
-      <nav className="tabbar" aria-label="Main navigation">
+      <nav className="tabbar" aria-label={t('nav.mainNavigation')}>
         {TAB_LEFT.map(tab)}
         {/* An empty grid cell, not a wrapper: the centre button is a sibling of
             the bar, so it can sit above the backdrop its own menu raises. A

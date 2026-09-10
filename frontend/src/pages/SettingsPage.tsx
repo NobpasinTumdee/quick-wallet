@@ -19,6 +19,7 @@ import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
@@ -124,6 +125,13 @@ export function SettingsPage() {
           <Field label="Currency" hint="What amounts are stored in. ISO code, e.g. USD, THB, EUR.">
             <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={8} />
           </Field>
+
+          {/* First in the card, and outside the form: it applies immediately
+              rather than waiting for "Save preferences". A control whose whole
+              job is to change what you are looking at should not need a second
+              click to take effect — and it persists itself, through
+              `useLanguage`, which also keeps the Locale field below in step. */}
+          <LanguageSelector className="span-2" />
 
           <Field label="Locale" hint="Controls number and date formatting.">
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
