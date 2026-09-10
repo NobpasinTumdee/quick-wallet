@@ -317,10 +317,14 @@ opens Settings downloads none of it.
 
 ### The logo
 
-Source art is at the repo root; everything the app loads is a downscaled copy in
-`frontend/public/`. The transparent PNG is used throughout the UI; the
-white-background one is the iOS home-screen icon. Swap the files in `public/` at the
-same names to change the artwork — no code change needed.
+Everything the app loads is a downscaled copy in `frontend/public/`; the full-size
+source art is not kept in the repo. The PNGs are transparent and used throughout
+the UI. `apple-touch-icon.png` is the one exception and is flattened onto white,
+because iOS ignores alpha on a home-screen icon and would otherwise composite it
+onto black.
+
+Swap the files in `public/` at the same names to change the artwork — no code
+change needed. Sizes are 32, 64, 128, 180 (iOS) and 512.
 
 ---
 

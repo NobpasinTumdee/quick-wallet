@@ -7,8 +7,10 @@
   <meta name="color-scheme" content="light dark" />
   <title>Quick Wallet</title>
 
-  <!-- The mark ships with its own background, so the same art serves browser
-         tabs and iOS home screens; only the pixel size differs. -->
+  <!-- The tab icons are transparent, so the mark sits on a light or dark tab
+       strip without a plate around it. The apple-touch-icon is the exception
+       and is pre-composited onto white: iOS ignores alpha on a home-screen
+       icon and would otherwise flatten it onto black. -->
   <link rel="icon" type="image/png" href="/logo.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
