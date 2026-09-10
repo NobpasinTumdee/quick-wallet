@@ -305,6 +305,16 @@ body::after {
   font-size: var(--text-xs);
   color: var(--text-muted);
   letter-spacing: 0.01em;
+  /* Same treatment the h1 above already has, and for the same reason: this line
+     is "THB → USD · September 2026", and the month is formatted in the user's
+     own locale. A Thai month pushes it well past the width a phone has left
+     once the stepper is in the bar, and without this it wraps to a second line
+     and makes the whole topbar taller. Unconditional rather than inside the
+     mobile query — it only engages when the text would not have fitted anyway,
+     and the desktop half of the pair is already written this way. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-tools {
@@ -325,6 +335,70 @@ body::after {
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* ---- The month stepper on a phone ----
+   At the desktop sizing this pill is ~153px wide, and `.topbar-tools` is
+   `flex: none`, so the whole tool cluster comes to ~290px and simply cannot
+   give. Against a 320px viewport (16px of topbar padding each side, a 30px
+   brand mark and two 12px gaps) that overflows the page by ~56px, and by ~16px
+   at 360px — the title is squeezed to nothing first, then the document scrolls
+   sideways.
+
+   Two things are done about it here. The pill is made genuinely narrower, and
+   `.topbar-tools` is allowed to shrink as a last resort so that a 320px screen
+   cannot be forced into a horizontal scroll no matter what else lands in the
+   bar.
+
+   Note the touch targets move the *other* way. The buttons are 35px tall at
+   the desktop sizing, already under the 44px minimum, so trimming their
+   padding further would have made a small control genuinely hard to hit. The
+   saving is taken horizontally — where the actual problem is — and the height
+   goes up to a 40px minimum. 44px total with the pill's border and padding,
+   which is exactly the topbar's content box, so it costs no extra height. */
+@media (max-width: 767px) {
+  /* Overrides `flex: none`. The tools only ever shrink once the pill below has
+     already given up everything it can, so on any normal phone nothing moves. */
+  .topbar-tools {
+    min-width: 0;
+  }
+
+  .period-nav {
+    gap: 1px;
+    padding: 1px;
+    max-width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    /* The safety valve, not the normal case. There is no long text inside this
+       pill — it is two chevrons and the fixed word "Today" — so this never
+       engages on a phone wide enough to hold it. Below that it scrolls the
+       three buttons instead of pushing the page sideways. */
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .period-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .period-nav .btn {
+    /* Scroll rather than squash: without this the buttons would compress and
+       `.btn`'s own `overflow: hidden` would clip "Today" to "Toda". */
+    flex: none;
+    /* The touch target. Vertical padding is dropped because this governs. */
+    min-height: 40px;
+    padding: 0 8px;
+    font-size: var(--text-2xs);
+  }
+
+  /* One step down from the 15px `Icon size="sm"`, so the chevrons sit with the
+     smaller label rather than towering over it. */
+  .period-nav .btn svg {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 .page {
@@ -2479,6 +2553,28 @@ tr:hover .row-actions,
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 32%, transparent);
   color: var(--accent);
+}
+
+/* Sign out, mobile only. The sidebar owns this above 1000px — see the hide rule
+   in the sidebar breakpoint — and below it the sidebar does not exist, so
+   without this there is no way to sign out on a phone at all.
+
+   Tinted toward the negative colour rather than left as a neutral ghost. It
+   sits immediately beside the settings gear at icon-only size, where two
+   identical grey glyphs a few pixels apart is how someone ends a session they
+   meant to configure. The colour is the separation; it is deliberately a tint
+   and not a full danger button, because signing out loses no data and should
+   not shout. */
+.topbar-signout {
+  color: color-mix(in srgb, var(--negative) 72%, var(--text-muted));
+  /* A hair of air after the gear, so the two do not read as one control. */
+  margin-left: 2px;
+}
+
+.topbar-signout:hover {
+  background: color-mix(in srgb, var(--negative) 12%, transparent);
+  border-color: color-mix(in srgb, var(--negative) 30%, transparent);
+  color: var(--negative);
 }
 
 .icon-spin {
@@ -5773,8 +5869,11 @@ table.data.data--nested td {
     transform: none;
   }
 
+  /* All three exist only while the sidebar does not: the tab bar is replaced by
+     it, the brand mark is already in it, and it carries its own Sign out. */
   .tabbar,
-  .topbar-logo {
+  .topbar-logo,
+  .topbar-signout {
     display: none;
   }
 

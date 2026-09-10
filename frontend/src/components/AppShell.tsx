@@ -357,6 +357,25 @@ export function AppShell() {
             >
               <Icon icon={SETTINGS_ITEM.icon} size="sm" />
             </Button>
+
+            {/* Mobile only — see .topbar-signout.
+
+                The sidebar carries this on desktop, and the sidebar is
+                display:none below 1000px, which left signing out genuinely
+                unreachable on a phone: not buried, absent. Rendered here rather
+                than added to the gesture arc because that menu commits on
+                release, and an action you cannot undo in one tap has no place
+                somewhere a slip of the thumb confirms it. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="topbar-signout"
+              aria-label="Sign out"
+              title="Sign out"
+              onClick={logout}
+            >
+              <Icon icon={LogOut} size="sm" />
+            </Button>
           </div>
         </header>
 
