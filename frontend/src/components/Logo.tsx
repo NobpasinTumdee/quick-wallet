@@ -4,8 +4,8 @@ import { cx } from '../lib/format';
  * The app mark. Files live in `frontend/public/`, so they're referenced by URL
  * rather than imported — Vite serves them as-is and they stay out of the bundle.
  *
- * The transparent PNG is used everywhere in the UI so it sits correctly on any
- * theme; the white-background original is reserved for iOS home-screen icons.
+ * The mark carries its own dark background, so the same asset is used on every
+ * theme and for the iOS home-screen icon.
  */
 export function Logo({
   size = 28,
