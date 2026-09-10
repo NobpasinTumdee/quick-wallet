@@ -15,6 +15,9 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { TranslationKey } from '../locales';
 
 import { cx } from '../lib/format';
 import { DatePreset, EMPTY_FILTERS, TxFilters, activeFilters } from '../lib/txFilters';
@@ -38,21 +41,22 @@ import { Badge, Button, DecimalInput, Field, Input, Select } from './ui';
  * state because the date range decides what gets fetched — see `fetchScope`.
  */
 
-const DATE_PRESETS: { value: DatePreset; label: string }[] = [
-  { value: 'period', label: 'This month' },
-  { value: 'today', label: 'Today' },
-  { value: 'yesterday', label: 'Yesterday' },
-  { value: 'last7', label: 'Last 7 days' },
-  { value: 'last30', label: 'Last 30 days' },
-  { value: 'custom', label: 'Custom range' },
+/* Keys, not labels — module-level arrays are built once at import time. */
+const DATE_PRESETS: { value: DatePreset; labelKey: TranslationKey }[] = [
+  { value: 'period', labelKey: 'common.thisMonth' },
+  { value: 'today', labelKey: 'activity.datePresetToday' },
+  { value: 'yesterday', labelKey: 'activity.datePresetYesterday' },
+  { value: 'last7', labelKey: 'activity.datePresetLast7' },
+  { value: 'last30', labelKey: 'activity.datePresetLast30' },
+  { value: 'custom', labelKey: 'activity.datePresetCustom' },
 ];
 
 /** The four windows people actually mean when they say "morning spending". */
 const TIME_PRESETS = [
-  { label: 'Morning', icon: Sunrise, from: '06:00', to: '11:59' },
-  { label: 'Afternoon', icon: Sun, from: '12:00', to: '17:59' },
-  { label: 'Evening', icon: Sunset, from: '18:00', to: '23:59' },
-  { label: 'Late night', icon: Moon, from: '00:00', to: '05:59' },
+  { labelKey: 'activity.timeMorning', icon: Sunrise, from: '06:00', to: '11:59' },
+  { labelKey: 'activity.timeAfternoon', icon: Sun, from: '12:00', to: '17:59' },
+  { labelKey: 'activity.timeEvening', icon: Sunset, from: '18:00', to: '23:59' },
+  { labelKey: 'activity.timeLateNight', icon: Moon, from: '00:00', to: '05:59' },
 ];
 
 export function TransactionFilters({
@@ -71,6 +75,7 @@ export function TransactionFilters({
   matched: number;
   total: number;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const walletName = (id: string) => wallets.find((w) => w.id === id)?.name ?? 'Unknown wallet';
@@ -157,14 +162,14 @@ export function TransactionFilters({
                     })
                   }
                 >
-                  {preset.label}
+                  {t(preset.labelKey)}
                 </button>
               ))}
             </div>
 
             {filters.datePreset === 'custom' && (
               <div className="filter-pair">
-                <Field label="From">
+                <Field label={t('activity.filterFrom')}>
                   <Input
                     type="date"
                     value={filters.from}
@@ -172,7 +177,7 @@ export function TransactionFilters({
                     onChange={(event) => onChange({ from: event.target.value })}
                   />
                 </Field>
-                <Field label="To">
+                <Field label={t('activity.filterTo')}>
                   <Input
                     type="date"
                     value={filters.to}
@@ -196,7 +201,7 @@ export function TransactionFilters({
                 const active = timeMatches(preset.from, preset.to);
                 return (
                   <button
-                    key={preset.label}
+                    key={preset.labelKey}
                     type="button"
                     className={cx('user-chip', active && 'is-active')}
                     onClick={() =>
@@ -208,21 +213,21 @@ export function TransactionFilters({
                     }
                   >
                     <Icon icon={preset.icon} size="sm" />
-                    {preset.label}
+                    {t(preset.labelKey as TranslationKey)}
                   </button>
                 );
               })}
             </div>
 
             <div className="filter-pair">
-              <Field label="From">
+              <Field label={t('activity.filterFrom')}>
                 <Input
                   type="time"
                   value={filters.timeFrom}
                   onChange={(event) => onChange({ timeFrom: event.target.value })}
                 />
               </Field>
-              <Field label="To">
+              <Field label={t('activity.filterTo')}>
                 <Input
                   type="time"
                   value={filters.timeTo}
@@ -249,12 +254,12 @@ export function TransactionFilters({
             </h3>
 
             <div className="filter-pair">
-              <Field label="Wallet">
+              <Field label={t('common.wallet')}>
                 <Select
                   value={filters.walletId}
                   onChange={(event) => onChange({ walletId: event.target.value })}
                 >
-                  <option value="">All wallets</option>
+                  <option value="">{t('activity.filterAllWallets')}</option>
                   {wallets.map((wallet) => (
                     <option key={wallet.id} value={wallet.id}>
                       {wallet.icon} {wallet.name}
@@ -263,17 +268,17 @@ export function TransactionFilters({
                 </Select>
               </Field>
 
-              <Field label="Type">
+              <Field label={t('common.type')}>
                 <Select
                   value={filters.type}
                   onChange={(event) =>
                     onChange({ type: event.target.value as '' | TransactionType })
                   }
                 >
-                  <option value="">All types</option>
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                  <option value="transfer">Transfer</option>
+                  <option value="">{t('activity.filterAllTypes')}</option>
+                  <option value="expense">{t('forms.typeExpense')}</option>
+                  <option value="income">{t('forms.typeIncome')}</option>
+                  <option value="transfer">{t('forms.typeTransfer')}</option>
                 </Select>
               </Field>
             </div>
@@ -288,7 +293,7 @@ export function TransactionFilters({
               value={filters.category}
               onChange={(event) => onChange({ category: event.target.value })}
             >
-              <option value="">All categories</option>
+              <option value="">{t('activity.filterAllCategories')}</option>
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
@@ -304,18 +309,18 @@ export function TransactionFilters({
               Amount
             </h3>
             <div className="filter-pair">
-              <Field label="At least">
+              <Field label={t('activity.filterAtLeast')}>
                 <DecimalInput
                   value={filters.minAmount}
                   onChange={(raw) => onChange({ minAmount: raw })}
                   placeholder="0.00"
                 />
               </Field>
-              <Field label="At most">
+              <Field label={t('activity.filterAtMost')}>
                 <DecimalInput
                   value={filters.maxAmount}
                   onChange={(raw) => onChange({ maxAmount: raw })}
-                  placeholder="No limit"
+                  placeholder={t('activity.filterNoLimit')}
                 />
               </Field>
             </div>
@@ -327,7 +332,7 @@ export function TransactionFilters({
               Search
             </h3>
             <Input
-              placeholder="Note or category…"
+              placeholder={t('activity.filterSearchPlaceholder')}
               value={filters.search}
               onChange={(event) => onChange({ search: event.target.value })}
             />

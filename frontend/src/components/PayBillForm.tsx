@@ -18,6 +18,7 @@
  */
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { CardState } from '../lib/creditMath';
 import { formatDate, todayKey } from '../lib/format';
@@ -72,6 +73,7 @@ export function PayBillForm({
   onClose: () => void;
   onSubmit: (payload: PayBillPayload) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const money = useMoneyFormatter();
 
   const [preset, setPreset] = useState<Preset>('statement');
@@ -123,11 +125,11 @@ export function PayBillForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!fromWalletId) {
-      setLocalError('Choose a wallet to pay from');
+      setLocalError(t('forms.chooseSourceWallet'));
       return;
     }
     if (!(value > 0)) {
-      setLocalError('Enter an amount greater than zero');
+      setLocalError(t('forms.amountGreaterThanZero'));
       return;
     }
     setLocalError(null);
@@ -143,70 +145,69 @@ export function PayBillForm({
   return (
     <Modal
       open={open}
-      title={`Pay ${card.wallet.name}`}
+      title={t('forms.payCard', { name: card.wallet.name })}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy}>
-            Pay {money(value)}
+            {t('forms.payAmount', { amount: money(value) })}
           </Button>
         </>
       }
     >
       {wallets.length === 0 ? (
-        <Alert tone="warning" title="Nowhere to pay from">
-          Every wallet you have is a credit card. Add a cash or bank wallet first — a card bill has
-          to be settled from real money.
+        <Alert tone="warning" title={t('forms.nowhereToPayFrom')}>
+          {t('forms.nowhereToPayFromBody')}
         </Alert>
       ) : (
         <form className="form-grid" onSubmit={submit}>
           <div className="span-2 paybill-summary">
             <div className="metric">
-              <span className="section-label">Statement balance</span>
+              <span className="section-label">{t('cards.statementBalance')}</span>
               <span className="metric-value">{money(statementBalance)}</span>
               <span className="metric-hint">
                 {card.paymentDueDate
-                  ? `Due ${formatDate(card.paymentDueDate)}`
-                  : 'No due date set'}
+                  ? t('cards.dueOn', { date: formatDate(card.paymentDueDate) })
+                  : t('forms.noDueDateSet')}
               </span>
             </div>
             <div className="metric">
-              <span className="section-label">Unbilled since</span>
+              <span className="section-label">{t('forms.unbilledSince')}</span>
               <span className="metric-value">{money(card.unbilledBalance)}</span>
               <span className="metric-hint">
                 {card.lastStatementDate
                   ? formatDate(card.lastStatementDate)
-                  : 'No statement day set'}
+                  : t('forms.noStatementDaySet')}
               </span>
             </div>
           </div>
 
           <div className="span-2">
-            <Field label="How much">
+            <Field label={t('forms.howMuch')}>
               <Segmented<Preset>
                 value={preset}
                 onChange={choosePreset}
-                ariaLabel="Payment amount"
+                ariaLabel={t('forms.paymentAmount')}
                 options={[
-                  { value: 'statement', label: `Statement · ${money(statementBalance, { compact: true })}` },
-                  { value: 'full', label: `Full · ${money(currentBalance, { compact: true })}` },
-                  { value: 'custom', label: 'Custom' },
+                  { value: 'statement', label: t('forms.presetStatement', { amount: money(statementBalance, { compact: true }) }) },
+                  { value: 'full', label: t('forms.presetFull', { amount: money(currentBalance, { compact: true }) }) },
+                  { value: 'custom', label: t('forms.presetCustom') },
                 ]}
               />
             </Field>
           </div>
 
           <Field
-            label="Amount"
+            label={t('common.amount')}
             hint={
               remaining > 0.005
-                ? `${money(remaining)} would still be owed`
+                ? t('forms.stillOwed', { amount: money(remaining) })
                 : remaining < -0.005
-                  ? `${money(-remaining)} more than the balance — the card ends in credit`
-                  : 'Clears the balance exactly'
+                  ? t('forms.endsInCredit', { amount: money(-remaining) })
+                  : t('forms.clearsExactly')
             }
           >
             <DecimalInput
@@ -220,35 +221,34 @@ export function PayBillForm({
           </Field>
 
           <Field
-            label="Pay from"
-            error={overdraws ? `${source?.name} only holds ${money(source?.balance ?? 0)}` : undefined}
+            label={t('forms.payFrom')}
+            error={overdraws ? t('forms.onlyHolds', { name: source?.name ?? '', amount: money(source?.balance ?? 0) }) : undefined}
           >
             <Select value={fromWalletId} onChange={(e) => setFromWalletId(e.target.value)}>
               {wallets.map((wallet) => (
                 <option key={wallet.id} value={wallet.id}>
-                  {wallet.icon} {wallet.name} — {money(wallet.balance)}
+                  {t('forms.walletOption', { icon: wallet.icon, name: wallet.name, amount: money(wallet.balance) })}
                 </option>
               ))}
             </Select>
           </Field>
 
-          <Field label="Date">
+          <Field label={t('common.date')}>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
 
-          <Field label="Note" hint="Optional.">
+          <Field label={t('common.note')} hint={t('common.optional')}>
             <Input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder={`${card.wallet.name} bill payment`}
+              placeholder={t('forms.billPaymentNote', { name: card.wallet.name })}
               maxLength={300}
             />
           </Field>
 
           <div className="span-2">
             <Alert tone="info">
-              Recorded as a transfer, so it moves the balance without counting as spending — the
-              charges were already the expense.
+              {t('forms.transferNotice')}
             </Alert>
           </div>
 

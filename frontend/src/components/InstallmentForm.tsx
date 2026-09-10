@@ -15,6 +15,7 @@
  */
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { CardState } from '../lib/creditMath';
 import { formatDate, todayKey } from '../lib/format';
@@ -77,6 +78,7 @@ export function InstallmentForm({
   onClose: () => void;
   onSubmit: (payload: InstallmentPayload) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const money = useMoneyFormatter();
   const { settings } = useSettings();
 
@@ -127,15 +129,15 @@ export function InstallmentForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!(total > 0)) {
-      setLocalError('Enter the full purchase price');
+      setLocalError(t('forms.enterPurchasePrice'));
       return;
     }
     if (!(months >= 1 && months <= MAX_MONTHS)) {
-      setLocalError(`Choose between 1 and ${MAX_MONTHS} months`);
+      setLocalError(t('forms.chooseTerm', { max: MAX_MONTHS }));
       return;
     }
     if (!category.trim()) {
-      setLocalError('Pick a category — each chunk is an ordinary expense and needs one');
+      setLocalError(t('forms.pickInstallmentCategory'));
       return;
     }
     setLocalError(null);
@@ -149,16 +151,16 @@ export function InstallmentForm({
   return (
     <Modal
       open={open}
-      title="0% installment plan"
+      title={t('forms.installmentTitle')}
       onClose={onClose}
       width={600}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy}>
-            Create {months} charge{months === 1 ? '' : 's'}
+            {t('forms.createCharges', { count: months })}
           </Button>
         </>
       }
@@ -166,21 +168,28 @@ export function InstallmentForm({
       <form className="form-grid" onSubmit={submit}>
         <div className="span-2">
           <Alert tone="info">
-            Charged to <strong>{card.wallet.name}</strong>. Written as {months} dated expenses, so
-            each month is billed one chunk while the card shows the whole amount you still owe.
+            {/* `Trans`, not `t()`: the sentence wraps the card name in <strong>,
+                and where that emphasis falls inside the sentence differs by
+                language. Splitting it into three concatenated pieces would
+                hard-code English word order; `<1>` lets the translator move it. */}
+            <Trans
+              i18nKey="forms.installmentIntro"
+              values={{ name: card.wallet.name, count: months }}
+              components={{ 1: <strong /> }}
+            />
           </Alert>
         </div>
 
-        <Field label="Purchase price" hint="The full price, not the monthly figure.">
+        <Field label={t('forms.purchasePrice')} hint={t('forms.purchasePriceHint')}>
           <DecimalInput value={amount} onChange={setAmount} placeholder="0.00" />
         </Field>
 
-        <Field label="First charge">
+        <Field label={t('forms.firstCharge')}>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
 
         <div className="span-2">
-          <Field label="Term">
+          <Field label={t('forms.term')}>
             <Segmented<string>
               value={COMMON_TERMS.includes(months) ? String(months) : 'other'}
               onChange={(next) => {
@@ -191,16 +200,16 @@ export function InstallmentForm({
                 setCustomMonths('');
                 setMonths(Number(next));
               }}
-              ariaLabel="Number of months"
+              ariaLabel={t('forms.numberOfMonths')}
               options={[
-                ...COMMON_TERMS.map((term) => ({ value: String(term), label: `${term}m` })),
-                { value: 'other', label: 'Other' },
+                ...COMMON_TERMS.map((term) => ({ value: String(term), label: t('forms.termMonths', { count: term }) })),
+                { value: 'other', label: t('forms.termOther') },
               ]}
             />
           </Field>
           {!COMMON_TERMS.includes(months) || customMonths ? (
             <div style={{ marginTop: 'var(--space-3)' }}>
-              <Field label="Months" hint={`1 to ${MAX_MONTHS}.`}>
+              <Field label={t('forms.months')} hint={t('forms.monthsHint', { max: MAX_MONTHS })}>
                 <Input
                   type="number"
                   min={1}
@@ -217,7 +226,7 @@ export function InstallmentForm({
           ) : null}
         </div>
 
-        <Field label="Category" hint="Every chunk is filed under this.">
+        <Field label={t('common.category')} hint={t('forms.categoryFiledUnder')}>
           <Select value={category} onChange={(e) => setCategory(e.target.value)}>
             {settings.categories.map((name) => (
               <option key={name} value={name}>
@@ -227,7 +236,7 @@ export function InstallmentForm({
           </Select>
         </Field>
 
-        <Field label="What is it" hint="Shown on every chunk.">
+        <Field label={t('forms.whatIsIt')} hint={t('forms.whatIsItHint')}>
           <Input
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -240,23 +249,23 @@ export function InstallmentForm({
           <div className="span-2 installment-preview">
             <div className="installment-figures">
               <div className="metric metric--accent">
-                <span className="section-label">Per month</span>
+                <span className="section-label">{t('forms.perMonth')}</span>
                 <span className="metric-value">{money(chunks.rest)}</span>
                 <span className="metric-hint">
                   {chunks.first !== chunks.rest
-                    ? `First ${money(chunks.first)} — rounding rides on it`
-                    : 'Even split'}
+                    ? t('forms.firstChunkNote', { amount: money(chunks.first) })
+                    : t('forms.evenSplit')}
                 </span>
               </div>
               <div className="metric">
-                <span className="section-label">This month</span>
+                <span className="section-label">{t('common.thisMonth')}</span>
                 <span className="metric-value">{money(chunks.first)}</span>
-                <span className="metric-hint">All that hits this month's spending</span>
+                <span className="metric-hint">{t('forms.hitsThisMonth')}</span>
               </div>
               <div className="metric metric--negative">
-                <span className="section-label">Card balance</span>
+                <span className="section-label">{t('forms.cardBalance')}</span>
                 <span className="metric-value text-negative">+{money(total)}</span>
-                <span className="metric-hint">Owed to the bank from today</span>
+                <span className="metric-hint">{t('forms.owedFromToday')}</span>
               </div>
             </div>
 
@@ -272,8 +281,10 @@ export function InstallmentForm({
                 <li className="installment-more">
                   <span className="installment-index">…</span>
                   <span className="installment-date">
-                    {months - preview.length} more, through{' '}
-                    {formatDate(addMonths(date, months - 1), settings.locale)}
+                    {t('forms.moreThrough', {
+                      count: months - preview.length,
+                      date: formatDate(addMonths(date, months - 1), settings.locale),
+                    })}
                   </span>
                   <span className="installment-amount">{money(chunks.rest)}</span>
                 </li>
@@ -284,9 +295,11 @@ export function InstallmentForm({
 
         {wouldExceed && (
           <div className="span-2">
-            <Alert tone="warning" title="Over the limit">
-              This is more than the {money(card.availableCredit)} available on {card.wallet.name}.
-              Banks often approve a plan anyway — recording it here is fine either way.
+            <Alert tone="warning" title={t('forms.overLimitTitle')}>
+              {t('forms.overLimitBody', {
+                amount: money(card.availableCredit),
+                name: card.wallet.name,
+              })}
             </Alert>
           </div>
         )}

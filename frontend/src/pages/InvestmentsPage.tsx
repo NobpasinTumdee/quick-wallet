@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Icon } from '../components/Icon';
 import type { ChartReadout } from '../components/StockCandlestickChart';
 import { useCandles } from '../hooks/useCandles';
@@ -74,6 +76,7 @@ interface SellTarget {
 }
 
 export function InvestmentsPage() {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const [view, setView] = useState<'hold' | 'sold'>('hold');
   const [tagFilter, setTagFilter] = useState('');
@@ -318,7 +321,7 @@ export function InvestmentsPage() {
 
   async function removeLot(lot: Investment) {
     const label = `${lot.symbol} — ${formatNumber(lot.quantity, 8, settings.locale)} bought ${formatDate(lot.buyDate, settings.locale)}`;
-    if (!window.confirm(`Delete this purchase?\n\n${label}`)) return;
+    if (!window.confirm(t('invest.deletePurchaseConfirm', { label }))) return;
     await investments.remove(lot.id);
   }
 
@@ -405,7 +408,7 @@ export function InvestmentsPage() {
   }
 
   async function removeWatch(item: WatchlistItem) {
-    if (!window.confirm(`Remove ${item.symbol} from your watchlist?`)) return;
+    if (!window.confirm(t('invest.removeFromWatchlistConfirm', { symbol: item.symbol }))) return;
     await watchlist.remove(item.id);
   }
 
@@ -426,7 +429,7 @@ export function InvestmentsPage() {
 
   if (investments.initialLoading || wallets.initialLoading) {
     return (
-      <Card title="Loading positions">
+      <Card title={t('invest.loadingPositions')}>
         <Skeleton rows={5} />
       </Card>
     );
@@ -437,8 +440,8 @@ export function InvestmentsPage() {
       <Card>
         <EmptyState
           icon={<Icon icon={TrendingUp} size="xl" />}
-          title="No investment wallet yet"
-          description="Create a wallet in Investment mode from the Wallets tab, then add positions here. Fund it with a transfer from a cash wallet."
+          title={t('invest.noWalletTitle')}
+          description={t('invest.noWalletBody')}
         />
       </Card>
     );
@@ -448,57 +451,57 @@ export function InvestmentsPage() {
     <>
       <div className="grid grid--stats">
         <StatCard
-          label="Cost basis"
+          label={t('invest.costBasis')}
           icon={<Icon icon={Receipt} size="sm" />}
           value={money(portfolio.totalCost, { compact: true })}
-          hint={`${holdings.length} position${holdings.length === 1 ? '' : 's'} · ${portfolio.positions.length} purchase${portfolio.positions.length === 1 ? '' : 's'}`}
+          hint={`${t('invest.positionCount', { count: holdings.length })} · ${t('invest.purchaseCount', { count: portfolio.positions.length })}`}
         />
         <StatCard
-          label="Market value"
+          label={t('invest.marketValue')}
           tone="accent"
           icon={<Icon icon={TrendingUp} size="sm" />}
           value={money(portfolio.totalValue, { compact: true })}
-          hint={`${portfolio.provider} · ${formatRelativeTime(portfolio.lastUpdated)}`}
+          hint={t('invest.quoteMeta', { provider: portfolio.provider, time: formatRelativeTime(portfolio.lastUpdated) })}
         />
         <StatCard
-          label="Unrealised P&L"
+          label={t('invest.unrealisedPnl')}
           tone={portfolio.totalPnl >= 0 ? 'positive' : 'negative'}
           icon={<Icon icon={ChartColumn} size="sm" />}
           value={formatPercent(portfolio.totalPnlPercent, 2, true)}
           hint={money(portfolio.totalPnl, { signed: true })}
         />
         <StatCard
-          label="Realised P&L"
+          label={t('invest.realisedPnl')}
           tone={realizedTotal >= 0 ? 'positive' : 'negative'}
           icon={<Icon icon={Flag} size="sm" />}
           value={money(realizedTotal, { signed: true })}
-          hint={`${soldLots.length} closed lot${soldLots.length === 1 ? '' : 's'}`}
+          hint={t('invest.closedLots', { count: soldLots.length })}
         />
       </div>
 
       {/* Conversion is doing real work to the numbers, so it is stated openly
           rather than hidden behind the totals. */}
       {portfolio.fx.degraded ? (
-        <Alert tone="error" title="Exchange rate unavailable">
+        <Alert tone="error" title={t('invest.rateUnavailable')}>
           {portfolio.fx.unresolved.join(', ')} prices could not be converted to {portfolio.baseCurrency},
           so they are being compared 1:1 against your cost basis. P&amp;L for those positions is wrong
           until the rate is available — press Refresh prices to retry.
         </Alert>
       ) : (
         convertedRate && (
-          <Alert tone="info" title="Currency conversion">
+          <Alert tone="info" title={t('invest.currencyConversion')}>
             Prices are quoted in {convertedRate.currency} and converted at{' '}
             <strong>
               1 {convertedRate.currency} = {convertedRate.rate.toFixed(4)} {portfolio.baseCurrency}
             </strong>{' '}
             to compare against your {portfolio.baseCurrency} cost basis.
-            {convertedRate.fetchedAt && ` Rate from ${formatRelativeTime(convertedRate.fetchedAt)}.`}
+            {convertedRate.fetchedAt && ` ${t('invest.rateFrom', { time: formatRelativeTime(convertedRate.fetchedAt) })}`}
           </Alert>
         )
       )}
 
       {misEnteredCount > 0 && (
-        <Alert tone="warning" title={`${misEnteredCount} position${misEnteredCount === 1 ? '' : 's'} may be priced in ${brokerCurrency}`}>
+        <Alert tone="warning" title={t('invest.misEntered', { count: misEnteredCount, currency: brokerCurrency })}>
           Their cost per share is roughly {brokerRate.toFixed(0)}× below the live price, which is what a{' '}
           {brokerCurrency} price saved into a {portfolio.baseCurrency} field looks like. Open the
           purchase history, edit the offending buy, switch its price to{' '}
@@ -508,16 +511,16 @@ export function InvestmentsPage() {
       )}
 
       {!portfolio.isLive && (
-        <Alert tone="warning" title="Simulated prices">
+        <Alert tone="warning" title={t('invest.simulatedPrices')}>
           No stock API key configured, so prices are generated locally and P&L is illustrative. Add{' '}
           <code>VITE_STOCK_API_KEY</code> to <code>frontend/.env.local</code> for live quotes.
         </Alert>
       )}
 
       {Object.keys(portfolio.errors).length > 0 && (
-        <Alert tone="warning" title="Some quotes failed">
+        <Alert tone="warning" title={t('invest.someQuotesFailed')}>
           {Object.entries(portfolio.errors)
-            .map(([symbol, message]) => `${symbol}: ${message}`)
+            .map(([symbol, message]) => t('invest.quoteError', { symbol, message }))
             .join(' · ')}
         </Alert>
       )}
@@ -574,10 +577,10 @@ export function InvestmentsPage() {
                 aria-pressed={chartFullscreen.expanded}
                 title={
                   chartFullscreen.expanded
-                    ? 'Exit full screen (Esc)'
-                    : `Expand the ${chartSymbol} chart to full screen`
+                    ? t('invest.exitFullscreenHint')
+                    : t('invest.expandChart', { symbol: chartSymbol })
                 }
-                aria-label={chartFullscreen.expanded ? 'Exit full screen' : 'Full screen'}
+                aria-label={chartFullscreen.expanded ? t('invest.exitFullscreen') : t('invest.fullscreen')}
               >
                 <Icon icon={chartFullscreen.expanded ? Minimize2 : Maximize2} size="sm" />
               </Button>
@@ -611,7 +614,7 @@ export function InvestmentsPage() {
           onClick={() => setTab('holdings')}
         >
           <Icon icon={TrendingUp} size="sm" />
-          Holdings
+          {t('invest.holdings')}
           <span className="invest-tab-count">{holdings.length}</span>
         </button>
         <button
@@ -622,14 +625,14 @@ export function InvestmentsPage() {
           onClick={() => setTab('watchlist')}
         >
           <Icon icon={Eye} size="sm" />
-          Watchlist
+          {t('invest.watchlist')}
           <span className="invest-tab-count">{watchlist.items.length}</span>
         </button>
       </div>
 
       {tab === 'holdings' && (
       <Card
-        title="Positions"
+        title={t('invest.positions')}
         actions={
           <>
             {/* Positions come from the sheet; prices come from the quote API.
@@ -637,13 +640,13 @@ export function InvestmentsPage() {
             <RefreshButton
               onRefresh={() => Promise.all([investments.refresh(), wallets.refresh()])}
               busy={investments.isValidating || wallets.isValidating}
-              label="Refresh positions"
+              label={t('invest.refreshPositions')}
             />
             <Button size="sm" onClick={() => void portfolio.refresh()} loading={portfolio.loading}>
-              Refresh prices
+              {t('invest.refreshPrices')}
             </Button>
             <Button size="sm" variant="primary" onClick={openNewPosition}>
-              + New position
+              {t('invest.newPosition')}
             </Button>
           </>
         }
@@ -653,11 +656,11 @@ export function InvestmentsPage() {
           <div className="toolbar">
             <Segmented<'hold' | 'sold'>
               value={view}
-              ariaLabel="Position view"
+              ariaLabel={t('invest.positionView')}
               onChange={setView}
               options={[
-                { value: 'hold', label: `Holding (${holdings.length})` },
-                { value: 'sold', label: `Sold (${soldLots.length})` },
+                { value: 'hold', label: t('invest.holdingCount', { count: holdings.length }) },
+                { value: 'sold', label: t('invest.soldCount', { count: soldLots.length }) },
               ]}
             />
             <div className="spacer" />
@@ -699,13 +702,13 @@ export function InvestmentsPage() {
             title={view === 'hold' ? 'No open positions' : 'Nothing sold yet'}
             description={
               view === 'hold'
-                ? 'Add a position with its symbol, buy price and quantity to start tracking P&L. Buy the same ticker again later and the two purchases average together automatically.'
-                : 'Positions you mark as sold appear here with their realised P&L, one row per purchase.'
+                ? t('invest.emptyHoldingsBody')
+                : t('invest.emptySoldBody')
             }
             action={
               view === 'hold' ? (
                 <Button variant="primary" onClick={openNewPosition}>
-                  Add a position
+                  {t('invest.addPosition')}
                 </Button>
               ) : undefined
             }
@@ -716,13 +719,13 @@ export function InvestmentsPage() {
             <table className="data">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th className="num">Qty</th>
-                  <th className="num">Avg cost</th>
-                  <th className="num">Price</th>
-                  <th className="num">Value</th>
-                  <th className="num">P&L</th>
-                  <th>Tags</th>
+                  <th>{t('invest.symbol')}</th>
+                  <th className="num">{t('invest.quantity')}</th>
+                  <th className="num">{t('invest.avgCost')}</th>
+                  <th className="num">{t('invest.price')}</th>
+                  <th className="num">{t('invest.value')}</th>
+                  <th className="num">{t('invest.pnl')}</th>
+                  <th>{t('invest.tags')}</th>
                   <th className="num" />
                 </tr>
               </thead>
@@ -740,7 +743,7 @@ export function InvestmentsPage() {
                       tabIndex={0}
                       role="button"
                       aria-expanded={expanded}
-                      aria-label={`${holding.symbol}: chart and purchase history`}
+                      aria-label={t('invest.chartAndHistory', { symbol: holding.symbol })}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
@@ -762,7 +765,7 @@ export function InvestmentsPage() {
                           {looksMisEntered(holding) && (
                             <Badge tone="warning">
                               <span
-                                title={`The cost per share is about ${brokerRate.toFixed(0)}× below the live price — the sign of a ${brokerCurrency} figure saved as ${portfolio.baseCurrency}. Open the purchase history and re-enter the offending buy with the ${brokerCurrency} toggle.`}
+                                title={t('invest.checkPriceHint', { factor: brokerRate.toFixed(0), quote: brokerCurrency, base: portfolio.baseCurrency })}
                               >
                                 check price
                               </span>
@@ -771,7 +774,7 @@ export function InvestmentsPage() {
                         </span>
                         <div className="list-item-sub">
                           {averaged
-                            ? `${formatDate(holding.firstBuyDate, settings.locale)} – ${formatDate(holding.lastBuyDate, settings.locale)}`
+                            ? t('invest.dateRange', { from: formatDate(holding.firstBuyDate, settings.locale), to: formatDate(holding.lastBuyDate, settings.locale) })
                             : formatDate(holding.firstBuyDate, settings.locale)}
                         </div>
                       </td>
@@ -845,18 +848,18 @@ export function InvestmentsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            title={`Add another purchase of ${holding.symbol}`}
+                            title={t('invest.addAnotherPurchase', { symbol: holding.symbol })}
                             onClick={() => openBuyMore(holding)}
                           >
                             <Icon icon={Plus} size="sm" />
-                            Buy
+                            {t('invest.buy')}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => openSell(holding, averaged ? 'all' : holding.lots[0].id)}
                           >
-                            Sell
+                            {t('invest.sell')}
                           </Button>
                         </div>
                       </td>
@@ -871,7 +874,7 @@ export function InvestmentsPage() {
                         <td colSpan={8}>
                           <div className="lot-history">
                             <div className="lot-history-head">
-                              <strong>Purchase history</strong>
+                              <strong>{t('invest.purchaseHistory')}</strong>
                               <span className="text-faint">
                                 {holding.lots.length} {holding.lots.length === 1 ? 'buy' : 'buys'} ·
                                 averaged to {money(holding.avgCost)}/share
@@ -886,19 +889,19 @@ export function InvestmentsPage() {
                               <div className="spacer" />
                               <Button size="sm" onClick={() => openBuyMore(holding)}>
                                 <Icon icon={Plus} size="sm" />
-                                Add purchase
+                                {t('invest.addPurchase')}
                               </Button>
                             </div>
 
                             <table className="data data--nested">
                               <thead>
                                 <tr>
-                                  <th>Bought</th>
-                                  <th className="num">Qty</th>
-                                  <th className="num">Price / share</th>
-                                  <th className="num">Cost</th>
-                                  <th className="num">Share of position</th>
-                                  <th className="num">P&L</th>
+                                  <th>{t('invest.bought')}</th>
+                                  <th className="num">{t('invest.quantity')}</th>
+                                  <th className="num">{t('invest.pricePerShare')}</th>
+                                  <th className="num">{t('invest.cost')}</th>
+                                  <th className="num">{t('invest.shareOfPosition')}</th>
+                                  <th className="num">{t('invest.pnl')}</th>
                                   <th className="num" />
                                 </tr>
                               </thead>
@@ -971,19 +974,19 @@ export function InvestmentsPage() {
                                             variant="ghost"
                                             onClick={() => openSell(holding, lot.id)}
                                           >
-                                            Sell
+                                            {t('invest.sell')}
                                           </Button>
                                           <Button
                                             size="sm"
                                             variant="ghost"
                                             onClick={() => openEditLot(lot)}
                                           >
-                                            Edit
+                                            {t('common.edit')}
                                           </Button>
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            aria-label="Delete this purchase"
+                                            aria-label={t('invest.deletePurchase')}
                                             onClick={() => void removeLot(lot)}
                                           >
                                             ✕
@@ -1010,13 +1013,13 @@ export function InvestmentsPage() {
             <table className="data">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th className="num">Qty</th>
-                  <th className="num">Avg cost</th>
-                  <th className="num">Sell price</th>
-                  <th className="num">Proceeds</th>
-                  <th className="num">P&L</th>
-                  <th>Tags</th>
+                  <th>{t('invest.symbol')}</th>
+                  <th className="num">{t('invest.quantity')}</th>
+                  <th className="num">{t('invest.avgCost')}</th>
+                  <th className="num">{t('invest.sellPrice')}</th>
+                  <th className="num">{t('invest.proceeds')}</th>
+                  <th className="num">{t('invest.pnl')}</th>
+                  <th>{t('invest.tags')}</th>
                   <th className="num" />
                 </tr>
               </thead>
@@ -1050,12 +1053,12 @@ export function InvestmentsPage() {
                     <td className="num">
                       <div className="row-actions">
                         <Button size="sm" variant="ghost" onClick={() => openEditLot(lot)}>
-                          Edit
+                          {t('common.edit')}
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          aria-label="Delete this purchase"
+                          aria-label={t('invest.deletePurchase')}
                           onClick={() => void removeLot(lot)}
                         >
                           ✕
@@ -1080,7 +1083,7 @@ export function InvestmentsPage() {
           className={cx(watchFullscreen.expanded && 'card--fullscreen')}
           title={
             <span className="watch-card-title">
-              Watchlist
+              {t('invest.watchlist')}
               {watchFullscreen.expanded && (
                 <span className="watch-card-count">
                   {watchlist.items.length} symbol{watchlist.items.length === 1 ? '' : 's'} ·{' '}
@@ -1095,7 +1098,7 @@ export function InvestmentsPage() {
               <RefreshButton
                 onRefresh={() => Promise.all([watchlist.refresh(), watchQuotes.refresh()])}
                 busy={watchlist.isValidating || watchQuotes.loading}
-                label="Refresh watchlist"
+                label={t('invest.refreshWatchlist')}
               />
               <Button size="sm" variant="primary" onClick={() => openWatchForm()}>
                 + Add to watchlist
@@ -1108,10 +1111,10 @@ export function InvestmentsPage() {
                 aria-pressed={watchFullscreen.expanded}
                 title={
                   watchFullscreen.expanded
-                    ? 'Exit full screen (Esc)'
-                    : 'Expand the watchlist to full screen'
+                    ? t('invest.exitFullscreenHint')
+                    : t('invest.expandWatchlist')
                 }
-                aria-label={watchFullscreen.expanded ? 'Exit full screen' : 'Full screen'}
+                aria-label={watchFullscreen.expanded ? t('invest.exitFullscreen') : t('invest.fullscreen')}
               >
                 <Icon icon={watchFullscreen.expanded ? Minimize2 : Maximize2} size="sm" />
               </Button>
@@ -1134,11 +1137,11 @@ export function InvestmentsPage() {
           ) : watchlist.items.length === 0 ? (
             <EmptyState
               icon={<Icon icon={Eye} size="xl" />}
-              title="Nothing on the watchlist"
-              description="Track symbols you do not own yet. Group them however you think — sectors, conviction, a shortlist — set a target price, and click any row to chart it."
+              title={t('invest.emptyWatchlistTitle')}
+              description={t('invest.emptyWatchlistBody')}
               action={
                 <Button variant="primary" onClick={() => openWatchForm()}>
-                  Add a symbol
+                  {t('invest.addSymbol')}
                 </Button>
               }
             />
@@ -1167,7 +1170,7 @@ export function InvestmentsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        title={`Add a symbol to ${group.category}`}
+                        title={t('invest.addSymbolTo', { group: group.category })}
                         onClick={() => openWatchForm(undefined, group.category)}
                       >
                         <Icon icon={Plus} size="sm" />
@@ -1192,7 +1195,7 @@ export function InvestmentsPage() {
                                 role="button"
                                 tabIndex={0}
                                 aria-pressed={charted}
-                                aria-label={`Chart ${item.symbol}`}
+                                aria-label={t('invest.chartSymbol', { symbol: item.symbol })}
                                 onClick={() => setChartSymbol(item.symbol)}
                                 onKeyDown={(event) => {
                                   if (event.key === 'Enter' || event.key === ' ') {
@@ -1268,12 +1271,12 @@ export function InvestmentsPage() {
                                     variant="ghost"
                                     onClick={() => openWatchForm(item)}
                                   >
-                                    Edit
+                                    {t('common.edit')}
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    aria-label={`Remove ${item.symbol} from the watchlist`}
+                                    aria-label={t('invest.removeFromWatchlist', { symbol: item.symbol })}
                                     onClick={() => void removeWatch(item)}
                                   >
                                     ✕
@@ -1323,19 +1326,19 @@ export function InvestmentsPage() {
 
       <Modal
         open={Boolean(sellTarget)}
-        title={`Sell ${sellTarget?.holding.symbol ?? ''}`}
+        title={t('invest.sellSymbol', { symbol: sellTarget?.holding.symbol ?? '' })}
         onClose={() => setSellTarget(null)}
         width={440}
         footer={
           <>
-            <Button onClick={() => setSellTarget(null)}>Cancel</Button>
+            <Button onClick={() => setSellTarget(null)}>{t('common.cancel')}</Button>
             <Button
               variant="primary"
               loading={investments.mutating}
               disabled={sellPriceValue <= 0 || !sellLots.length}
               onClick={() => void confirmSell()}
             >
-              {sellLots.length > 1 ? `Sell ${sellLots.length} lots` : 'Confirm sale'}
+              {sellLots.length > 1 ? t('invest.sellLots', { count: sellLots.length }) : t('invest.confirmSale')}
             </Button>
           </>
         }
@@ -1344,8 +1347,8 @@ export function InvestmentsPage() {
             single-purchase position has nothing to pick. */}
         {sellTarget && sellTarget.holding.lots.length > 1 && (
           <Field
-            label="What are you selling?"
-            hint="Lots are sold whole. Pick one purchase, or close the entire position at this price."
+            label={t('invest.whatSelling')}
+            hint={t('invest.whatSellingHint')}
           >
             <Select
               value={sellTarget.lotId}
@@ -1371,11 +1374,11 @@ export function InvestmentsPage() {
         )}
 
         <Field
-          label={`Sell price per share (${sellInQuote ? brokerCurrency : money.base})`}
+          label={t('invest.sellPricePerShare', { currency: sellInQuote ? brokerCurrency : money.base })}
           hint={
             sellInQuote
-              ? `Type it exactly as your broker shows it — converted at ${brokerRate.toFixed(4)} on save.`
-              : 'Pre-filled with the latest quote, already converted.'
+              ? t('invest.brokerRateHint', { rate: brokerRate.toFixed(4) })
+              : t('invest.sellPricePrefilled')
           }
         >
           <div className="field-with-unit">
@@ -1383,7 +1386,7 @@ export function InvestmentsPage() {
             {brokerRate > 0 && (
               <Segmented<'quote' | 'base'>
                 value={sellCurrency}
-                ariaLabel="Sell price currency"
+                ariaLabel={t('invest.sellPriceCurrency')}
                 onChange={(next) => {
                   if (next === sellCurrency) return;
                   const value = parseDecimal(sellPrice);

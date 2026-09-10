@@ -1,5 +1,7 @@
 import { Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import { TransactionForm, TransactionPayload } from '../components/TransactionForm';
 import { TransactionFilters } from '../components/TransactionFilters';
@@ -20,27 +22,42 @@ function recordedClock(tx: Transaction, locale: string): string {
   return at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Shown beside the title, so the header describes what is actually on screen. */
-function rangeLabel(filters: TxFilters, period: string, locale: string): string {
+/**
+ * Shown beside the title, so the header describes what is actually on screen.
+ *
+ * `t` is a parameter rather than this being a hook: it is a pure formatter, and
+ * threading the function through keeps it callable from anywhere without
+ * dragging React's rules-of-hooks along with it.
+ */
+function rangeLabel(
+  filters: TxFilters,
+  period: string,
+  locale: string,
+  t: TFunction,
+): string {
   switch (filters.datePreset) {
     case 'today':
-      return 'Today';
+      return t('activity.datePresetToday');
     case 'yesterday':
-      return 'Yesterday';
+      return t('activity.datePresetYesterday');
     case 'last7':
-      return 'Last 7 days';
+      return t('activity.datePresetLast7');
     case 'last30':
-      return 'Last 30 days';
+      return t('activity.datePresetLast30');
     case 'custom':
       return filters.from || filters.to
-        ? `${filters.from || 'the start'} → ${filters.to || 'today'}`
-        : 'Custom range';
+        ? t('activity.rangeSpan', {
+            from: filters.from || t('activity.rangeStart'),
+            to: filters.to || t('activity.rangeToday'),
+          })
+        : t('activity.datePresetCustom');
     default:
       return formatPeriod(period, locale);
   }
 }
 
 export function TransactionsPage({ period }: { period: string }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const [filters, setFilters] = useState<TxFilters>(EMPTY_FILTERS);
 
@@ -94,7 +111,7 @@ export function TransactionsPage({ period }: { period: string }) {
   }
 
   async function remove(tx: Transaction) {
-    if (!window.confirm(`Delete this ${tx.type} of ${money(tx.amount)}?`)) return;
+    if (!window.confirm(t('activity.deleteConfirm', { type: tx.type, amount: money(tx.amount) }))) return;
     // Disappears instantly; reappears with a toast if the server refuses.
     await transactions.remove(tx.id).catch(() => undefined);
   }
@@ -102,14 +119,14 @@ export function TransactionsPage({ period }: { period: string }) {
   return (
     <>
       <Card
-        title={`Activity · ${rangeLabel(filters, period, settings.locale)}`}
-        subtitle={`${money(totals.income)} in · ${money(totals.expense)} out · net ${money(totals.net)}`}
+        title={t('activity.header', { range: rangeLabel(filters, period, settings.locale, t) })}
+        subtitle={t('activity.totals', { income: money(totals.income), expense: money(totals.expense), net: money(totals.net) })}
         actions={
           <>
           <RefreshButton
             onRefresh={() => Promise.all([transactions.refresh(), wallets.refresh()])}
             busy={transactions.isValidating || wallets.isValidating}
-            label="Refresh transactions"
+            label={t('activity.refresh')}
           />
           <Button
             size="sm"
@@ -157,17 +174,17 @@ export function TransactionsPage({ period }: { period: string }) {
                different fixes, so they get different words and different
                buttons — offering "add a transaction" to someone whose filters
                are too narrow is the wrong advice. */
-            title={transactions.items.length ? 'No matches' : 'Nothing recorded here'}
+            title={t(transactions.items.length ? 'activity.noMatches' : 'activity.nothingRecorded')}
             description={
               wallets.items.length === 0
-                ? 'Create a wallet first, then start adding transactions.'
+                ? t('activity.createWalletFirst')
                 : transactions.items.length
-                  ? `All ${transactions.items.length} transactions in this range were filtered out. Widen the range, or clear a filter above.`
-                  : 'Nothing was recorded in this range yet.'
+                  ? t('activity.filteredOutBody', { count: transactions.items.length })
+                  : t('activity.nothingInRange')
             }
             action={
               transactions.items.length ? (
-                <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>
+                <Button onClick={() => setFilters(EMPTY_FILTERS)}>{t('common.clearFilters')}</Button>
               ) : wallets.items.length > 0 ? (
                 <Button variant="primary" onClick={() => setFormOpen(true)}>
                   Add a transaction
@@ -180,11 +197,11 @@ export function TransactionsPage({ period }: { period: string }) {
             <table className="data">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Category / Route</th>
-                  <th>Wallet</th>
-                  <th>Note</th>
+                  <th>{t('common.date')}</th>
+                  <th>{t('common.type')}</th>
+                  <th>{t('activity.categoryOrRoute')}</th>
+                  <th>{t('common.wallet')}</th>
+                  <th>{t('common.note')}</th>
                   <th className="num">Amount</th>
                   <th className="num" />
                 </tr>
@@ -211,7 +228,7 @@ export function TransactionsPage({ period }: { period: string }) {
                     </td>
                     <td>
                       {tx.type === 'transfer'
-                        ? `${walletName(tx.walletId)} → ${walletName(tx.toWalletId)}`
+                        ? t('activity.transferRoute', { from: walletName(tx.walletId), to: walletName(tx.toWalletId) })
                         : tx.category}
                     </td>
                     <td className="text-muted">{walletName(tx.walletId)}</td>

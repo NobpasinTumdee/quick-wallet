@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ordinal } from '../lib/format';
+import { TranslationKey } from '../locales';
 import { useSettings } from '../state/SettingsContext';
 import { Wallet, WalletKind, WalletMode, WalletType } from '../types';
 import {
@@ -17,13 +19,15 @@ import {
   parseDecimal,
 } from './ui';
 
-const KINDS: { value: WalletKind; label: string; modes: WalletMode[] }[] = [
-  { value: 'cash', label: 'Cash', modes: ['expense'] },
-  { value: 'bank', label: 'Bank account', modes: ['expense'] },
-  { value: 'ewallet', label: 'E-wallet', modes: ['expense'] },
-  { value: 'credit', label: 'Credit card', modes: ['expense'] },
-  { value: 'brokerage', label: 'Brokerage', modes: ['investment'] },
-  { value: 'other', label: 'Other', modes: ['expense', 'investment'] },
+/* `labelKey` rather than `label`: this array is built once at import time, so a
+   translated string here would freeze in whatever language was active then. */
+const KINDS: { value: WalletKind; labelKey: TranslationKey; modes: WalletMode[] }[] = [
+  { value: 'cash', labelKey: 'forms.kindCash', modes: ['expense'] },
+  { value: 'bank', labelKey: 'forms.kindBank', modes: ['expense'] },
+  { value: 'ewallet', labelKey: 'forms.kindEwallet', modes: ['expense'] },
+  { value: 'credit', labelKey: 'forms.kindCredit', modes: ['expense'] },
+  { value: 'brokerage', labelKey: 'forms.kindBrokerage', modes: ['investment'] },
+  { value: 'other', labelKey: 'forms.kindOther', modes: ['expense', 'investment'] },
 ];
 
 const ICONS = ['💵', '🏦', '💳', '📱', '📈', '🪙', '🏠', '🎯', '✈️', '🎓'];
@@ -130,6 +134,7 @@ export function WalletForm({
   onClose: () => void;
   onSubmit: (payload: WalletPayload) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const [form, setForm] = useState<FormState>(() =>
     initialState(settings.currency, wallet, defaultKind),
@@ -167,7 +172,7 @@ export function WalletForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!form.name.trim()) {
-      setLocalError('Give the wallet a name');
+      setLocalError(t('forms.walletNameRequired'));
       return;
     }
 
@@ -180,7 +185,7 @@ export function WalletForm({
        balance of 50,000 is almost always the two fields the wrong way round. */
     if (isCredit && limit > 0 && owed > limit * 10) {
       setLocalError(
-        'That balance is more than ten times the limit — check the two fields are the right way round.',
+        t('forms.limitLooksSwapped'),
       );
       return;
     }
@@ -208,15 +213,15 @@ export function WalletForm({
   return (
     <Modal
       open={open}
-      title={wallet ? `Edit ${wallet.name}` : 'New wallet'}
+      title={wallet ? t('forms.editWallet', { name: wallet.name }) : t('forms.newWallet')}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy}>
-            {wallet ? 'Save changes' : 'Create wallet'}
+            {wallet ? t('common.saveChanges') : t('forms.createWallet')}
           </Button>
         </>
       }
@@ -224,43 +229,43 @@ export function WalletForm({
       <form className="form-grid" onSubmit={submit}>
         <div className="span-2">
           <Field
-            label="Wallet mode"
+            label={t('forms.walletModeLabel')}
             hint={
               form.mode === 'expense'
-                ? 'Tracks income, expenses and transfers.'
-                : 'Holds stock positions with live P&L. Fund it with a transfer from a cash wallet.'
+                ? t('forms.walletModeExpenseHint')
+                : t('forms.walletModeInvestmentHint')
             }
           >
             <Segmented<WalletMode>
               value={form.mode}
               onChange={setMode}
-              ariaLabel="Wallet mode"
+              ariaLabel={t('forms.walletModeLabel')}
               options={[
-                { value: 'expense', label: '💳 Expense / Income' },
-                { value: 'investment', label: '📈 Investment' },
+                { value: 'expense', label: t('forms.walletModeExpense') },
+                { value: 'investment', label: t('forms.walletModeInvestment') },
               ]}
             />
           </Field>
           {wallet && (
             <p className="field-hint" style={{ marginTop: 4 }}>
-              Mode can only change while the wallet has no records.
+              {t('forms.walletModeLocked')}
             </p>
           )}
         </div>
 
-        <Field label="Name">
+        <Field label={t('common.name')}>
           <Input
             value={form.name}
             onChange={(e) => patch('name', e.target.value)}
-            placeholder={form.mode === 'investment' ? 'Brokerage' : 'Everyday spending'}
+            placeholder={t(form.mode === 'investment' ? 'forms.walletNamePlaceholderInvestment' : 'forms.walletNamePlaceholderExpense')}
             maxLength={60}
             required
           />
         </Field>
 
         <Field
-          label="Type"
-          hint={isCredit ? 'Charges add to what you owe; a transfer in pays it off.' : undefined}
+          label={t('common.type')}
+          hint={isCredit ? t('forms.creditKindHint') : undefined}
         >
           <Select
             value={form.kind}
@@ -277,19 +282,15 @@ export function WalletForm({
           >
             {kinds.map((kind) => (
               <option key={kind.value} value={kind.value}>
-                {kind.label}
+                {t(kind.labelKey)}
               </option>
             ))}
           </Select>
         </Field>
 
         <Field
-          label={isCredit ? 'Balance already owed' : 'Opening balance'}
-          hint={
-            isCredit
-              ? 'What the card owes today, as a positive number.'
-              : "What's in it right now."
-          }
+          label={t(isCredit ? 'forms.balanceOwed' : 'forms.openingBalance')}
+          hint={t(isCredit ? 'forms.balanceOwedHint' : 'forms.openingBalanceHint')}
         >
           <DecimalInput
             value={form.openingBalance}
@@ -304,14 +305,13 @@ export function WalletForm({
         {isCredit && (
           <>
             <div className="span-2 form-section-head">
-              <span className="section-label">Billing cycle</span>
+              <span className="section-label">{t('forms.billingCycle')}</span>
               <p className="field-hint">
-                Optional, but without both days the card cannot tell a statement balance from an
-                unbilled one, and nothing can fall due.
+                {t('forms.billingCycleHint')}
               </p>
             </div>
 
-            <Field label="Credit limit" hint="Leave empty if you'd rather not track utilisation.">
+            <Field label={t('forms.creditLimit')} hint={t('forms.creditLimitHint')}>
               <DecimalInput
                 value={form.creditLimit}
                 onChange={(raw) => patch('creditLimit', raw)}
@@ -319,7 +319,7 @@ export function WalletForm({
               />
             </Field>
 
-            <Field label="Cashback rate" hint="Percent. 1.5 means 1.5% back.">
+            <Field label={t('forms.cashbackRate')} hint={t('forms.cashbackRateHint')}>
               <DecimalInput
                 value={form.cashbackRate}
                 onChange={(raw) => patch('cashbackRate', raw)}
@@ -327,12 +327,12 @@ export function WalletForm({
               />
             </Field>
 
-            <Field label="Statement closes" hint="Day of month the bill is cut.">
+            <Field label={t('forms.statementCloses')} hint={t('forms.statementClosesHint')}>
               <Select
                 value={form.statementDate}
                 onChange={(e) => patch('statementDate', e.target.value)}
               >
-                <option value="">Not set</option>
+                <option value="">{t('common.notSet')}</option>
                 {DAYS.map((day) => (
                   <option key={day} value={day}>
                     {ordinal(day)}
@@ -341,9 +341,9 @@ export function WalletForm({
               </Select>
             </Field>
 
-            <Field label="Payment due" hint="Day of month it has to be paid.">
+            <Field label={t('forms.paymentDue')} hint={t('forms.paymentDueHint')}>
               <Select value={form.dueDate} onChange={(e) => patch('dueDate', e.target.value)}>
-                <option value="">Not set</option>
+                <option value="">{t('common.notSet')}</option>
                 {DAYS.map((day) => (
                   <option key={day} value={day}>
                     {ordinal(day)}
@@ -354,7 +354,7 @@ export function WalletForm({
           </>
         )}
 
-        <Field label="Currency">
+        <Field label={t('settings.currency')}>
           <Input
             value={form.currency}
             onChange={(e) => patch('currency', e.target.value.toUpperCase())}
@@ -362,7 +362,7 @@ export function WalletForm({
           />
         </Field>
 
-        <Field label="Icon" className="span-2">
+        <Field label={t('forms.icon')} className="span-2">
           <div className="swatches">
             {ICONS.map((icon) => (
               <button
@@ -371,7 +371,7 @@ export function WalletForm({
                 className={`swatch${form.icon === icon ? ' is-active' : ''}`}
                 style={{ background: 'var(--surface-2)' }}
                 onClick={() => patch('icon', icon)}
-                aria-label={`Icon ${icon}`}
+                aria-label={t('forms.iconNamed', { icon })}
               >
                 {icon}
               </button>
@@ -379,7 +379,7 @@ export function WalletForm({
           </div>
         </Field>
 
-        <Field label="Colour" className="span-2">
+        <Field label={t('forms.colour')} className="span-2">
           <div className="swatches">
             {COLORS.map((color) => (
               <button
@@ -388,18 +388,18 @@ export function WalletForm({
                 className={`swatch${form.color === color ? ' is-active' : ''}`}
                 style={{ background: color }}
                 onClick={() => patch('color', color)}
-                aria-label={`Colour ${color}`}
+                aria-label={t('forms.colourNamed', { colour: color })}
               />
             ))}
           </div>
         </Field>
 
-        <Field label="Note" className="span-2">
+        <Field label={t('common.note')} className="span-2">
           <Textarea
             value={form.note}
             onChange={(e) => patch('note', e.target.value)}
             maxLength={300}
-            placeholder="Optional"
+            placeholder={t('common.optional')}
           />
         </Field>
 

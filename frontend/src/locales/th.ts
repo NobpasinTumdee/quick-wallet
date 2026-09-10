@@ -5,25 +5,38 @@
  * than an English word appearing mid-sentence in production.
  *
  * ---------------------------------------------------------------------------
- * ON THE WORD CHOICES
+ * ON THE VOCABULARY
  * ---------------------------------------------------------------------------
- * These follow the vocabulary Thai banking apps actually use, not the literal
- * dictionary translation:
+ * These follow the wording Thai banking, SET brokerage and Revenue Department
+ * material actually uses, not the literal dictionary translation:
  *
- *   - "ภาพรวม" (overview) for the dashboard, not "แดชบอร์ด" — the transliteration
- *     is common in enterprise software and reads as jargon in a consumer app.
- *   - "การลงทุน" for investing; "พอร์ต" (portfolio) was the alternative but is
- *     narrower — it names the holdings, not the activity.
- *   - "รายการ" (items/entries) for Activity. The literal "กิจกรรม" means activity
- *     in the social sense and is wrong for a ledger.
+ *   - "ภาพรวม" (overview) for the dashboard, not the transliterated
+ *     "แดชบอร์ด", which reads as enterprise jargon in a consumer app.
+ *   - "รายการ" (entries) for Activity. The literal "กิจกรรม" means activity in
+ *     the social sense and is wrong for a ledger.
  *   - "รายจ่ายประจำ" (regular outgoings) for Recurring, which is what the screen
- *     is actually about, rather than "การสมัครสมาชิก" (subscriptions/membership).
- *   - "บัตรเครดิต" is kept in full rather than shortened to "บัตร"; a bare "card"
- *     is ambiguous between a debit and a credit card in Thai as in English.
+ *     is about, rather than "การสมัครสมาชิก" (membership).
+ *   - Investing follows SET convention: "ต้นทุนเฉลี่ย" for average cost,
+ *     "มูลค่าตลาด" for market value, and the pair
+ *     "กำไร/ขาดทุนที่ยังไม่รับรู้" (unrealised) against
+ *     "กำไร/ขาดทุนที่รับรู้แล้ว" (realised) — the accounting terms a Thai
+ *     brokerage statement prints, not a paraphrase.
+ *   - Cards follow issuer statements: "ยอดเรียกเก็บ" is the billed statement
+ *     balance, "วงเงินคงเหลือ" the available credit, "ผ่อนชำระ" instalments.
+ *   - Tax follows the Revenue Department: "เงินได้สุทธิ" for the taxable
+ *     figure, "ค่าลดหย่อน" for deductions, "ภาษีหัก ณ ที่จ่าย" for withholding.
  *
- * Thai does not use spaces between words, and has no plural inflection — so no
- * `_plural` variants are needed here, unlike the English side would be if these
- * strings ever took counts.
+ * ---------------------------------------------------------------------------
+ * ON THE PLURAL KEYS
+ * ---------------------------------------------------------------------------
+ * Thai has no plural inflection — one wallet and nine wallets are both
+ * "กระเป๋าเงิน" — so CLDR gives Thai a single `other` category and i18next never
+ * consults the `_one` entries below whatever the count. They are present only
+ * because the schema is strict, and each is identical to its `_other` twin on
+ * purpose: if the rule ever changed, the fallback would still read correctly.
+ *
+ * Thai also does not put spaces between words, so interpolated values sit flush
+ * against the surrounding text rather than being spaced as in English.
  */
 
 import type { TranslationSchema } from './en';
@@ -82,7 +95,493 @@ export const th: TranslationSchema = {
     name: 'ชื่อ',
     type: 'ประเภท',
     balance: 'ยอดคงเหลือ',
+    wallet: 'กระเป๋าเงิน',
+    seeAll: 'ดูทั้งหมด',
+    manage: 'จัดการ',
+    thisMonth: 'เดือนนี้',
     somethingWentWrong: 'เกิดข้อผิดพลาดบางอย่าง',
+    clearFilters: 'ล้างตัวกรอง',
+    addOne: 'เพิ่มรายการ',
+  },
+
+  dashboard: {
+    netWorth: 'ความมั่งคั่งสุทธิ',
+    refresh: 'รีเฟรชภาพรวม',
+    loadFailed: 'ไม่สามารถโหลดภาพรวมได้',
+    noData: 'ไม่พบข้อมูล',
+    firstWalletTitle: 'สร้างกระเป๋าเงินใบแรกของคุณ',
+    firstWalletBody:
+      'กระเป๋าเงินคือที่เก็บรายการและการลงทุนทั้งหมด สร้างสักใบแล้วเริ่มบันทึกรายการได้เลย',
+    goToWallets: 'ไปที่กระเป๋าเงิน',
+    taxCta: 'คำนวณภาษีเงินได้บุคคลธรรมดา',
+
+    cashOnHand: 'เงินสดคงเหลือ',
+    cashWallets: 'กระเป๋าเงินสด',
+    afterCards: 'เหลือ{{amount}}หลังหักหนี้บัตร',
+    cardDebt: 'หนี้บัตรเครดิต',
+    limitUsed: 'ใช้ไปแล้ว {{percent}} ของวงเงิน',
+    alreadySubtracted: 'หักออกจากความมั่งคั่งสุทธิแล้ว',
+    income: 'รายรับ',
+    spent: 'รายจ่าย',
+    savedLabel: 'เงินออม',
+    savingsRate: 'อัตราการออม {{percent}}',
+    unrealised: 'กำไร/ขาดทุนที่ยังไม่รับรู้',
+
+    monthNetUp: '↑ {{amount}} ในเดือนนี้',
+    monthNetDown: '↓ {{amount}} ในเดือนนี้',
+    inPositions_one: '{{amount}} ใน {{count}} หลักทรัพย์ · ราคาจาก {{provider}}',
+    inPositions_other: '{{amount}} ใน {{count}} หลักทรัพย์ · ราคาจาก {{provider}}',
+    walletCount_one: 'กระเป๋าเงิน {{count}} ใบ',
+    walletCount_other: 'กระเป๋าเงิน {{count}} ใบ',
+    categoryCount_one: '{{count}} หมวดหมู่',
+    categoryCount_other: '{{count}} หมวดหมู่',
+    recordCount_one: '{{count}} รายการ',
+    recordCount_other: '{{count}} รายการ',
+    walletInvested: 'เงินสด {{cash}} · ลงทุน {{invested}}',
+
+    budgetProgress: 'ความคืบหน้างบประมาณ',
+    noBudgetsTitle: 'ยังไม่มีงบประมาณสำหรับเดือนนี้',
+    noBudgetsBody:
+      'กำหนดวงเงินเป็นจำนวนเงินหรือเป็นสัดส่วนของรายรับก็ได้ เช่น ลงทุน 40% ออม 10% ค่าใช้จ่ายจำเป็น 20%',
+    createBudget: 'สร้างงบประมาณ',
+    budgetUsed: '{{label}}: ใช้ไปแล้ว {{percent}}',
+    budgetOver: 'เกิน {{amount}}',
+    budgetLeft: 'เหลือ {{amount}}',
+    allSpending: 'รายจ่ายทั้งหมด',
+
+    walletsTitle: 'กระเป๋าเงิน',
+    spending: 'ใช้จ่าย',
+    investing: 'ลงทุน',
+
+    projectionTitle: 'แนวโน้มในอนาคต',
+    projectionSubtitle: 'ประมาณการความมั่งคั่งสุทธิ หากยังออมในอัตราปัจจุบัน',
+
+    breakdownTitle: 'รายจ่ายแยกตามหมวด',
+    nothingSpentTitle: 'ยังไม่มีรายจ่าย',
+    nothingSpentBody: 'รายจ่ายของเดือนนี้จะแสดงที่นี่',
+
+    recentTitle: 'รายการล่าสุด',
+    noTransactionsTitle: 'ยังไม่มีรายการ',
+    noTransactionsBody: 'เพิ่มรายการได้จากแท็บรายการ',
+  },
+
+  invest: {
+    title: 'การลงทุน',
+    loadingPositions: 'กำลังโหลดพอร์ตการลงทุน',
+    noWalletTitle: 'ยังไม่มีกระเป๋าเงินสำหรับลงทุน',
+    noWalletBody:
+      'สร้างกระเป๋าเงินแบบลงทุนได้จากแท็บกระเป๋าเงิน แล้วจึงเพิ่มหลักทรัพย์ที่นี่ โดยโอนเงินเข้าจากกระเป๋าเงินสด',
+
+    costBasis: 'ต้นทุนรวม',
+    marketValue: 'มูลค่าตลาด',
+    unrealisedPnl: 'กำไร/ขาดทุนที่ยังไม่รับรู้',
+    realisedPnl: 'กำไร/ขาดทุนที่รับรู้แล้ว',
+
+    holdings: 'หลักทรัพย์ที่ถือครอง',
+    watchlist: 'รายการติดตาม',
+    positions: 'พอร์ตการลงทุน',
+    refreshPositions: 'รีเฟรชพอร์ตการลงทุน',
+    refreshPrices: 'รีเฟรชราคา',
+    refreshWatchlist: 'รีเฟรชรายการติดตาม',
+    addPosition: 'เพิ่มหลักทรัพย์',
+    addSymbol: 'เพิ่มชื่อย่อ',
+    addSymbolTo: 'เพิ่มชื่อย่อเข้ากลุ่ม{{group}}',
+
+    symbol: 'ชื่อย่อ',
+    quantity: 'จำนวน',
+    avgCost: 'ต้นทุนเฉลี่ย',
+    price: 'ราคา',
+    value: 'มูลค่า',
+    pnl: 'กำไร/ขาดทุน',
+    tags: 'ป้ายกำกับ',
+    buy: 'ซื้อ',
+    sell: 'ขาย',
+    cost: 'ต้นทุน',
+    proceeds: 'เงินที่ได้รับ',
+    targetPrice: 'ราคาเป้าหมาย',
+
+    purchaseHistory: 'ประวัติการซื้อ',
+    addPurchase: 'เพิ่มรายการซื้อ',
+    addAnotherPurchase: 'ซื้อ{{symbol}}เพิ่ม',
+    bought: 'วันที่ซื้อ',
+    pricePerShare: 'ราคาต่อหน่วย',
+    shareOfPosition: 'สัดส่วนในพอร์ต',
+    sellPrice: 'ราคาขาย',
+    deletePurchase: 'ลบรายการซื้อนี้',
+    deletePurchaseConfirm: 'ลบรายการซื้อนี้?\n\n{{label}}',
+
+    holdingCount: 'ถือครอง ({{count}})',
+    soldCount: 'ขายแล้ว ({{count}})',
+    closedLots_one: 'ปิดสถานะแล้ว {{count}} รายการ',
+    closedLots_other: 'ปิดสถานะแล้ว {{count}} รายการ',
+    sellLots_one: 'ขาย {{count}} รายการ',
+    sellLots_other: 'ขาย {{count}} รายการ',
+    sellSymbol: 'ขาย{{symbol}}',
+    whatSelling: 'ต้องการขายรายการใด',
+    whatSellingHint:
+      'ขายได้ทีละทั้งรายการ เลือกรายการซื้อรายการเดียว หรือปิดทั้งพอร์ตที่ราคานี้',
+    sellPricePerShare: 'ราคาขายต่อหน่วย ({{currency}})',
+    sellPriceCurrency: 'สกุลเงินของราคาขาย',
+    brokerRateHint:
+      'กรอกตามที่โบรกเกอร์แสดงทุกประการ ระบบจะแปลงค่าที่อัตรา {{rate}} เมื่อบันทึก',
+
+    investmentView: 'มุมมองการลงทุน',
+    positionView: 'มุมมองพอร์ต',
+    convertedToday: 'แปลงค่าด้วยอัตราวันนี้',
+    convertedAt: 'แปลงค่าที่อัตรา {{rate}}',
+    rateUnavailable: 'ไม่พบอัตราแลกเปลี่ยน',
+    currencyConversion: 'การแปลงสกุลเงิน',
+    rateFrom: 'อัตราเมื่อ {{time}}',
+    simulatedPrices: 'ราคาจำลอง',
+    someQuotesFailed: 'ดึงราคาบางรายการไม่สำเร็จ',
+    quoteMeta: '{{provider}} · {{time}}',
+
+    emptyWatchlistTitle: 'ยังไม่มีรายการติดตาม',
+    emptyWatchlistBody:
+      'ติดตามหลักทรัพย์ที่ยังไม่ได้ถือครอง จัดกลุ่มได้ตามใจ เช่น ตามกลุ่มอุตสาหกรรม ความมั่นใจ หรือรายการที่สนใจ ตั้งราคาเป้าหมายไว้ แล้วคลิกที่แถวใดก็ได้เพื่อดูกราฟ',
+    chartSymbol: 'ดูกราฟ{{symbol}}',
+    chartAndHistory: '{{symbol}}: กราฟและประวัติการซื้อ',
+    expandChart: 'ขยายกราฟ{{symbol}}เต็มหน้าจอ',
+    removeFromWatchlist: 'ลบ{{symbol}}ออกจากรายการติดตาม',
+    removeFromWatchlistConfirm: 'ลบ{{symbol}}ออกจากรายการติดตาม?',
+
+    newPosition: '+ เพิ่มหลักทรัพย์',
+    confirmSale: 'ยืนยันการขาย',
+    positionCount_one: '{{count}} หลักทรัพย์',
+    positionCount_other: '{{count}} หลักทรัพย์',
+    purchaseCount_one: 'ซื้อ {{count}} ครั้ง',
+    purchaseCount_other: 'ซื้อ {{count}} ครั้ง',
+    dateRange: '{{from}} – {{to}}',
+    quoteError: '{{symbol}}: {{message}}',
+    misEntered_one: '{{count}} หลักทรัพย์อาจบันทึกราคาเป็น{{currency}}',
+    misEntered_other: '{{count}} หลักทรัพย์อาจบันทึกราคาเป็น{{currency}}',
+    checkPrice: 'ตรวจสอบราคา',
+    exitFullscreenHint: 'ออกจากโหมดเต็มหน้าจอ (Esc)',
+    exitFullscreen: 'ออกจากโหมดเต็มหน้าจอ',
+    fullscreen: 'เต็มหน้าจอ',
+    expandWatchlist: 'ขยายรายการติดตามเต็มหน้าจอ',
+    emptyHoldingsBody:
+      'เพิ่มหลักทรัพย์พร้อมชื่อย่อ ราคาซื้อ และจำนวน เพื่อเริ่มติดตามกำไร/ขาดทุน หากซื้อชื่อย่อเดิมอีกครั้งในภายหลัง ระบบจะเฉลี่ยต้นทุนให้อัตโนมัติ',
+    emptySoldBody:
+      'หลักทรัพย์ที่ทำเครื่องหมายว่าขายแล้วจะแสดงที่นี่พร้อมกำไร/ขาดทุนที่รับรู้แล้ว แยกเป็นหนึ่งแถวต่อหนึ่งรายการซื้อ',
+    sellPricePrefilled: 'กรอกไว้ให้แล้วจากราคาล่าสุด และแปลงค่าเรียบร้อยแล้ว',
+    checkPriceHint:
+      'ต้นทุนต่อหน่วยต่ำกว่าราคาตลาดประมาณ {{factor}} เท่า ซึ่งเป็นสัญญาณว่าบันทึกราคา{{quote}}ไว้เป็น{{base}} เปิดประวัติการซื้อแล้วบันทึกรายการที่ผิดใหม่โดยเลือกสลับเป็น{{quote}}',
+  },
+
+  wallets: {
+    title: 'กระเป๋าเงิน',
+    accounts: 'บัญชี',
+    lede: 'กระเป๋าเงินแบบใช้จ่ายใช้ติดตามเงินในชีวิตประจำวัน ส่วนกระเป๋าเงินแบบลงทุนใช้เก็บหลักทรัพย์ และเติมเงินด้วยการโอน',
+    refresh: 'รีเฟรชกระเป๋าเงิน',
+    newWallet: 'สร้างกระเป๋าเงิน',
+    showArchived: 'แสดงที่เก็บเข้าคลัง',
+    hideArchived: 'ซ่อนที่เก็บเข้าคลัง',
+    archived: 'เก็บเข้าคลังแล้ว',
+    invested: 'ลงทุนไปแล้ว',
+    activity: 'จำนวนรายการ',
+    owed: 'ยอดหนี้',
+    cash: 'เงินสด',
+    creditCard: 'บัตรเครดิต',
+    openedWith: 'ยอดตั้งต้น {{amount}}',
+    emptyTitle: 'ยังไม่มีกระเป๋าเงิน',
+    emptyBody:
+      'สร้างกระเป๋าเงินสดหรือบัญชีธนาคารเพื่อบันทึกรายจ่าย หรือกระเป๋าเงินแบบลงทุนเพื่อติดตามหุ้น',
+    createWallet: 'สร้างกระเป๋าเงิน',
+    spendingGroup: 'ใช้จ่าย',
+    spendingCaption: 'รายรับ รายจ่าย และการโอน',
+    spendingEmpty: 'ยังไม่มีกระเป๋าเงินแบบใช้จ่าย',
+    investingGroup: 'ลงทุน',
+    investingCaption: 'หลักทรัพย์ คิดมูลค่าตามต้นทุน',
+    investingEmpty: 'ยังไม่มีกระเป๋าเงินแบบลงทุน สร้างสักใบเพื่อเริ่มติดตามหลักทรัพย์',
+    deleted: 'ลบ "{{name}}" แล้ว',
+    deletedWithRecords: 'ลบ "{{name}}" พร้อมรายการทั้งหมดแล้ว',
+    deleteCascadeConfirm: '{{message}}\n\nลบ "{{name}}" และรายการทั้งหมดอย่างถาวร?',
+  },
+
+  activity: {
+    filterTo: 'ถึงวันที่',
+    timeMorning: 'ช่วงเช้า',
+    timeAfternoon: 'ช่วงบ่าย',
+    timeEvening: 'ช่วงเย็น',
+    timeLateNight: 'กลางดึก',
+    noMatches: 'ไม่พบรายการที่ตรงกัน',
+    nothingRecorded: 'ยังไม่มีรายการที่บันทึกไว้',
+    createWalletFirst: 'สร้างกระเป๋าเงินก่อน แล้วจึงเริ่มเพิ่มรายการ',
+    nothingInRange: 'ยังไม่มีรายการที่บันทึกไว้ในช่วงเวลานี้',
+    datePresetToday: 'วันนี้',
+    datePresetYesterday: 'เมื่อวาน',
+    datePresetLast7: '7 วันล่าสุด',
+    datePresetLast30: '30 วันล่าสุด',
+    datePresetCustom: 'กำหนดช่วงเอง',
+    filterAtLeast: 'ตั้งแต่',
+    filterAtMost: 'ไม่เกิน',
+    filterFrom: 'ตั้งแต่วันที่',
+    filterNoLimit: 'ไม่จำกัด',
+    filterSearchPlaceholder: 'บันทึกช่วยจำหรือหมวดหมู่…',
+    filterAllCategories: 'ทุกหมวดหมู่',
+    filterAllTypes: 'ทุกประเภท',
+    filterAllWallets: 'ทุกกระเป๋าเงิน',
+    header: 'รายการ · {{range}}',
+    totals: 'รับ {{income}} · จ่าย {{expense}} · สุทธิ {{net}}',
+    rangeStart: 'เริ่มต้น',
+    rangeToday: 'วันนี้',
+    rangeSpan: '{{from}} → {{to}}',
+    deleteConfirm: 'ลบรายการ{{type}} จำนวน {{amount}}?',
+    filteredOutTitle: 'ไม่พบรายการที่ตรงกัน',
+    filteredOutBody:
+      'รายการทั้งหมด {{count}} รายการในช่วงนี้ถูกกรองออก ลองขยายช่วงเวลาหรือล้างตัวกรองด้านบน',
+
+    title: 'รายการ',
+    refresh: 'รีเฟรชรายการ',
+    newTransaction: 'เพิ่มรายการ',
+    categoryOrRoute: 'หมวดหมู่ / เส้นทาง',
+    emptyTitle: 'ไม่พบรายการ',
+    emptyBody: 'ไม่มีรายการที่ตรงกับตัวกรองนี้',
+    transferRoute: '{{from}} → {{to}}',
+  },
+
+  cards: {
+    title: 'บัตรเครดิต',
+    debt: 'หนี้สิน',
+    lede: 'ยอดใช้จ่ายจะเพิ่มหนี้ ส่วนการชำระบิลคือการโอนจากกระเป๋าเงินสด จึงไม่ถูกนับเป็นรายจ่ายซ้ำ',
+    refresh: 'รีเฟรชบัตรเครดิต',
+    newCard: 'เพิ่มบัตร',
+    emptyTitle: 'ยังไม่มีบัตรเครดิต',
+    emptyBody:
+      'เพิ่มบัตรเพื่อติดตามยอดหนี้ วันสรุปยอด และยอดที่ยังไม่เรียกเก็บ กระเป๋าเงินเดิมไม่ได้รับผลกระทบ ยังคงเป็นเงินสดตามเดิม',
+    addCard: 'เพิ่มบัตร',
+
+    totalOwed: 'ยอดหนี้รวม',
+    billed: 'เรียกเก็บแล้ว {{amount}}',
+    acrossCards_one: 'จากบัตร {{count}} ใบ',
+    acrossCards_other: 'จากบัตร {{count}} ใบ',
+    scheduledSuffix: ' · รอเรียกเก็บ {{amount}}',
+    availableCredit: 'วงเงินคงเหลือ',
+    ofLimit: 'จากวงเงิน {{amount}}',
+    noLimits: 'ยังไม่ได้ตั้งวงเงิน',
+    utilisation: 'อัตราการใช้วงเงิน',
+    utilisationHealthy: 'ต่ำกว่า 30% อยู่ในเกณฑ์ดี',
+    utilisationHigh: 'เกิน 30%',
+    utilisationOver: 'เกินวงเงิน',
+
+    statementBalance: 'ยอดเรียกเก็บ',
+    unbilled: 'ยอดที่ยังไม่เรียกเก็บ',
+    scheduled: 'รอเรียกเก็บ',
+    scheduledHint: 'งวดผ่อนชำระที่ยังไม่ถูกเรียกเก็บ',
+    dueOn: 'ครบกำหนด {{date}}',
+    daysLate_one: 'เกินกำหนด {{count}} วัน',
+    daysLate_other: 'เกินกำหนด {{count}} วัน',
+    dueToday: 'วันนี้',
+    dueInDays_one: 'อีก {{count}} วัน',
+    dueInDays_other: 'อีก {{count}} วัน',
+    setCycleHint: 'ตั้งรอบบิลเพื่อติดตามยอดนี้',
+    billsOn: 'สรุปยอด {{date}}',
+    sinceOpened: 'นับตั้งแต่เปิดบัญชี',
+    percentOfUsed: 'ใช้ไปแล้ว {{percent}} จาก {{amount}}',
+    noLimitSet: 'ยังไม่ได้ตั้งวงเงิน',
+    noCycleWarning:
+      'บัตรใบนี้ยังไม่ได้ตั้งรอบบิล เพิ่มวันสรุปยอดและวันครบกำหนดชำระ ระบบจึงจะแยกยอดเรียกเก็บและวันครบกำหนดให้ได้',
+
+    payBill: 'ชำระบิล',
+    newInstallment: 'สร้างแผนผ่อนชำระ',
+    nothingOwed: 'บัตรใบนี้ไม่มียอดค้างชำระ',
+    overdueTitle: 'เกินกำหนดชำระ',
+    overdueBody: '{{names}} — เลยวันครบกำหนดแล้วและยังมียอดค้างชำระ',
+    dueSoonTitle: 'ครบกำหนดภายใน 3 วัน',
+    dueSoonEntry: '{{name}} · {{amount}} วันที่ {{date}}',
+    billPaid: 'ชำระบิลแล้ว',
+    billPaidBody: 'ชำระ {{amount}} เข้า{{name}} เรียบร้อย',
+    planCreated: 'สร้างแผนผ่อนชำระแล้ว',
+    planCreatedBody: 'แบ่งเป็น {{count}} งวด งวดละประมาณ {{amount}} บน{{name}}',
+    paymentFailed: 'ชำระเงินไม่สำเร็จ',
+    planFailed: 'สร้างแผนผ่อนชำระไม่สำเร็จ',
+  },
+
+  recurring: {
+    subscriptionCount_one: '{{count}} รายการ · ปรับบิลรายสัปดาห์และรายปีให้เป็นยอดต่อเดือนแล้ว',
+    subscriptionCount_other: '{{count}} รายการ · ปรับบิลรายสัปดาห์และรายปีให้เป็นยอดต่อเดือนแล้ว',
+    createWalletFirst: 'สร้างกระเป๋าเงินก่อน เพราะรายจ่ายประจำต้องมีที่สำหรับหักเงิน',
+    emptyHint: 'เพิ่มค่าเช่า Netflix ประกัน หรืออะไรก็ตามที่จ่ายเป็นรอบ แล้วระบบจะติดตามว่าอะไรครบกำหนดถัดไป',
+    addFirst: 'เพิ่มรายการแรก',
+    bucketDueTitle: 'ต้องดำเนินการ',
+    bucketDueBlurb: 'ครบกำหนดแล้วหรือเกินกำหนด',
+    bucketSoonTitle: 'ใกล้ครบกำหนด',
+    bucketSoonBlurb: 'ภายใน 7 วัน ตรวจสอบว่ามีเงินเพียงพอ',
+    bucketLaterTitle: 'ภายหลัง',
+    bucketLaterBlurb: 'กำหนดชำระในอนาคต',
+    freqWeekly: 'ทุกสัปดาห์',
+    freqMonthly: 'ทุกเดือน',
+    freqYearly: 'ทุกปี',
+    dueTodayFull: 'ครบกำหนดวันนี้',
+    dueTomorrowFull: 'ครบกำหนดพรุ่งนี้',
+    unknownWallet: 'ไม่พบกระเป๋าเงิน',
+    nothingDue: 'ไม่มีรายการครบกำหนด',
+    dueIn_one: 'อีก {{count}} วัน',
+    dueIn_other: 'อีก {{count}} วัน',
+    overdueBy_one: 'เกินกำหนด {{count}} วัน',
+    overdueBy_other: 'เกินกำหนด {{count}} วัน',
+    dueTomorrow: 'พรุ่งนี้',
+    dueTodayLabel: 'วันนี้',
+    paidToast: '{{name}} · บันทึก {{amount}} แล้ว',
+    deleteConfirm: 'ลบรายจ่ายประจำ "{{name}}"? ประวัติการชำระเงินจะยังคงอยู่',
+    dueSummary: 'ครบกำหนด {{count}} รายการ · {{amount}}',
+
+    title: 'รายจ่ายประจำ',
+    subscriptions: 'รายการสมัครใช้บริการ',
+    refresh: 'รีเฟรชรายจ่ายประจำ',
+    newSubscription: 'เพิ่มรายจ่ายประจำ',
+    committedMonthly: 'ภาระผูกพันต่อเดือน',
+    emptyTitle: 'ยังไม่มีรายจ่ายประจำ',
+    emptyBody: 'เพิ่มบิลที่ต้องจ่ายซ้ำทุกงวด แล้วยืนยันเมื่อชำระเงินแล้ว',
+    addSubscription: 'เพิ่มรายจ่ายประจำ',
+    dueOn: 'ครบกำหนด {{date}}',
+    markPaid: 'ยืนยันการชำระเงิน',
+    overdue: 'เกินกำหนดชำระ',
+  },
+
+  budgets: {
+    deleteConfirm: 'ลบงบประมาณ "{{label}}"?',
+    copied: 'คัดลอกงบประมาณแล้ว {{count}} รายการ{{skipped}}',
+    copiedSkipped: ' ข้าม {{count}} รายการที่ตั้งไว้แล้ว',
+    planUsed: 'ใช้ไปแล้ว {{percent}} ของแผน',
+    nothingPlanned: 'ยังไม่ได้วางแผนงบประมาณ',
+    savingEllipsis: 'กำลังบันทึก…',
+    percentUsed: 'ใช้ไปแล้ว {{percent}}',
+    baseSuffix: ' · ฐาน {{amount}}',
+    emptyThisMonth: 'ยังไม่มีงบประมาณสำหรับเดือนนี้',
+
+    title: 'งบประมาณ',
+    refresh: 'รีเฟรชงบประมาณ',
+    newBudget: 'สร้างงบประมาณ',
+    emptyTitle: 'ยังไม่มีงบประมาณสำหรับ{{period}}',
+    emptyBody: 'กำหนดวงเงินได้ทั้งรายหมวดหมู่ รายกระเป๋าเงิน หรือรวมทั้งหมด',
+    copyPrevious: 'คัดลอกจากเดือนก่อน',
+    allocated: 'จัดสรรแล้ว',
+    unallocated: 'ยังไม่ได้จัดสรร',
+    spentOfLimit: 'ใช้ไป {{spent}} จาก {{limit}}',
+  },
+
+  forms: {
+    // ---- Wallet ----
+    walletModeLabel: 'ประเภทกระเป๋าเงิน',
+    walletModeExpense: '💳 รายรับ / รายจ่าย',
+    walletModeInvestment: '📈 การลงทุน',
+    walletModeExpenseHint: 'ใช้ติดตามรายรับ รายจ่าย และการโอน',
+    walletModeInvestmentHint:
+      'ใช้เก็บหลักทรัพย์พร้อมกำไร/ขาดทุนตามราคาตลาด เติมเงินด้วยการโอนจากกระเป๋าเงินสด',
+    walletModeLocked: 'เปลี่ยนประเภทได้เฉพาะตอนที่ยังไม่มีรายการในกระเป๋าเงินนี้',
+    newWallet: 'สร้างกระเป๋าเงิน',
+    editWallet: 'แก้ไข{{name}}',
+    createWallet: 'สร้างกระเป๋าเงิน',
+    walletNameRequired: 'กรุณาตั้งชื่อกระเป๋าเงิน',
+    walletNamePlaceholderExpense: 'ใช้จ่ายประจำวัน',
+    walletNamePlaceholderInvestment: 'บัญชีหลักทรัพย์',
+    kindCash: 'เงินสด',
+    kindBank: 'บัญชีธนาคาร',
+    kindEwallet: 'กระเป๋าเงินอิเล็กทรอนิกส์',
+    kindCredit: 'บัตรเครดิต',
+    kindBrokerage: 'บัญชีหลักทรัพย์',
+    kindOther: 'อื่น ๆ',
+    creditKindHint: 'ยอดใช้จ่ายจะเพิ่มหนี้ ส่วนการโอนเข้าจะลดหนี้',
+    openingBalance: 'ยอดตั้งต้น',
+    openingBalanceHint: 'จำนวนเงินที่มีอยู่ในขณะนี้',
+    balanceOwed: 'ยอดหนี้คงค้าง',
+    balanceOwedHint: 'ยอดที่ค้างชำระบนบัตรวันนี้ กรอกเป็นจำนวนบวก',
+    icon: 'ไอคอน',
+    iconNamed: 'ไอคอน {{icon}}',
+    colour: 'สี',
+    colourNamed: 'สี {{colour}}',
+
+    billingCycle: 'รอบบิล',
+    billingCycleHint:
+      'ไม่บังคับ แต่หากไม่ระบุทั้งสองวัน ระบบจะแยกยอดเรียกเก็บกับยอดที่ยังไม่เรียกเก็บไม่ได้ และจะไม่มีวันครบกำหนดชำระ',
+    creditLimit: 'วงเงิน',
+    creditLimitHint: 'เว้นว่างไว้ได้หากไม่ต้องการติดตามอัตราการใช้วงเงิน',
+    cashbackRate: 'อัตราเงินคืน',
+    cashbackRateHint: 'หน่วยเป็นเปอร์เซ็นต์ เช่น 1.5 หมายถึงคืน 1.5%',
+    statementCloses: 'วันสรุปยอด',
+    statementClosesHint: 'วันที่ของเดือนที่ธนาคารสรุปยอดบิล',
+    paymentDue: 'วันครบกำหนดชำระ',
+    paymentDueHint: 'วันที่ของเดือนที่ต้องชำระเงิน',
+    limitLooksSwapped:
+      'ยอดหนี้สูงกว่าวงเงินเกินสิบเท่า กรุณาตรวจสอบว่ากรอกสองช่องนี้สลับกันหรือไม่',
+
+    // ---- Transaction ----
+    newTransaction: 'เพิ่มรายการ',
+    editTransaction: 'แก้ไขรายการ',
+    transactionType: 'ประเภทรายการ',
+    typeExpense: 'รายจ่าย',
+    typeIncome: 'รายรับ',
+    typeTransfer: 'โอนเงิน',
+    fromWallet: 'กระเป๋าเงิน',
+    toWallet: 'กระเป๋าเงินปลายทาง',
+    selectPlaceholder: 'เลือก…',
+    noEligibleWallet: 'ไม่มีกระเป๋าเงินที่ใช้ได้',
+    amountIn: 'จำนวนเงิน ({{currency}})',
+    approxAmount: '≈ {{amount}}',
+    pickWallet: 'กรุณาเลือกกระเป๋าเงิน',
+    pickDestination: 'กรุณาเลือกกระเป๋าเงินปลายทาง',
+    pickCategory: 'กรุณาเลือกหมวดหมู่',
+    amountPositive: 'จำนวนเงินต้องมากกว่าศูนย์',
+
+    // ---- Pay bill ----
+    payCard: 'ชำระ{{name}}',
+    payAmount: 'ชำระ {{amount}}',
+    nowhereToPayFrom: 'ไม่มีกระเป๋าเงินสำหรับชำระ',
+    nowhereToPayFromBody:
+      'กระเป๋าเงินทั้งหมดของคุณเป็นบัตรเครดิต กรุณาเพิ่มกระเป๋าเงินสดหรือบัญชีธนาคารก่อน เพราะบิลบัตรต้องชำระด้วยเงินจริง',
+    noDueDateSet: 'ยังไม่ได้ตั้งวันครบกำหนดชำระ',
+    noStatementDaySet: 'ยังไม่ได้ตั้งวันสรุปยอด',
+    unbilledSince: 'ยอดที่ยังไม่เรียกเก็บตั้งแต่',
+    howMuch: 'จำนวนที่ต้องการชำระ',
+    paymentAmount: 'จำนวนเงินที่ชำระ',
+    presetStatement: 'ยอดเรียกเก็บ · {{amount}}',
+    presetFull: 'ทั้งหมด · {{amount}}',
+    presetCustom: 'กำหนดเอง',
+    stillOwed: 'จะเหลือยอดค้างชำระ {{amount}}',
+    endsInCredit: 'มากกว่ายอดหนี้อยู่ {{amount}} บัตรจะมียอดเงินคงเหลือ',
+    clearsExactly: 'ชำระหมดพอดี',
+    payFrom: 'ชำระจาก',
+    onlyHolds: '{{name}} มียอดคงเหลือเพียง {{amount}}',
+    walletOption: '{{icon}} {{name}} — {{amount}}',
+    billPaymentNote: 'ชำระบิล{{name}}',
+    transferNotice:
+      'บันทึกเป็นรายการโอน จึงเปลี่ยนเฉพาะยอดคงเหลือโดยไม่นับเป็นรายจ่ายซ้ำ เพราะยอดใช้จ่ายถูกบันทึกเป็นรายจ่ายไปแล้ว',
+    chooseSourceWallet: 'กรุณาเลือกกระเป๋าเงินที่ใช้ชำระ',
+    amountGreaterThanZero: 'กรุณากรอกจำนวนเงินที่มากกว่าศูนย์',
+
+    // ---- Installments ----
+    installmentTitle: 'แผนผ่อนชำระ 0%',
+    installmentIntro:
+      'เรียกเก็บผ่าน <1>{{name}}</1> โดยบันทึกเป็นรายจ่าย {{count}} รายการตามวันที่ แต่ละเดือนจึงถูกเรียกเก็บทีละงวด ขณะที่บัตรแสดงยอดหนี้คงค้างทั้งหมด',
+    createCharges_one: 'สร้างรายการ {{count}} งวด',
+    createCharges_other: 'สร้างรายการ {{count}} งวด',
+    purchasePrice: 'ราคาสินค้า',
+    purchasePriceHint: 'กรอกราคาเต็ม ไม่ใช่ยอดผ่อนต่อเดือน',
+    firstCharge: 'งวดแรก',
+    term: 'จำนวนงวด',
+    termMonths: '{{count}} เดือน',
+    termOther: 'อื่น ๆ',
+    numberOfMonths: 'จำนวนเดือน',
+    months: 'จำนวนเดือน',
+    monthsHint: 'ตั้งแต่ 1 ถึง {{max}}',
+    categoryFiledUnder: 'ทุกงวดจะถูกจัดอยู่ในหมวดหมู่นี้',
+    whatIsIt: 'รายละเอียด',
+    whatIsItHint: 'แสดงในทุกงวด',
+    perMonth: 'ต่อเดือน',
+    firstChunkNote: 'งวดแรก {{amount}} รวมเศษที่ปัดแล้ว',
+    evenSplit: 'แบ่งเท่ากันทุกงวด',
+    hitsThisMonth: 'ยอดที่นับเป็นรายจ่ายของเดือนนี้',
+    cardBalance: 'ยอดหนี้บัตร',
+    owedFromToday: 'เป็นหนี้ธนาคารตั้งแต่วันนี้',
+    moreThrough: 'อีก {{count}} งวด ถึง {{date}}',
+    overLimitTitle: 'เกินวงเงิน',
+    overLimitBody:
+      'ยอดนี้มากกว่าวงเงินคงเหลือ {{amount}} บน{{name}} ธนาคารมักอนุมัติแผนผ่อนชำระให้อยู่ดี บันทึกไว้ที่นี่ได้ตามปกติ',
+    enterPurchasePrice: 'กรุณากรอกราคาสินค้าเต็มจำนวน',
+    chooseTerm: 'กรุณาเลือกจำนวนงวดตั้งแต่ 1 ถึง {{max}} เดือน',
+    pickInstallmentCategory: 'กรุณาเลือกหมวดหมู่ เพราะแต่ละงวดคือรายจ่ายปกติที่ต้องมีหมวดหมู่',
   },
 
   settings: {
@@ -95,8 +594,67 @@ export const th: TranslationSchema = {
     locale: 'รูปแบบภูมิภาค',
     localeHint: 'กำหนดรูปแบบการแสดงตัวเลขและวันที่',
     monthlyIncome: 'รายได้ต่อเดือน',
+    monthlyIncomeHint:
+      'ใช้เป็นฐานคำนวณงบประมาณแบบเปอร์เซ็นต์ เว้นว่างไว้เพื่อใช้รายรับที่บันทึกจริงในแต่ละเดือน',
     categories: 'หมวดหมู่',
+    categoriesHint: 'คั่นด้วยเครื่องหมายจุลภาค ใช้กับรายการและงบประมาณ',
     savePreferences: 'บันทึกการตั้งค่า',
+
+    conversionTitle: 'แสดงผลเป็นสกุลเงินอื่น',
+    conversionSubtitle:
+      'แปลงทุกจำนวนเงินบนหน้าจอ เช่น บันทึกบัญชีเป็น USD แต่อ่านเป็นเงินบาท ข้อมูลที่บันทึกไว้ไม่เปลี่ยนแปลง จึงสลับกลับได้ทุกเมื่อ',
+    showAmountsIn: 'แสดงจำนวนเงินเป็น',
+    rateHint: 'กรอกอัตราเอง หรือดึงอัตราของวันนี้',
+    fetchRate: 'ดึงอัตราวันนี้',
+    saveConversion: 'บันทึกการแปลงค่า',
+    preview: 'ตัวอย่าง',
+
+    quotesTitle: 'ราคาหลักทรัพย์',
+    provider: 'ผู้ให้บริการ:',
+    providerSet: 'ตั้งค่าแล้ว',
+
+    workbookTitle: 'ไฟล์ข้อมูล',
+    refreshWorkbook: 'รีเฟรชการตั้งค่าและสถานะไฟล์ข้อมูล',
+    file: 'ไฟล์',
+    lastSaved: 'บันทึกล่าสุด',
+    fileLocked: 'ไฟล์ถูกล็อกอยู่',
+    queuedWrites: 'การแก้ไขที่ยังไม่บันทึกถูกจัดคิวไว้ ระบบจะเขียนให้อัตโนมัติ',
+    allWritten: 'บันทึกการเปลี่ยนแปลงทั้งหมดลงดิสก์แล้ว',
+    saveWorkbook: 'บันทึกไฟล์ข้อมูลทันที',
+    checkingBackend: 'กำลังตรวจสอบระบบหลังบ้าน…',
+
     account: 'บัญชีผู้ใช้',
+    signedInAs: 'เข้าสู่ระบบในชื่อ {{name}} (@{{username}})',
+    currentPassword: 'รหัสผ่านปัจจุบัน',
+    newPassword: 'รหัสผ่านใหม่',
+    passwordHint: 'อย่างน้อย 4 ตัวอักษร',
+    changePassword: 'เปลี่ยนรหัสผ่าน',
+  },
+
+  tax: {
+    title: 'คำนวณภาษีเงินได้บุคคลธรรมดา',
+    close: 'ปิด',
+    from: 'ตั้งแต่วันที่',
+    to: 'ถึงวันที่',
+    dateRangeError: 'วันเริ่มต้นอยู่หลังวันสิ้นสุด',
+    readingTransactions: 'กำลังอ่านรายการ…',
+    runCalculation: 'คำนวณภาษี',
+    noIncomeInRange: 'ไม่มีรายรับที่บันทึกไว้ในช่วงเวลานี้',
+
+    socialSecurity: 'ประกันสังคม',
+    lifeHealthInsurance: 'ประกันชีวิตและประกันสุขภาพ',
+    investmentFunds: 'กองทุนรวมเพื่อการลงทุน',
+    additionalDeductions: 'ค่าลดหย่อนเพิ่มเติม',
+    withholding: 'ภาษีหัก ณ ที่จ่ายที่ชำระแล้ว',
+
+    howTaxableReached: 'ที่มาของเงินได้สุทธิ',
+    band: 'ขั้นเงินได้',
+    rate: 'อัตราภาษี',
+    taxableHere: 'เงินได้ในขั้นนี้',
+    taxPayable: 'ภาษีที่ต้องชำระ',
+    afterTax: 'คงเหลือหลังหักภาษี',
+    perMonth: 'เฉลี่ยต่อเดือน',
+    effectiveRate: 'อัตราภาษีที่แท้จริง',
+    marginalRate: 'อัตราภาษีขั้นสูงสุด',
   },
 };

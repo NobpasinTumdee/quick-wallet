@@ -1,5 +1,6 @@
 import { Calculator, Receipt, Target, Wallet } from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
 import { DashboardSkeleton } from '../components/Skeletons';
@@ -88,6 +89,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   );
 
   const money = (value: number, compact = false) => format(value, { compact });
+  const { t } = useTranslation();
 
   // Only shown when there is genuinely nothing cached. Revisiting this page
   // paints the previous data immediately and refreshes behind the scenes.
@@ -97,10 +99,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   // over good data leaves the data on screen.
   if (!data) {
     return (
-      <Card title="Couldn't load the dashboard">
-        <Alert tone="error">{error ?? 'No data returned'}</Alert>
+      <Card title={t('dashboard.loadFailed')}>
+        <Alert tone="error">{error ?? t('dashboard.noData')}</Alert>
         <div style={{ marginTop: 'var(--space-4)' }}>
-          <Button onClick={() => void refresh()}>Try again</Button>
+          <Button onClick={() => void refresh()}>{t('common.tryAgain')}</Button>
         </div>
       </Card>
     );
@@ -138,11 +140,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       <Card>
         <EmptyState
           icon={<Icon icon={Wallet} size="xl" />}
-          title="Create your first wallet"
-          description="Wallets are where transactions and positions live. Add one, then start recording activity."
+          title={t('dashboard.firstWalletTitle')}
+          description={t('dashboard.firstWalletBody')}
           action={
             <Button variant="primary" onClick={() => onNavigate('wallets')}>
-              Go to wallets
+              {t('dashboard.goToWallets')}
             </Button>
           }
         />
@@ -159,8 +161,8 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         <div className="list-item-title truncate">{wallet.name}</div>
         <div className="list-item-sub">
           {wallet.mode === 'investment'
-            ? `${money(wallet.balance)} cash · ${money(wallet.investedCost)} invested`
-            : `${wallet.kind} · ${wallet.transactionCount} record${wallet.transactionCount === 1 ? '' : 's'}`}
+            ? t('dashboard.walletInvested', { cash: money(wallet.balance), invested: money(wallet.investedCost) })
+            : `${wallet.kind} · ${t('dashboard.recordCount', { count: wallet.transactionCount })}`}
         </div>
       </div>
       <span className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
@@ -178,28 +180,33 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
               background revalidation too, so it reports the same thing while
               also being actionable. */}
           <div className="hero-label-row">
-            <span className="section-label">Net worth · {formatPeriod(period, locale)}</span>
+            <span className="section-label">
+              {t('dashboard.netWorth')} · {formatPeriod(period, locale)}
+            </span>
             <RefreshButton
               onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
               busy={isValidating}
-              label="Refresh dashboard"
+              label={t('dashboard.refresh')}
             />
           </div>
           <span className="hero-value">{money(netWorthLive)}</span>
           <div className="hero-meta">
             <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
-              {data.monthNet >= 0 ? '↑' : '↓'} {format(Math.abs(data.monthNet), { compact: true })} this month
+              {data.monthNet >= 0
+                ? t('dashboard.monthNetUp', { amount: format(Math.abs(data.monthNet), { compact: true }) })
+                : t('dashboard.monthNetDown', { amount: format(Math.abs(data.monthNet), { compact: true }) })}
             </Badge>
             {hasPositions && (
               <span>
-                {money(portfolio.totalValue, true)} in {holdingCount} position
-                {holdingCount === 1 ? '' : 's'} · {portfolio.provider} prices
+                {t('dashboard.inPositions', {
+                  count: holdingCount,
+                  amount: money(portfolio.totalValue, true),
+                  provider: portfolio.provider,
+                })}
               </span>
             )}
             {!hasPositions && (
-              <span>
-                {data.walletCount} wallet{data.walletCount === 1 ? '' : 's'}
-              </span>
+              <span>{t('dashboard.walletCount', { count: data.walletCount })}</span>
             )}
           </div>
 
@@ -209,49 +216,49 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
               refreshing a view. */}
           <button type="button" className="tax-cta" onClick={() => setTaxOpen(true)}>
             <Icon icon={Calculator} size="sm" />
-            Calculate Thai income tax
+            {t('dashboard.taxCta')}
           </button>
         </div>
 
         <div className="hero-metrics">
           <div className="metric">
-            <span className="section-label">Cash on hand</span>
+            <span className="section-label">{t('dashboard.cashOnHand')}</span>
             <span className="metric-value">{money(cashBalance, true)}</span>
             <span className="metric-hint">
-              {hasDebt ? `${money(safeToSpend, true)} after cards` : 'Cash wallets'}
+              {hasDebt ? t('dashboard.afterCards', { amount: money(safeToSpend, true) }) : t('dashboard.cashWallets')}
             </span>
           </div>
           {hasDebt && (
             <div className="metric metric--negative">
-              <span className="section-label">Card debt</span>
+              <span className="section-label">{t('dashboard.cardDebt')}</span>
               <span className="metric-value text-negative">{money(creditDebt, true)}</span>
               <span className="metric-hint">
                 {data.creditLimit > 0
-                  ? `${formatPercent(data.creditUtilization, 0)} of limit used`
-                  : 'Already subtracted from net worth'}
+                  ? t('dashboard.limitUsed', { percent: formatPercent(data.creditUtilization, 0) })
+                  : t('dashboard.alreadySubtracted')}
               </span>
             </div>
           )}
           <div className="metric metric--positive">
-            <span className="section-label">Income</span>
+            <span className="section-label">{t('dashboard.income')}</span>
             <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>
-            <span className="metric-hint">This month</span>
+            <span className="metric-hint">{t('common.thisMonth')}</span>
           </div>
           <div className="metric metric--negative">
-            <span className="section-label">Spent</span>
+            <span className="section-label">{t('dashboard.spent')}</span>
             <span className="metric-value text-negative">{money(data.monthExpense, true)}</span>
             <span className="metric-hint">
-              {data.categoryBreakdown.length} categor{data.categoryBreakdown.length === 1 ? 'y' : 'ies'}
+              {t('dashboard.categoryCount', { count: data.categoryBreakdown.length })}
             </span>
           </div>
           <div className="metric metric--accent">
-            <span className="section-label">Saved</span>
+            <span className="section-label">{t('dashboard.savedLabel')}</span>
             <span className="metric-value">{money(data.monthNet, true)}</span>
-            <span className="metric-hint">Rate {formatPercent(data.savingsRate)}</span>
+            <span className="metric-hint">{t('dashboard.savingsRate', { percent: formatPercent(data.savingsRate) })}</span>
           </div>
           {hasPositions && (
             <div className={cx('metric', portfolio.totalPnl >= 0 ? 'metric--positive' : 'metric--negative')}>
-              <span className="section-label">Unrealised</span>
+              <span className="section-label">{t('dashboard.unrealised')}</span>
               <span
                 className={cx('metric-value', portfolio.totalPnl >= 0 ? 'text-positive' : 'text-negative')}
               >
@@ -267,11 +274,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       <div className="bento">
         <Card
           className="bento-item--wide"
-          title="Budget progress"
+          title={t('dashboard.budgetProgress')}
           subtitle={formatPeriod(period, locale)}
           actions={
             <Button size="sm" onClick={() => onNavigate('budgets')}>
-              Manage
+              {t('common.manage')}
             </Button>
           }
           padded={data.budgets.length === 0}
@@ -279,11 +286,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {data.budgets.length === 0 ? (
             <EmptyState
               icon={<Icon icon={Target} size="xl" />}
-              title="No budgets this month"
-              description="Set limits by exact amount or as a share of income — 40% invest, 10% save, 20% needs."
+              title={t('dashboard.noBudgetsTitle')}
+              description={t('dashboard.noBudgetsBody')}
               action={
                 <Button variant="primary" size="sm" onClick={() => onNavigate('budgets')}>
-                  Create a budget
+                  {t('dashboard.createBudget')}
                 </Button>
               }
             />
@@ -293,7 +300,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                 <div key={budget.id} className="budget-item">
                   <div className="budget-head">
                     <span className="budget-name truncate">
-                      {budget.targetLabel || 'All spending'}
+                      {budget.targetLabel || t('dashboard.allSpending')}
                       {budget.mode === 'percent' && <Badge tone="accent">{budget.value}%</Badge>}
                     </span>
                     <span className="budget-numbers">
@@ -303,14 +310,14 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                   <ProgressBar
                     percent={budget.percentUsed}
                     tone={budget.status}
-                    label={`${budget.targetLabel}: ${formatPercent(budget.percentUsed)} used`}
+                    label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
                   />
                   <div className="budget-foot">
                     <span>{formatPercent(budget.percentUsed)} used</span>
                     <span className={budget.remaining < 0 ? 'text-negative' : ''}>
                       {budget.remaining < 0
-                        ? `${money(Math.abs(budget.remaining))} over`
-                        : `${money(budget.remaining)} left`}
+                        ? t('dashboard.budgetOver', { amount: money(Math.abs(budget.remaining)) })
+                        : t('dashboard.budgetLeft', { amount: money(budget.remaining) })}
                     </span>
                   </div>
                 </div>
@@ -322,10 +329,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         {/* Wallets split by mode — the two halves of the app, side by side. */}
         <Card
           className="bento-item--narrow"
-          title="Wallets"
+          title={t('dashboard.walletsTitle')}
           actions={
             <Button size="sm" onClick={() => onNavigate('wallets')}>
-              Manage
+              {t('common.manage')}
             </Button>
           }
           padded={false}
@@ -333,7 +340,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {spendWallets.length > 0 && (
             <>
               <div className="list-group-label">
-                <span className="section-label">Spending</span>
+                <span className="section-label">{t('dashboard.spending')}</span>
                 <span className="section-label">{money(data.liquidBalance, true)}</span>
               </div>
               <div className="list">{spendWallets.map(walletRow)}</div>
@@ -343,7 +350,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {investWallets.length > 0 && (
             <>
               <div className="list-group-label">
-                <span className="section-label">Investing</span>
+                <span className="section-label">{t('dashboard.investing')}</span>
                 <span className="section-label">
                   {money(data.investmentCash + data.investedCost, true)}
                 </span>
@@ -379,8 +386,8 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
              three-column hole behind it. It also wants the width: a ten-year
              curve plus two sliders is cramped at four columns. */
           className="bento-item--full"
-          title="Where this is heading"
-          subtitle="Projected net worth if today's savings rate holds"
+          title={t('dashboard.projectionTitle')}
+          subtitle={t('dashboard.projectionSubtitle')}
         >
           <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
             <NetWorthProjection
@@ -392,9 +399,9 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           </Suspense>
         </Card>
 
-        <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
+        <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
-            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title="Nothing spent yet" description="Expenses this month show up here." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
           ) : (
             <div className="stack stack--tight">
               {data.categoryBreakdown.slice(0, 7).map((row, index) => (
@@ -427,16 +434,16 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             into that row's empty half rather than leaving one there. */}
         <Card
           className="bento-item--half"
-          title="Recent activity"
+          title={t('dashboard.recentTitle')}
           actions={
             <Button size="sm" onClick={() => onNavigate('transactions')}>
-              See all
+              {t('common.seeAll')}
             </Button>
           }
           padded={false}
         >
           {data.recentTransactions.length === 0 ? (
-            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title="No transactions yet" description="Add one from the Activity tab." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.noTransactionsTitle')} description={t('dashboard.noTransactionsBody')} />
           ) : (
             <div className="list">
               {data.recentTransactions.map((tx) => {

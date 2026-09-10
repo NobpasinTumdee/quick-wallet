@@ -12,9 +12,12 @@
 
 import { AlarmClock, CalendarClock, CalendarDays, Repeat2, Wallet as WalletIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
+import { TranslationKey } from '../locales';
 import { SubscriptionForm, SubscriptionPayload } from '../components/SubscriptionForm';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
@@ -26,16 +29,22 @@ import { Subscription, WalletBalance } from '../types';
 
 type Bucket = 'due' | 'soon' | 'later';
 
-const BUCKETS: { key: Bucket; title: string; blurb: string; icon: typeof AlarmClock }[] = [
-  { key: 'due', title: 'Action required', blurb: 'Due now or overdue', icon: AlarmClock },
-  { key: 'soon', title: 'Upcoming', blurb: 'Within 7 days — make sure the funds are there', icon: CalendarClock },
-  { key: 'later', title: 'Later', blurb: 'Scheduled further out', icon: CalendarDays },
+/* Keys, not labels: module-level arrays are built once at import time. */
+const BUCKETS: {
+  key: Bucket;
+  titleKey: TranslationKey;
+  blurbKey: TranslationKey;
+  icon: typeof AlarmClock;
+}[] = [
+  { key: 'due', titleKey: 'recurring.bucketDueTitle', blurbKey: 'recurring.bucketDueBlurb', icon: AlarmClock },
+  { key: 'soon', titleKey: 'recurring.bucketSoonTitle', blurbKey: 'recurring.bucketSoonBlurb', icon: CalendarClock },
+  { key: 'later', titleKey: 'recurring.bucketLaterTitle', blurbKey: 'recurring.bucketLaterBlurb', icon: CalendarDays },
 ];
 
-const FREQUENCY_LABEL: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  yearly: 'Yearly',
+const FREQUENCY_KEY: Record<Subscription['frequency'], TranslationKey> = {
+  weekly: 'recurring.freqWeekly',
+  monthly: 'recurring.freqMonthly',
+  yearly: 'recurring.freqYearly',
 };
 
 /** Whole days from today to `dateKey`; negative when overdue. */
@@ -55,15 +64,16 @@ function bucketFor(days: number): Bucket {
   return 'later';
 }
 
-function relativeLabel(days: number): string {
-  if (days === 0) return 'Due today';
-  if (days === -1) return 'Overdue by 1 day';
-  if (days < 0) return `Overdue by ${Math.abs(days)} days`;
-  if (days === 1) return 'Due tomorrow';
-  return `In ${days} days`;
+/** `t` threaded in rather than hooked — this is a pure formatter. */
+function relativeLabel(days: number, t: TFunction): string {
+  if (days === 0) return t('recurring.dueTodayFull');
+  if (days < 0) return t('recurring.overdueBy', { count: Math.abs(days) });
+  if (days === 1) return t('recurring.dueTomorrowFull');
+  return t('recurring.dueIn', { count: days });
 }
 
 export function SubscriptionsPage() {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
 
@@ -109,13 +119,13 @@ export function SubscriptionsPage() {
     [subscriptions.items],
   );
 
-  const walletName = (id: string) => wallets.items.find((w) => w.id === id)?.name ?? 'Unknown wallet';
+  const walletName = (id: string) => wallets.items.find((w) => w.id === id)?.name ?? t('recurring.unknownWallet');
 
   async function confirmPayment(subscription: Subscription) {
     setPaying((ids) => [...ids, subscription.id]);
     try {
       await subscriptions.pay(subscription);
-      toast.success(`${subscription.name} · ${money(Number(subscription.amount) || 0)} recorded`);
+      toast.success(t('recurring.paidToast', { name: subscription.name, amount: money(Number(subscription.amount) || 0) }));
     } catch {
       // useExcelDB already toasted the failure and the hook rolled the caches back.
     } finally {
@@ -153,7 +163,7 @@ export function SubscriptionsPage() {
           <RefreshButton
             onRefresh={() => Promise.all([subscriptions.refresh(), wallets.refresh()])}
             busy={subscriptions.isValidating || wallets.isValidating}
-            label="Refresh subscriptions"
+            label={t('recurring.refresh')}
           />
           <Button
             size="sm"
@@ -180,17 +190,16 @@ export function SubscriptionsPage() {
       {subscriptions.items.length > 0 && (
         <section className="hero hero--compact">
           <div className="hero-primary">
-            <span className="section-label">Committed each month</span>
+            <span className="section-label">{t('recurring.committedMonthly')}</span>
             <span className="hero-value">{money(monthlyEquivalent)}</span>
             <div className="hero-meta">
               <Badge tone={grouped.due.length ? 'negative' : 'positive'}>
                 {grouped.due.length
-                  ? `${grouped.due.length} due · ${money(dueTotal)}`
-                  : 'Nothing due'}
+                  ? t('recurring.dueSummary', { count: grouped.due.length, amount: money(dueTotal) })
+                  : t('recurring.nothingDue')}
               </Badge>
               <span>
-                {subscriptions.items.length} subscription{subscriptions.items.length === 1 ? '' : 's'} ·
-                weekly and yearly bills normalised to a monthly figure
+                {t('recurring.subscriptionCount', { count: subscriptions.items.length })}
               </span>
             </div>
           </div>
@@ -209,16 +218,16 @@ export function SubscriptionsPage() {
         <Card padded>
           <EmptyState
             icon={<Icon icon={Repeat2} size="xl" />}
-            title="No subscriptions yet"
+            title={t('recurring.emptyTitle')}
             description={
               wallets.items.length === 0
-                ? 'Create a wallet first — a subscription needs somewhere to deduct from.'
-                : 'Add rent, Netflix, insurance — anything on a cycle — and this tracks what is due next.'
+                ? t('recurring.createWalletFirst')
+                : t('recurring.emptyHint')
             }
             action={
               wallets.items.length > 0 && (
                 <Button variant="primary" onClick={() => setFormOpen(true)}>
-                  Add the first one
+                  {t('recurring.addFirst')}
                 </Button>
               )
             }
@@ -238,10 +247,10 @@ export function SubscriptionsPage() {
                   </span>
                   <div>
                     <h2 className="timeline-title">
-                      {bucket.title}
+                      {t(bucket.titleKey)}
                       <span className="timeline-count">{entries.length}</span>
                     </h2>
-                    <p className="timeline-blurb">{bucket.blurb}</p>
+                    <p className="timeline-blurb">{t(bucket.blurbKey)}</p>
                   </div>
                 </header>
 
@@ -261,14 +270,14 @@ export function SubscriptionsPage() {
                           <div className="sub-title-row">
                             <h3 className="sub-name truncate">{subscription.name}</h3>
                             <Badge tone={bucket.key === 'due' ? 'negative' : bucket.key === 'soon' ? 'warning' : 'neutral'}>
-                              {relativeLabel(days)}
+                              {relativeLabel(days, t)}
                             </Badge>
                           </div>
 
                           <div className="sub-meta">
                             <span>
                               <Icon icon={Repeat2} size="sm" />
-                              {FREQUENCY_LABEL[subscription.frequency]}
+                              {t(FREQUENCY_KEY[subscription.frequency])}
                             </span>
                             <span>
                               <Icon icon={WalletIcon} size="sm" />
