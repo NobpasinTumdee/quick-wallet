@@ -45,9 +45,9 @@ quick-wallet/
         │   ├── AuthContext.tsx
         │   └── SettingsContext.tsx
         ├── components/           # AppShell, Logo, ui.tsx, the four forms
-        ├── pages/                # Login, Dashboard, Wallets, Transactions,
-        │                         # Investments, Budgets, Settings
-        ├── lib/                  # format.ts, router.ts
+        ├── pages/                # Login, Dashboard, Wallets, Cards,
+        │                         # Transactions, Investments, Budgets, Settings
+        ├── lib/                  # format.ts, router.ts, creditMath.ts
         └── styles/
             ├── theme.css         # design tokens — light / dark / custom
             └── app.css           # layout & components
@@ -146,6 +146,7 @@ auth.status               auth.register        auth.login
 auth.me                   auth.changePassword  auth.resetPassword
 wallets.list              wallets.get          wallets.create       wallets.update      wallets.delete
 transactions.list         transactions.get     transactions.create  transactions.update transactions.delete
+transactions.installment  transactions.cancelInstallment
 investments.list          investments.get      investments.symbols  investments.create
 investments.update        investments.sell     investments.delete
 budgets.list              budgets.get          budgets.create       budgets.update
@@ -168,8 +169,8 @@ user that token resolves to.
 | Sheet | Key | Notes |
 |---|---|---|
 | `Users` | `ID` | `Salt` + `Password Hash`. Never returned by the API. |
-| `Wallets` | `ID` | `Mode` is either `expense` or `investment`. |
-| `Transactions` | `ID` | A transfer is **one** row: source `Wallet ID` + `To Wallet ID`. |
+| `Wallets` | `ID` | `Mode` is either `expense` or `investment`. `Type` is `CASH` or `CREDIT`; a credit wallet also carries `Credit Limit`, `Statement Day`, `Due Day` and `Cashback Rate %`. |
+| `Transactions` | `ID` | A transfer is **one** row: source `Wallet ID` + `To Wallet ID`. A 0% installment plan is *n* rows sharing an `Installment Group ID`, each with an `Installment Index` like `3/10`. |
 | `Investments` | `ID` | Cost basis lives here; live price comes from the stock API. |
 | `Budgets` | `ID` | One row per period + scope + target. |
 | `Subscriptions` | `ID` | `Next Due Date` rolls forward when a payment is confirmed. |
@@ -179,6 +180,14 @@ user that token resolves to.
 Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this,
 and `createMissingSheets()` creates any table a newer version of `Code.gs` adds —
 and appends any column it adds — without touching existing data.
+
+> **Upgrading to credit cards:** run `createMissingSheets()` once from the Apps
+> Script editor. It appends `Type`, `Credit Limit`, `Statement Day`, `Due Day` and
+> `Cashback Rate %` to `Wallets`, and `Installment Group ID` + `Installment Index`
+> to `Transactions`. Nothing else changes: an existing wallet whose `Type` cell is
+> empty reads as `CASH`, so every balance, budget and net-worth figure is exactly
+> what it was — except a wallet already saved with kind `credit`, which reads as
+> `CREDIT` and picks up the card UI without being edited.
 
 > **Upgrading to the theme library:** run `createMissingSheets()` once from the
 > Apps Script editor. It appends `Custom Themes (JSON)`, `Active Custom Theme ID`
@@ -194,6 +203,24 @@ investment wallet = same, − cost basis of open positions + proceeds of closed 
 net worth         = Σ wallet balances + Σ cost basis   (the UI swaps cost basis
                                                         for live market value)
 ```
+
+**Credit cards** need no arithmetic of their own. A charge is an expense, so the
+balance goes negative; paying the bill is an ordinary transfer from a cash wallet,
+so it comes back toward zero *without* counting as spending a second time. Net
+worth therefore already subtracts card debt, because a negative balance summed in
+is a subtraction. The dashboard breaks the total out as `cashBalance`,
+`creditDebt` and `safeToSpend` (`cash − debt`).
+
+The statement / unbilled split is derived on the client in `lib/creditMath.ts`
+from the `Statement Day` and the ledger, not stored: charges bucket by date
+around the last statement close, while payments are applied oldest-debt-first so
+that paying a bill *after* it closed clears the statement rather than landing in
+"unbilled".
+
+An **installment plan** is real rows, not a projection, so each monthly chunk is an
+ordinary expense in its own month — this month's spending carries one chunk while
+the card's balance carries the whole amount still owed to the bank. Every existing
+aggregate (budgets, the trend chart, the Sankey) is right for free as a result.
 
 **Budgets** can be a fixed amount or a percentage. A percentage resolves against the
 first available of: the budget's own base override → Settings → monthly income →

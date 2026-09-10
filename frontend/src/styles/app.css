@@ -357,8 +357,11 @@ body::after {
   right: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* Two links, the centre button's slot, two links. The button itself is not
+     in this grid — see .gnav — so slot 3 is deliberately empty. */
+  grid-template-columns: repeat(5, 1fr);
   gap: 2px;
+  min-height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
   padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
   background: var(--glass-bg-strong);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -6330,4 +6333,711 @@ table.data.data--nested td {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+}
+
+/* ==========================================================================
+   Credit cards
+   --------------------------------------------------------------------------
+   The virtual card is the one place in the app that leans on a colour the user
+   chose rather than a theme token. Everything else here is the same glass the
+   wallet cards use; the difference is that a card face is *lit* — a tint wash,
+   a diagonal sheen and a brighter chip plate — which is what separates "a
+   plastic card" from "a rounded rectangle".
+
+   Two custom properties carry it: --card-tint (the wallet colour) and
+   --card-fill (utilisation as a percentage). Everything else derives from them
+   through color-mix, so a recoloured wallet recolours its card with no class
+   changes, and the whole thing still respects the active theme's surfaces.
+   ========================================================================== */
+
+.debt-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* The wash follows the utilisation band, so the panel itself carries the
+   warning before any number has been read. */
+.debt-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(70% 120% at 0% 0%, var(--debt-wash, var(--accent-softer)), transparent 60%);
+}
+
+.debt-hero--ok {
+  --debt-wash: color-mix(in srgb, var(--positive) 9%, transparent);
+}
+.debt-hero--warning {
+  --debt-wash: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+.debt-hero--over {
+  --debt-wash: color-mix(in srgb, var(--negative) 14%, transparent);
+}
+
+.debt-hero-primary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ---- The card face ---- */
+
+.vcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* 1.586 is the real ISO/IEC 7810 ID-1 ratio. Using it rather than a round
+     number is most of why the shape reads as a card at a glance. */
+  aspect-ratio: 1.586;
+  padding: var(--space-5);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--card-tint) 30%, var(--glass-border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--card-tint) 26%, transparent), transparent 62%),
+    var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  text-align: left;
+  color: inherit;
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* A single diagonal highlight sweeping the face. Its own element rather than a
+   third background layer so hover can move it without repainting the gradients
+   underneath. */
+.vcard-sheen {
+  position: absolute;
+  inset: -40% -10%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in srgb, #ffffff 22%, transparent) 46%,
+    transparent 58%
+  );
+  opacity: 0.7;
+  transform: translateX(-12%);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.vcard--interactive {
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+
+.vcard--interactive:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.vcard--interactive:hover .vcard-sheen {
+  transform: translateX(12%);
+}
+
+.vcard-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vcard-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  font-size: 1rem;
+  /* Standing in for the chip: a warm metallic block where a card's contact
+     plate sits. */
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--card-tint) 55%, #d9b45a),
+    color-mix(in srgb, var(--card-tint) 20%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 30%, transparent);
+}
+
+.vcard-number {
+  position: relative;
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+
+.vcard-owed {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+}
+
+.vcard-owed-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.vcard-owed-value {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.vcard-meter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vcard-meter-track {
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+
+.vcard-meter-fill {
+  width: var(--card-fill, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--card-tint) 70%, transparent), var(--card-tint));
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* The bar takes the band's colour rather than staying the wallet's: at 90% of a
+   limit the point is the number, not the branding. */
+.vcard--warning .vcard-meter-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning) 60%, transparent), var(--warning));
+}
+.vcard--over .vcard-meter-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--negative) 60%, transparent), var(--negative));
+}
+
+.vcard-meter-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.vcard-foot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.vcard-name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.vcard-cycle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  white-space: nowrap;
+}
+
+.vcard-cycle-label {
+  font-size: 0.5625rem; /* 9 — the "VALID THRU" line on real plastic is tiny */
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.vcard-cycle-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* ---- A card and the billing detail beside it ---- */
+
+.credit-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+}
+
+.credit-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+}
+
+.credit-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.credit-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.credit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+/* ---- Pay bill / installment sheets ---- */
+
+.paybill-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.form-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+.installment-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.installment-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+}
+
+.installment-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installment-schedule li {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-sm);
+}
+
+.installment-index {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.installment-date {
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.installment-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+}
+
+.installment-more .installment-date,
+.installment-more .installment-amount {
+  color: var(--text-faint);
+  font-weight: var(--weight-normal);
+}
+
+/* Two columns once there is room for the card face beside its figures. Below
+   this the face sits on top, which is the right order on a phone: you identify
+   the card first, then read what it owes. */
+@media (min-width: 760px) {
+  .debt-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .credit-panel {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+}
+
+/* Wide enough for two whole panels side by side. */
+@media (min-width: 1440px) {
+  .credit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vcard,
+  .vcard-sheen,
+  .vcard-meter-fill,
+  .vcard--interactive {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Mobile centre nav button + its arc of shortcuts
+   --------------------------------------------------------------------------
+   Lives only where the tab bar lives — below 1000px. That is this app's
+   sidebar breakpoint, not 767px: between 768 and 999 the tab bar is still the
+   navigation, so scoping to a phone-only query would leave every tablet with
+   the five-slot markup and no five-slot styling. The desktop sidebar cannot be
+   touched by any of this, because it does not exist until 1000px.
+
+   PERFORMANCE
+   Everything that animates here is `transform` or `opacity`, both of which the
+   compositor handles without a layout or a paint. The arc items carry their
+   position in --gnav-x / --gnav-y and are moved by a single transform that
+   also does the scale, so opening the menu is one composited property per item
+   and stays at 60fps on a mid-range phone.
+   ========================================================================== */
+
+/* The empty middle cell. Present only to hold the column open — the button is
+   a sibling of the bar, not a child of it. */
+.tabbar-slot {
+  display: block;
+}
+
+.gnav {
+  /* Sibling of .tabbar rather than a child: .tabbar carries z-index 30 and so
+     creates a stacking context, inside which nothing could rise above the
+     backdrop this menu raises. */
+  position: fixed;
+  inset: 0;
+  /* 40 is chosen, not arbitrary. Above the tab bar (30), so the button paints
+     over the bar's top edge and the backdrop can cover a tab link. Below the
+     fullscreen watchlist (50), which is documented as genuinely covering the
+     app and would look broken with a nav button floating on it — the two are
+     both `position: fixed; inset: 0`, so at equal z-index DOM order would
+     decide and this element, being later, would win. Below the modal backdrop
+     (60), the quick-add widget (80) and the toaster (90). */
+  z-index: 40;
+  /* The layer spans the viewport so the backdrop can, but must not intercept
+     anything itself — only the button and the open arc take input. */
+  pointer-events: none;
+}
+
+.gnav-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: auto;
+  animation: gnav-fade var(--dur-fast) var(--ease-out) both;
+}
+
+/* While the finger is still down the backdrop must be invisible to hit-testing:
+   `elementFromPoint` returns the topmost element, and a backdrop over the arc
+   would make every shortcut unreachable. Same rule the quick-add widget follows
+   for the same reason. */
+.gnav-backdrop.is-passthrough {
+  pointer-events: none;
+}
+
+@keyframes gnav-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The origin the arc is measured from: the centre of the button. */
+.gnav-anchor {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--gnav-drop) + env(safe-area-inset-bottom, 0px));
+  width: var(--gnav-size);
+  height: var(--gnav-size);
+  margin-left: calc(var(--gnav-size) / -2);
+  pointer-events: auto;
+}
+
+/* ---- The button ---- */
+
+.gnav-trigger {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  /* A ring in the bar's own surface colour, so the button reads as sitting on
+     top of the bar rather than punched through it. */
+  box-shadow:
+    0 0 0 4px var(--glass-bg-strong),
+    var(--shadow-lg);
+  cursor: pointer;
+  /* The three that make a long-press drag possible at all. touch-action is
+     also set inline, because this one is load-bearing: without it the browser
+     claims the drag for scroll or pull-to-refresh and the pointer stream stops
+     mid-gesture. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.gnav-trigger:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px var(--glass-bg-strong),
+    var(--shadow-lg),
+    var(--ring);
+}
+
+/* Held, but not yet armed. The shrink is the only feedback available during the
+   120ms before the arc appears, so it has to read instantly. */
+.gnav-trigger.is-pressing {
+  transform: scale(0.9);
+}
+
+.gnav-trigger.is-open {
+  transform: scale(1.04);
+}
+
+.gnav-trigger-icon {
+  display: grid;
+  place-items: center;
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+/* Quarter turn on open — enough to say "this changed state" without the icon
+   becoming an X, which would promise a close button the drag does not have. */
+.gnav-trigger.is-open .gnav-trigger-icon {
+  transform: rotate(45deg);
+}
+
+/* One of the hidden routes is the current page. The bar has no other way to
+   say so, and four of eight screens showing no active state anywhere on a
+   phone is how people get lost. */
+.gnav-trigger.is-current::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--accent-contrast);
+}
+
+/* ---- The arc ---- */
+
+.gnav-arc {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.gnav-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 60px;
+  height: 60px;
+  /* Half its own size, so `left/top: 50%` puts its centre on the button's
+     centre and --gnav-x/y are measured centre-to-centre. */
+  margin: -30px 0 0 -30px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+  /* Promoted before the gesture starts, not during: adding will-change at the
+     moment of animation forces the layer promotion to happen inside the frame
+     that was supposed to be cheap. */
+  will-change: transform, opacity;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Closed: collapsed into the button and inert. Kept in the DOM rather than
+   unmounted so the open transition has something to animate *from*. */
+.gnav:not(.is-open) .gnav-item {
+  transform: translate3d(0, 0, 0) scale(0.3);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gnav.is-open .gnav-item {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  opacity: 1;
+  /* Staggered outward, so the arc unfurls rather than appearing. Only on the
+     way out — collapsing should be immediate, because by then the user has
+     already decided. */
+  transition-delay: var(--gnav-delay), var(--gnav-delay), 0ms, 0ms, 0ms;
+}
+
+.gnav-item-icon {
+  display: grid;
+  place-items: center;
+}
+
+.gnav-item-label {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+/* Already on this page. Quiet — it marks position, it is not the thing the
+   thumb is being invited to hit. */
+.gnav-item.is-current {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+}
+
+/* The thumb is over this one. Scaled up past the fingertip covering it — the
+   single most common failure of touch menus is that the selected item is the
+   one you cannot see. */
+.gnav.is-open .gnav-item.is-hovered {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1.18);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-lg), 0 0 0 6px var(--accent-ring);
+  /* The highlight must never wait behind the opening stagger. */
+  transition-delay: 0ms;
+}
+
+/* Pointer devices get the same highlight from hover, so a mouse-drag and a
+   thumb-drag look identical. */
+@media (hover: hover) {
+  .gnav.is-open .gnav-item:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+}
+
+/* The bar and everything attached to it stop at the sidebar breakpoint. This
+   is what keeps the desktop layout untouched — see the note at the top. */
+@media (min-width: 1000px) {
+  .gnav {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gnav-item,
+  .gnav-trigger,
+  .gnav-trigger-icon {
+    transition-duration: 1ms;
+    transition-delay: 0ms !important;
+  }
+
+  /* Fade rather than fly, but still collapse to nothing so the closed state
+     stays non-interactive. */
+  .gnav:not(.is-open) .gnav-item {
+    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  }
+
+  .gnav.is-open .gnav-item.is-hovered {
+    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  }
+
+  .gnav-trigger.is-open .gnav-trigger-icon,
+  .gnav-trigger.is-open,
+  .gnav-trigger.is-pressing {
+    transform: none;
+  }
 }

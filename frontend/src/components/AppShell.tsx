@@ -1,6 +1,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
@@ -17,11 +18,12 @@ import { useCallback, useState } from 'react';
 
 import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
-import { useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
+import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
+import { CreditCardsPage } from '../pages/CreditCardsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -33,6 +35,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DbHealth, Transaction, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
+import { GestureNavWidget, Shortcut } from './GestureNavWidget';
 import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
@@ -40,6 +43,7 @@ import { Alert, Button, RefreshButton } from './ui';
 const NAV: { route: Route; label: string; icon: LucideIcon }[] = [
   { route: 'dashboard', label: 'Overview', icon: LayoutDashboard },
   { route: 'wallets', label: 'Wallets', icon: Wallet },
+  { route: 'cards', label: 'Cards', icon: CreditCard },
   { route: 'transactions', label: 'Activity', icon: Receipt },
   { route: 'investments', label: 'Invest', icon: TrendingUp },
   { route: 'budgets', label: 'Budgets', icon: Target },
@@ -58,6 +62,35 @@ const SETTINGS_ITEM: { route: Route; label: string; icon: LucideIcon } = {
 };
 
 /**
+ * How the seven routes split on a phone.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY FOUR AND FOUR RATHER THAN SEVEN
+ * ---------------------------------------------------------------------------
+ * Seven tabs across a 320px bar is 45px each — under the 44px touch minimum
+ * once padding is removed, with an 11px label that has to fit "Subscriptions".
+ *
+ * The split is by *how often you look*, not by importance. The four that keep a
+ * slot are the ones opened to read something, repeatedly, in a day. The four
+ * behind the centre button are opened to change something — a budget, a card, a
+ * setting — which happens weekly at most and comfortably affords one gesture.
+ *
+ * The desktop sidebar is unaffected: it renders NAV in full and always has.
+ */
+const MOBILE_PRIMARY: Route[] = ['dashboard', 'wallets', 'investments', 'transactions'];
+const MOBILE_SHORTCUTS: Route[] = ['cards', 'budgets', 'subscriptions', 'settings'];
+
+/** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
+function navItemFor(route: Route): { route: Route; label: string; icon: LucideIcon } {
+  return [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
+}
+
+/* Split so the bar reads left-to-right around the button: two, button, two. */
+const TAB_LEFT = MOBILE_PRIMARY.slice(0, 2).map(navItemFor);
+const TAB_RIGHT = MOBILE_PRIMARY.slice(2).map(navItemFor);
+const NAV_SHORTCUTS: Shortcut[] = MOBILE_SHORTCUTS.map(navItemFor);
+
+/**
  * What each tab needs before it can paint. Warmed on hover — a pointer takes
  * 200-400ms to travel and click, which buys a meaningful head start on a
  * request that takes 1-3s.
@@ -69,6 +102,12 @@ function warmRoute(route: Route, period: string): void {
       break;
     case 'wallets':
       prefetch('/api/wallets', { includeArchived: true });
+      break;
+    case 'cards':
+      /* The unscoped ledger, because a statement straddles a month boundary and
+         an installment plan runs years out — see useCreditCards. */
+      prefetch('/api/wallets', { includeArchived: true });
+      prefetch('/api/transactions', { limit: 2000 });
       break;
     case 'transactions':
       prefetch('/api/transactions', { period });
@@ -103,6 +142,7 @@ function warmRoute(route: Route, period: string): void {
 const ROUTE_DATA: Record<Route, string[]> = {
   dashboard: ['/api/dashboard'],
   wallets: ['/api/wallets'],
+  cards: ['/api/wallets', '/api/transactions'],
   transactions: ['/api/transactions', '/api/wallets'],
   investments: ['/api/investments', '/api/wallets', '/api/watchlist'],
   budgets: ['/api/budgets', '/api/wallets'],
@@ -140,6 +180,10 @@ export function AppShell() {
      here rather than on the Recurring page precisely because the point is to
      catch bills the user has not gone looking for. */
   useOverdueSubscriptionAlert();
+  /* And the same for card bills. Separate hook, separate latch: the two depend
+     on different requests that resolve at different times, so sharing one would
+     let whichever arrived first swallow the other. */
+  useCreditCardDueAlert();
 
   /* ---- Quick add ----
      The floating button lives at the shell level so it is reachable from every
@@ -178,6 +222,25 @@ export function AppShell() {
   }, [route, reloadSettings]);
 
   const active = [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
+
+  /** One tab-bar link. Shared by both sides of the centre button. */
+  const tab = (item: { route: Route; label: string; icon: LucideIcon }) => (
+    <button
+      key={item.route}
+      type="button"
+      className={cx('tabbar-item', route === item.route && 'is-active')}
+      aria-current={route === item.route ? 'page' : undefined}
+      // On touch there is no hover, but touchstart still lands ~100ms before
+      // the click resolves.
+      onTouchStart={() => warmRoute(item.route, period)}
+      onClick={() => go(item.route)}
+    >
+      <span className="tab-icon">
+        <Icon icon={item.icon} />
+      </span>
+      {item.label}
+    </button>
+  );
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
 
   return (
@@ -302,6 +365,7 @@ export function AppShell() {
 
           {route === 'dashboard' && <DashboardPage period={period} onNavigate={go} />}
           {route === 'wallets' && <WalletsPage />}
+          {route === 'cards' && <CreditCardsPage />}
           {route === 'transactions' && <TransactionsPage period={period} />}
           {route === 'investments' && <InvestmentsPage />}
           {route === 'budgets' && <BudgetsPage period={period} />}
@@ -328,24 +392,17 @@ export function AppShell() {
       />
 
       <nav className="tabbar" aria-label="Main navigation">
-        {NAV.map((item) => (
-          <button
-            key={item.route}
-            type="button"
-            className={cx('tabbar-item', route === item.route && 'is-active')}
-            aria-current={route === item.route ? 'page' : undefined}
-            // On touch there is no hover, but touchstart still lands ~100ms
-            // before the click resolves.
-            onTouchStart={() => warmRoute(item.route, period)}
-            onClick={() => go(item.route)}
-          >
-            <span className="tab-icon">
-              <Icon icon={item.icon} />
-            </span>
-            {item.label}
-          </button>
-        ))}
+        {TAB_LEFT.map(tab)}
+        {/* An empty grid cell, not a wrapper: the centre button is a sibling of
+            the bar, so it can sit above the backdrop its own menu raises. A
+            child could not — .tabbar creates a stacking context. */}
+        <span className="tabbar-slot" aria-hidden="true" />
+        {TAB_RIGHT.map(tab)}
       </nav>
+
+      {/* Rendered beside the bar rather than inside it, and hidden with it on
+          desktop. See the stacking note above. */}
+      <GestureNavWidget shortcuts={NAV_SHORTCUTS} activeRoute={route} onNavigate={go} />
     </div>
   );
 }

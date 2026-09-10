@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 
+import { DUE_SOON_DAYS } from '../lib/creditMath';
 import { toast } from '../lib/toast';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { Subscription } from '../types';
+import { useCreditCards } from './useCreditCards';
 import { todayKey, useSubscriptions } from './useSubscriptions';
 
 /**
@@ -35,9 +37,21 @@ import { todayKey, useSubscriptions } from './useSubscriptions';
  */
 let alertedFor: string | null = null;
 
+/**
+ * The same latch, kept separately for credit card bills.
+ *
+ * Two latches rather than one because the two notices depend on different data
+ * that arrives at different times: subscriptions is one request, cards needs
+ * both the wallets and the ledger. Sharing a latch would mean whichever
+ * resolved first silently swallowed the other, and which one that is would
+ * depend on the network.
+ */
+let cardsAlertedFor: string | null = null;
+
 /** Escape hatch for tests. Production resets itself when the user changes. */
 export function resetOverdueAlert(): void {
   alertedFor = null;
+  cardsAlertedFor = null;
 }
 
 /** Due today or earlier. Date keys are `YYYY-MM-DD`, so string compare is safe. */
@@ -73,4 +87,70 @@ export function useOverdueSubscriptionAlert(): void {
       count === 1 ? '1 unpaid subscription' : `${count} unpaid subscriptions`,
     );
   }, [user, items, initialLoading, error, money]);
+}
+
+/**
+ * "Your card bill is due" — raised once per app open, alongside the
+ * subscriptions notice above.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY IT WARNS ON THE STATEMENT BALANCE AND NOT THE CURRENT ONE
+ * ---------------------------------------------------------------------------
+ * The current balance includes charges made since the statement closed, and
+ * those are not due on this due date — they are due on the next one. Warning on
+ * the full balance would tell someone who cleared their statement on Monday and
+ * bought lunch on Tuesday that they still owe money, which is both wrong and
+ * the fastest way to teach them to ignore the notice.
+ *
+ * `computeCardState` already resolves the cycle, so all this decides is when to
+ * speak: money genuinely billed, and a due date inside the window.
+ */
+export function useCreditCardDueAlert(): void {
+  const { user } = useAuth();
+  const { cards, initialLoading, error } = useCreditCards();
+  const money = useMoneyFormatter();
+
+  useEffect(() => {
+    if (!user || cardsAlertedFor === user.id) return;
+    // Same rule as the subscriptions notice: wait for real data rather than
+    // reporting "nothing due" off an empty cache or a failed fetch.
+    if (initialLoading || error || !cards.length) return;
+
+    cardsAlertedFor = user.id;
+
+    const overdue = cards.filter((card) => card.overdue);
+    const dueSoon = cards.filter((card) => card.dueSoon);
+    if (!overdue.length && !dueSoon.length) return;
+
+    /* Overdue is the more urgent of the two and gets its own toast, because
+       folding them together would round "you have missed a payment" down into
+       "some bills are coming up". */
+    if (overdue.length) {
+      const total = overdue.reduce((sum, card) => sum + card.statementBalance, 0);
+      toast.error(
+        overdue.length === 1
+          ? `${overdue[0].wallet.name} was due ${overdue[0].paymentDueDate}. ${money(
+              overdue[0].statementBalance,
+            )} outstanding.`
+          : `${overdue.length} cards are past due, totalling ${money(total)}.`,
+        overdue.length === 1 ? 'Card payment overdue' : 'Card payments overdue',
+      );
+    }
+
+    if (dueSoon.length) {
+      const total = dueSoon.reduce((sum, card) => sum + card.statementBalance, 0);
+      const soonest = dueSoon.reduce((a, b) =>
+        (a.daysUntilDue ?? 0) <= (b.daysUntilDue ?? 0) ? a : b,
+      );
+      const days = soonest.daysUntilDue ?? 0;
+      const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+
+      toast.warning(
+        dueSoon.length === 1
+          ? `${money(soonest.statementBalance)} on ${soonest.wallet.name} is due ${when}.`
+          : `${dueSoon.length} card bills totalling ${money(total)} are due within ${DUE_SOON_DAYS} days — the soonest ${when}.`,
+        dueSoon.length === 1 ? 'Card payment due soon' : 'Card payments due soon',
+      );
+    }
+  }, [user, cards, initialLoading, error, money]);
 }

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 export const ROUTES = [
   'dashboard',
   'wallets',
+  'cards',
   'transactions',
   'investments',
   'budgets',

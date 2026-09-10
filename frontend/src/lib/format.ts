@@ -46,6 +46,36 @@ export function formatPeriod(period: string, locale = 'en-US'): string {
   return new Date(year, month - 1, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
 
+/**
+ * 1 -> "1st", 22 -> "22nd". Used wherever a billing day is shown.
+ *
+ * The teens are the whole trick: 11, 12 and 13 take "th" despite ending in
+ * 1, 2 and 3, so they are excluded before the last digit is consulted.
+ */
+export function ordinal(day: number): string {
+  const n = Math.round(Number(day) || 0);
+  const lastTwo = n % 100;
+  const suffix =
+    lastTwo >= 11 && lastTwo <= 13
+      ? 'th'
+      : n % 10 === 1
+        ? 'st'
+        : n % 10 === 2
+          ? 'nd'
+          : n % 10 === 3
+            ? 'rd'
+            : 'th';
+  return `${n}${suffix}`;
+}
+
+/** "12 Mar" — a date key without the year, for figures inside one cycle. */
+export function formatDayMonth(iso: string, locale = 'en-US'): string {
+  if (!iso) return '—';
+  const date = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+}
+
 export function formatRelativeTime(timestamp: number | null): string {
   if (!timestamp) return 'never';
   const seconds = Math.round((Date.now() - timestamp) / 1000);

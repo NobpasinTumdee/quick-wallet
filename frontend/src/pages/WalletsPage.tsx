@@ -73,7 +73,7 @@ export function WalletsPage() {
         <div className="stack stack--tight" style={{ gap: 2 }}>
           <span className="wallet-card-name truncate">{wallet.name}</span>
           <span className="list-item-sub">
-            {wallet.kind} · {wallet.currency}
+            {wallet.type === 'CREDIT' ? 'credit card' : wallet.kind} · {wallet.currency}
           </span>
         </div>
         {wallet.archived && <Badge>Archived</Badge>}
@@ -81,9 +81,14 @@ export function WalletsPage() {
 
       <div className="wallet-card-figures">
         <div className="metric">
-          <span className="section-label">{wallet.mode === 'investment' ? 'Cash' : 'Balance'}</span>
+          {/* A card's balance is stored negative like every other debt, but
+              "Balance -฿5,000" is not how anyone thinks about a card. Flipped
+              here for reading only — nothing downstream sees the change. */}
+          <span className="section-label">
+            {wallet.type === 'CREDIT' ? 'Owed' : wallet.mode === 'investment' ? 'Cash' : 'Balance'}
+          </span>
           <span className={cx('metric-value', wallet.balance < 0 && 'text-negative')}>
-            {money(wallet.balance)}
+            {money(wallet.type === 'CREDIT' ? Math.max(0, -wallet.balance) : wallet.balance)}
           </span>
         </div>
         {wallet.mode === 'investment' ? (

@@ -85,6 +85,11 @@ export function useSubscriptions(): SubscriptionsState {
         note: subscription.name,
         date: paidOn,
         createdAt: new Date().toISOString(),
+        // A subscription payment is never part of an installment plan; spelled
+        // out rather than left off so the draft is the same shape as the row
+        // the server sends back to replace it.
+        installmentGroupId: '',
+        installmentIndex: '',
       };
 
       /* ---- apply, collecting rollbacks so failure undoes all of it ---- */

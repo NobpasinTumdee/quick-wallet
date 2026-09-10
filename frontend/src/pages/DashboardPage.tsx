@@ -112,6 +112,21 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     ? data.netWorth - portfolio.totalCost + portfolio.totalValue
     : data.netWorth;
 
+  /* ---- Cash and card debt ----
+     `netWorth` already nets the two: a credit wallet's balance is negative, so
+     summing spending wallets subtracts the debt. What was missing was saying so
+     — a user seeing only the total had no way to tell a small net worth from a
+     healthy one with a card outstanding against it.
+
+     The fallbacks cover the window between deploying this frontend and pushing
+     the matching Code.gs: an older payload has no `cashBalance`, and reading
+     `undefined` into a currency formatter renders NaN rather than failing
+     loudly. With no credit wallets the two are equal anyway. */
+  const cashBalance = data.cashBalance ?? data.liquidBalance;
+  const creditDebt = data.creditDebt ?? 0;
+  const safeToSpend = data.safeToSpend ?? data.liquidBalance;
+  const hasDebt = creditDebt > 0;
+
   const isEmpty = data.walletCount === 0;
 
   // Presentational grouping only — the wallets themselves are unchanged.
@@ -201,9 +216,22 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         <div className="hero-metrics">
           <div className="metric">
             <span className="section-label">Cash on hand</span>
-            <span className="metric-value">{money(data.liquidBalance, true)}</span>
-            <span className="metric-hint">Expense wallets</span>
+            <span className="metric-value">{money(cashBalance, true)}</span>
+            <span className="metric-hint">
+              {hasDebt ? `${money(safeToSpend, true)} after cards` : 'Cash wallets'}
+            </span>
           </div>
+          {hasDebt && (
+            <div className="metric metric--negative">
+              <span className="section-label">Card debt</span>
+              <span className="metric-value text-negative">{money(creditDebt, true)}</span>
+              <span className="metric-hint">
+                {data.creditLimit > 0
+                  ? `${formatPercent(data.creditUtilization, 0)} of limit used`
+                  : 'Already subtracted from net worth'}
+              </span>
+            </div>
+          )}
           <div className="metric metric--positive">
             <span className="section-label">Income</span>
             <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>

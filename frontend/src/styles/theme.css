@@ -102,6 +102,16 @@
 
   /* ---------- layout ---------- */
   --header-height: 68px;
+  /* The mobile tab bar, excluding the safe-area inset. Declared rather than
+     left to content because the centre nav button is positioned against it
+     from outside the bar, and two elements guessing the same height
+     independently is how a 2px misalignment ships. */
+  --tabbar-height: 62px;
+  /* Diameter of that button, and how far its bottom edge sits above the
+     viewport floor. 62 - 16 = 46px of it is over the bar, the remaining 12px
+     stands proud of the top edge. */
+  --gnav-size: 58px;
+  --gnav-drop: 16px;
   --sidebar-width: 252px;
   /* Rail mode: wide enough for a 40px icon target plus breathing room. */
   --sidebar-width-rail: 68px;

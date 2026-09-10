@@ -150,6 +150,11 @@ const NAMED_ACTIONS: Record<string, string> = {
   'investments/symbols': 'investments.symbols',
   'dashboard/periods': 'dashboard.periods',
   'budgets/copy': 'budgets.copy',
+  /* Without these two the CRUD rules below would read "installment" as a
+     transaction id and route them to transactions.update. Same reason
+     budgets/copy is listed. */
+  'transactions/installment': 'transactions.installment',
+  'transactions/cancel-installment': 'transactions.cancelInstallment',
 };
 
 function resolve(path: string, method: HttpMethod, params?: QueryParams): ResolvedCall {

@@ -85,7 +85,31 @@ var SHEETS = {
       { key: 'icon', header: 'Icon', type: 'string' },
       { key: 'archived', header: 'Archived', type: 'boolean' },
       { key: 'note', header: 'Note', type: 'string' },
-      { key: 'createdAt', header: 'Created At', type: 'date' }
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      /* ---- Credit card fields, appended after createdAt on purpose ----
+         insertRow_/updateRow_ write columns positionally in schema order, so a
+         new column is only safe at the end, where createMissingSheets() also
+         appends its header. Every one of these coerces to 0 or '' for a row
+         written before they existed, which is what makes the upgrade seamless:
+         walletType_() reads an empty `type` as 'CASH', so every wallet already
+         in the sheet keeps behaving exactly as it did.
+
+         `type` is a coarser cut than the existing `kind`: kind is a label the
+         user picks for the card ("bank", "ewallet"), type is what the balance
+         maths has to know. They are kept in sync on write — kind 'credit'
+         implies type 'CREDIT' and vice versa — so neither can drift. */
+      { key: 'type', header: 'Type', type: 'string' },
+      { key: 'creditLimit', header: 'Credit Limit', type: 'number' },
+      /* Day of month the statement closes / falls due, 1-31. 0 means unset,
+         which the client reads as "this card has no billing cycle yet". A day
+         past the end of a short month is clamped, never overflowed — see
+         cycleDayInMonth() in lib/creditMath.ts. */
+      { key: 'statementDate', header: 'Statement Day', type: 'number' },
+      { key: 'dueDate', header: 'Due Day', type: 'number' },
+      /* Percent, so 1.5 means 1.5% back. Purely informational — no cashback
+         transaction is ever written automatically, because the issuer decides
+         the real figure and a guess in the ledger is worse than no figure. */
+      { key: 'cashbackRate', header: 'Cashback Rate %', type: 'number' }
     ]
   },
   Transactions: {
@@ -100,7 +124,23 @@ var SHEETS = {
       { key: 'category', header: 'Category', type: 'string' },
       { key: 'note', header: 'Note', type: 'string' },
       { key: 'date', header: 'Date', type: 'datekey' },
-      { key: 'createdAt', header: 'Created At', type: 'date' }
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      /* ---- 0% installment plans ----
+         A plan is n ordinary Transaction rows sharing one group id, one per
+         monthly chunk, dated a month apart. Nothing about the existing ledger
+         changes: each row is a normal expense that lands in its own month, so
+         `monthExpense` and budget progress count one chunk per month rather
+         than the whole purchase up front, while the card's balance — which
+         sums every row regardless of date — correctly shows the full amount
+         still owed to the bank.
+
+         Empty on every row that is not part of a plan, which is all of them
+         until someone creates one. */
+      { key: 'installmentGroupId', header: 'Installment Group ID', type: 'string' },
+      /* "3/10" — human-readable on purpose, because this column is read in the
+         sheet as often as it is read by code, and a bare index would need the
+         group's length fetched to mean anything. */
+      { key: 'installmentIndex', header: 'Installment Index', type: 'string' }
     ]
   },
   Investments: {
@@ -301,6 +341,16 @@ function dispatch_(action, method, query, body, token) {
     'transactions.update': function () { return transactionsUpdate_(requireAuth_(token), query, body); },
     'transactions.delete': function () { return transactionsDelete_(requireAuth_(token), query); },
 
+    /* A 0% installment plan: n dated expense rows written as one row-block.
+       Separate from transactions.create because it answers with the whole plan
+       and the client patches every chunk into its cache at once. */
+    'transactions.installment': function () {
+      return transactionsCreateInstallment_(requireAuth_(token), body);
+    },
+    'transactions.cancelInstallment': function () {
+      return transactionsDeleteInstallment_(requireAuth_(token), query);
+    },
+
     'investments.list': function () { return investmentsList_(requireAuth_(token), query); },
     'investments.symbols': function () { return investmentsSymbols_(requireAuth_(token)); },
     'investments.get': function () {
@@ -472,6 +522,41 @@ function insertRow_(name, obj) {
   });
 
   sheet_(name).appendRow(values);
+  invalidate_(name);
+  return normalized;
+}
+
+/**
+ * Appends many rows in a single setValues() call.
+ *
+ * appendRow() is one Sheets round trip each, and Apps Script bills per call
+ * with a six-minute execution ceiling. A ten-month installment plan written a
+ * row at a time is ten of those inside a lock every other tab is waiting on;
+ * as one write it is indistinguishable from creating a single transaction.
+ *
+ * Returns the normalised rows in the order given.
+ */
+function insertRows_(name, objects) {
+  if (!objects || !objects.length) return [];
+
+  var def = schema_(name);
+  var normalized = objects.map(function (obj) {
+    var row = {};
+    def.columns.forEach(function (col) {
+      row[col.key] = coerce_(obj[col.key], col.type);
+    });
+    return row;
+  });
+
+  var values = normalized.map(function (row) {
+    return def.columns.map(function (col) { return serialize_(row[col.key], col.type); });
+  });
+
+  var sheet = sheet_(name);
+  sheet
+    .getRange(sheet.getLastRow() + 1, 1, values.length, def.columns.length)
+    .setValues(values);
+
   invalidate_(name);
   return normalized;
 }
@@ -725,6 +810,32 @@ function toDateKey_(date) {
 
 function currentPeriod_() {
   return toDateKey_(new Date()).slice(0, 7);
+}
+
+/**
+ * `dateKey` plus n calendar months, clamped to the target month's length.
+ *
+ * Naive arithmetic overflows: 31 Jan + 1 month lands on 3 Mar, because
+ * `new Date(2026, 1, 31)` is February the 31st, which is March. An installment
+ * plan started on the 31st would then skip a month entirely and pay twice in
+ * another. Day 0 of the following month is the last day of the target month,
+ * which gives the clamp. Same rule advanceDueDate_() uses for subscriptions.
+ */
+function addMonths_(dateKey, months) {
+  var parts = String(dateKey || '').split('-');
+  var year = Number(parts[0]);
+  var monthIndex = Number(parts[1]) - 1;
+  var day = Number(parts[2]);
+  if (!isFinite(year) || !isFinite(monthIndex) || !isFinite(day)) {
+    throw bad_('Cannot shift an invalid date: "' + dateKey + '"');
+  }
+
+  var target = monthIndex + Math.round(Number(months) || 0);
+  var targetYear = year + Math.floor(target / 12);
+  var targetMonth = ((target % 12) + 12) % 12;
+  var lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+
+  return toDateKey_(new Date(targetYear, targetMonth, Math.min(day, lastDay)));
 }
 
 /**
@@ -1080,9 +1191,37 @@ function ownedWallet_(userId, walletId, label) {
 }
 
 /**
+ * 'CASH' or 'CREDIT' for any wallet row, including ones written before the
+ * column existed.
+ *
+ * The fallback is what makes the upgrade seamless. An empty cell means the row
+ * predates this feature, so it falls back to `kind`: a wallet the user had
+ * already labelled "Credit card" becomes CREDIT without them touching it, and
+ * everything else — every cash, bank, e-wallet, brokerage and other wallet in
+ * every existing sheet — becomes CASH. No migration script, no dirty state.
+ *
+ * Investment wallets are always CASH here: they hold positions, and a
+ * brokerage margin account is not something this app models.
+ */
+function walletType_(wallet) {
+  if (!wallet) return 'CASH';
+  var raw = String(wallet.type || '').trim().toUpperCase();
+  if (raw === 'CREDIT' || raw === 'CASH') return raw;
+  if (wallet.mode === 'investment') return 'CASH';
+  return String(wallet.kind || '').toLowerCase() === 'credit' ? 'CREDIT' : 'CASH';
+}
+
+/**
  * Wallet balance = opening + income - expense + transfers in - transfers out,
  * then investment wallets additionally convert cash into holdings on buy and
  * back into cash on sell.
+ *
+ * Credit cards need no special case here, which is the point. A charge is an
+ * expense, so it drives the balance negative; a bill payment is an ordinary
+ * transfer from a cash wallet, so it drives it back toward zero. A credit
+ * wallet's balance is therefore already "debt, expressed as a negative number"
+ * with no new arithmetic — and because a transfer is neither income nor
+ * expense, paying a card off never double-counts as spending.
  */
 function computeWalletBalances_(userId, period) {
   var wallets = userRows_('Wallets', userId).slice().sort(function (a, b) {
@@ -1099,6 +1238,11 @@ function computeWalletBalances_(userId, period) {
       kind: wallet.kind, currency: wallet.currency, openingBalance: wallet.openingBalance,
       color: wallet.color, icon: wallet.icon, archived: wallet.archived, note: wallet.note,
       createdAt: wallet.createdAt,
+      type: walletType_(wallet),
+      creditLimit: Number(wallet.creditLimit) || 0,
+      statementDate: Number(wallet.statementDate) || 0,
+      dueDate: Number(wallet.dueDate) || 0,
+      cashbackRate: Number(wallet.cashbackRate) || 0,
       balance: wallet.openingBalance || 0,
       investedCost: 0, income: 0, expense: 0, transactionCount: 0
     };
@@ -1271,6 +1415,57 @@ function decorateInvestment_(inv) {
 
 var WALLET_MODES = ['expense', 'investment'];
 var WALLET_KINDS = ['cash', 'bank', 'ewallet', 'credit', 'brokerage', 'other'];
+/* Lowercase because oneOf_() lowercases what it is given before matching — an
+   uppercase list here would reject the very values the client sends. The stored
+   and returned form is uppercase, which walletTypeIn_() below restores. */
+var WALLET_TYPES = ['cash', 'credit'];
+
+/** Validates a `type` from a request body and returns it in its stored form. */
+function walletTypeIn_(value) {
+  return oneOf_(value, 'type', WALLET_TYPES, 'cash').toUpperCase();
+}
+
+/**
+ * Validates the credit-card half of a wallet payload and returns the fields to
+ * write, with `type` and `kind` reconciled.
+ *
+ * `resolvedType` is the type the wallet will have once this write lands, which
+ * is not always what the body says: an update that only sets `creditLimit` has
+ * to be judged against the type already on the row.
+ *
+ * Billing days are stored as given, including 29-31. Clamping them here would
+ * lose the user's intent — a card that closes on the 31st should close on the
+ * 28th in February and back on the 31st in March — so the clamp happens where
+ * a concrete month is known, in cycleDayInMonth() on the client.
+ */
+function creditFieldsPatch_(body, resolvedType) {
+  var patch = {};
+
+  if (resolvedType === 'CASH') {
+    // Switching a card back to cash: clear the billing profile rather than
+    // leaving a limit and a due date on a wallet that has neither.
+    patch.creditLimit = 0;
+    patch.statementDate = 0;
+    patch.dueDate = 0;
+    patch.cashbackRate = 0;
+    return patch;
+  }
+
+  if (body.creditLimit !== undefined) {
+    patch.creditLimit = num_(body.creditLimit, 'creditLimit', { min: 0 });
+  }
+  if (body.statementDate !== undefined) {
+    patch.statementDate = Math.round(num_(body.statementDate, 'statementDate', { min: 0, max: 31 }));
+  }
+  if (body.dueDate !== undefined) {
+    patch.dueDate = Math.round(num_(body.dueDate, 'dueDate', { min: 0, max: 31 }));
+  }
+  if (body.cashbackRate !== undefined) {
+    patch.cashbackRate = num_(body.cashbackRate, 'cashbackRate', { min: 0, max: 100 });
+  }
+
+  return patch;
+}
 
 function walletsList_(user, query) {
   var includeArchived = bool_(query.includeArchived, false);
@@ -1294,12 +1489,23 @@ function walletsCreate_(user, body) {
   if (duplicate) throw bad_('You already have a wallet called "' + name + '"', 'DUPLICATE_WALLET');
 
   var mode = oneOf_(body.mode, 'mode', WALLET_MODES, 'expense');
+  var kind = oneOf_(body.kind, 'kind', WALLET_KINDS, mode === 'investment' ? 'brokerage' : 'cash');
+
+  /* Either field can declare the card, so both are consulted and then made to
+     agree. Picking a "Credit card" kind in the existing form is enough to get
+     a CREDIT wallet, which is what a user who has never seen the new field
+     will do. An investment wallet is never CREDIT. */
+  var type = mode === 'investment'
+    ? 'CASH'
+    : (kind === 'credit' || walletTypeIn_(body.type) === 'CREDIT') ? 'CREDIT' : 'CASH';
+  if (type === 'CREDIT') kind = 'credit';
+
   var wallet = {
     id: uuid_(),
     userId: user.id,
     name: name,
     mode: mode,
-    kind: oneOf_(body.kind, 'kind', WALLET_KINDS, mode === 'investment' ? 'brokerage' : 'cash'),
+    kind: kind,
     currency: (str_(body.currency, 'currency', { required: false, max: 8 }) || 'USD').toUpperCase(),
     openingBalance: num_(body.openingBalance, 'openingBalance', {}),
     color: str_(body.color, 'color', { required: false, max: 20 }) || '#4f8cff',
@@ -1307,8 +1513,16 @@ function walletsCreate_(user, body) {
       (mode === 'investment' ? '📈' : '💳'),
     archived: false,
     note: str_(body.note, 'note', { required: false, max: 300 }),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    type: type,
+    creditLimit: 0,
+    statementDate: 0,
+    dueDate: 0,
+    cashbackRate: 0
   };
+
+  var credit = creditFieldsPatch_(body, type);
+  for (var field in credit) wallet[field] = credit[field];
 
   insertRow_('Wallets', wallet);
   return wallet;
@@ -1331,6 +1545,40 @@ function walletsUpdate_(user, query, body) {
   if (body.note !== undefined) patch.note = str_(body.note, 'note', { required: false, max: 300 });
   if (body.archived !== undefined) patch.archived = bool_(body.archived);
 
+  /* ---- Cash <-> credit ----
+     Unlike `mode` below this is not locked once the wallet has records, and
+     deliberately so: someone who recorded a card as a plain bank wallet for six
+     months needs to be able to say what it really is without deleting the
+     history. The switch is safe because it changes no arithmetic — a credit
+     balance is the same "opening + income - expense +/- transfers" figure a
+     cash wallet has, only usually negative. All that changes is how the UI
+     reads and labels it.
+
+     Setting kind:'credit' through the existing wallet form implies the type,
+     and vice versa, so the two can never disagree on the row. */
+  /* Read from `body`, not `patch`: the mode block below runs after this one
+     (it has to, because it can throw) so `patch.mode` is not set yet. */
+  var resolvedMode = body.mode !== undefined
+    ? oneOf_(body.mode, 'mode', WALLET_MODES)
+    : existing.mode;
+  var resolvedType = walletType_(existing);
+
+  if (body.type !== undefined) {
+    resolvedType = walletTypeIn_(body.type);
+  } else if (patch.kind !== undefined) {
+    resolvedType = patch.kind === 'credit' ? 'CREDIT' : 'CASH';
+  }
+  if (resolvedMode === 'investment') resolvedType = 'CASH';
+
+  if (resolvedType !== walletType_(existing) || body.type !== undefined) {
+    patch.type = resolvedType;
+    if (resolvedType === 'CREDIT') patch.kind = 'credit';
+    else if (patch.kind === undefined && existing.kind === 'credit') patch.kind = 'bank';
+  }
+
+  var credit = creditFieldsPatch_(body, resolvedType);
+  for (var field in credit) patch[field] = credit[field];
+
   // Switching modes would strand existing rows, so only allow it while empty.
   if (body.mode !== undefined) {
     var mode = oneOf_(body.mode, 'mode', WALLET_MODES);
@@ -1350,6 +1598,9 @@ function walletsUpdate_(user, query, body) {
 
   var updated = updateRow_('Wallets', existing.id, patch);
   delete updated._row;
+  // Never hand back an empty `type` — a legacy row that this edit did not touch
+  // still has one, and the client should not have to re-derive it.
+  updated.type = walletType_(updated);
   return updated;
 }
 
@@ -1428,7 +1679,14 @@ function parseTransaction_(userId, body) {
     amount: amount,
     category: type === 'transfer' ? 'Transfer' : str_(body.category, 'category', { max: 60 }),
     note: str_(body.note, 'note', { required: false, max: 300 }),
-    date: isoDate_(body.date || toDateKey_(new Date()), 'date')
+    date: isoDate_(body.date || toDateKey_(new Date()), 'date'),
+    /* Carried through rather than validated into existence. transactionsUpdate_
+       re-parses the merged row, so dropping these here would silently strip a
+       chunk out of its plan the first time someone corrected its note. */
+    installmentGroupId: str_(body.installmentGroupId, 'installmentGroupId', {
+      required: false, max: 60
+    }),
+    installmentIndex: str_(body.installmentIndex, 'installmentIndex', { required: false, max: 12 })
   };
 }
 
@@ -1475,10 +1733,125 @@ function transactionsCreate_(user, body) {
     id: uuid_(), userId: user.id,
     walletId: parsed.walletId, toWalletId: parsed.toWalletId, type: parsed.type,
     amount: parsed.amount, category: parsed.category, note: parsed.note, date: parsed.date,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    installmentGroupId: parsed.installmentGroupId,
+    installmentIndex: parsed.installmentIndex
   };
   insertRow_('Transactions', tx);
   return tx;
+}
+
+/* -------------------------------------------------------------------------
+ * 0% installment plans
+ * -------------------------------------------------------------------------
+ * WHY REAL ROWS AND NOT A PROJECTION
+ * -------------------------------------------------------------------------
+ * The alternative was to store one row for the purchase and expand the monthly
+ * chunks in the UI. That loses in three places at once:
+ *
+ *   - the current month's expense total would carry the whole ฿30,000 iPhone,
+ *     which is exactly what the feature exists to avoid, and every consumer of
+ *     `monthExpense` — budgets, the trend chart, the savings estimate, the
+ *     Sankey — would each need to learn about installments to undo it
+ *   - a projection is invisible in the sheet, and the sheet is the database
+ *     the user actually opens
+ *   - editing or deleting one chunk (banks do move them) has nowhere to write
+ *
+ * As n real rows, none of that is special-cased. Each chunk is an ordinary
+ * expense in its own month, so every existing aggregate is right for free. The
+ * card's balance sums rows without a date filter, so it shows the full amount
+ * still owed the day the plan starts — which is what you owe the bank.
+ *
+ * Rounding lands on the FIRST chunk, not the last: ฿10,000 over 3 months is
+ * 3,333.34 + 3,333.33 + 3,333.33. Banks front-load the odd satang, and a user
+ * reconciling against a real statement compares the first line, not the last.
+ */
+var MAX_INSTALLMENT_MONTHS = 60;
+
+function transactionsCreateInstallment_(user, body) {
+  var months = Math.round(num_(body.months, 'months', { min: 1, max: MAX_INSTALLMENT_MONTHS }));
+  var total = num_(body.amount, 'amount', { min: 0 });
+  if (total <= 0) throw bad_('"amount" must be greater than zero');
+
+  // Validated as one ordinary transaction first, so a plan can never create
+  // rows a single create would have rejected.
+  var parsed = parseTransaction_(user.id, {
+    type: 'expense',
+    amount: total,
+    walletId: body.walletId,
+    category: body.category,
+    note: body.note,
+    date: body.date
+  });
+
+  if (months === 1) {
+    /* Not a plan. Writing a one-row group would leave "1/1" rows in the sheet
+       that mean nothing and that the UI would have to filter back out.
+
+       Built from `parsed` rather than forwarded as `body`, which carries a
+       `months` field and no `type` — transactionsCreate_ would re-parse it and
+       reject it for the missing type. */
+    var single = transactionsCreate_(user, {
+      type: 'expense',
+      walletId: parsed.walletId,
+      amount: parsed.amount,
+      category: parsed.category,
+      note: parsed.note,
+      date: parsed.date
+    });
+    return { groupId: '', months: 1, monthly: money_(total), total: money_(total), transactions: [single] };
+  }
+
+  var groupId = uuid_();
+  var createdAt = new Date().toISOString();
+
+  // Split so the chunks sum to the total exactly, whatever the division does.
+  var base = money_(Math.floor((total * 100) / months) / 100);
+  var remainder = money_(total - base * months);
+
+  var rows = [];
+  for (var i = 0; i < months; i += 1) {
+    rows.push({
+      id: uuid_(),
+      userId: user.id,
+      walletId: parsed.walletId,
+      toWalletId: '',
+      type: 'expense',
+      amount: i === 0 ? money_(base + remainder) : base,
+      category: parsed.category,
+      note: parsed.note,
+      date: addMonths_(parsed.date, i),
+      createdAt: createdAt,
+      installmentGroupId: groupId,
+      installmentIndex: (i + 1) + '/' + months
+    });
+  }
+
+  insertRows_('Transactions', rows);
+
+  return {
+    groupId: groupId,
+    months: months,
+    monthly: base,
+    total: money_(total),
+    transactions: rows
+  };
+}
+
+/**
+ * Deletes every chunk of a plan in one call.
+ *
+ * Without this, cancelling a ten-month plan is ten round trips through the
+ * generic delete, each taking the script lock, and a failure halfway leaves a
+ * half-cancelled plan.
+ */
+function transactionsDeleteInstallment_(user, query) {
+  var groupId = str_(query.groupId || query.id, 'groupId');
+  var removed = deleteWhere_('Transactions', function (t) {
+    return t.userId === user.id && t.installmentGroupId === groupId;
+  });
+  if (!removed) throw apiError_('Installment plan not found', 404, 'NOT_FOUND');
+  return { ok: true, removed: removed, groupId: groupId };
 }
 
 function transactionsUpdate_(user, query, body) {
@@ -2430,14 +2803,41 @@ function dashboardGet_(user, query) {
   monthIncome = money_(monthIncome);
   monthExpense = money_(monthExpense);
 
+  /* ---- Cash, debt and the difference between them ----
+     `liquidBalance` keeps its existing meaning to the decimal — every spending
+     wallet, credit cards included — because the projection, the hero figure and
+     the Sankey all read it and none of them should change. What is new is that
+     the two halves are now reported separately as well.
+
+     Net worth is unchanged and was already correct: a credit wallet's balance
+     is negative, and summing it in subtracts the debt. `creditDebt` below just
+     names the amount that was already being subtracted, so the dashboard can
+     show it instead of leaving the user to infer it from a smaller total. */
+  var cashBalance = 0;
+  var creditDebt = 0;
+  var creditLimit = 0;
   var liquidBalance = 0;
   var investmentCash = 0;
   var investedCost = 0;
   wallets.forEach(function (w) {
-    if (w.mode === 'expense') liquidBalance += w.balance;
-    else investmentCash += w.balance;
+    if (w.mode === 'expense') {
+      liquidBalance += w.balance;
+      if (w.type === 'CREDIT') {
+        // Positive = owed. A card in credit (overpaid) contributes nothing to
+        // debt rather than a negative one, which would overstate headroom.
+        creditDebt += Math.max(0, -w.balance);
+        creditLimit += w.creditLimit;
+      } else {
+        cashBalance += w.balance;
+      }
+    } else {
+      investmentCash += w.balance;
+    }
     investedCost += w.investedCost;
   });
+  cashBalance = money_(cashBalance);
+  creditDebt = money_(creditDebt);
+  creditLimit = money_(creditLimit);
   liquidBalance = money_(liquidBalance);
   investmentCash = money_(investmentCash);
   investedCost = money_(investedCost);
@@ -2500,6 +2900,17 @@ function dashboardGet_(user, query) {
     currency: (settings && settings.currency) || 'USD',
     netWorth: money_(liquidBalance + investmentCash + investedCost),
     liquidBalance: liquidBalance,
+    /* Cash wallets only. */
+    cashBalance: cashBalance,
+    /* Positive = owed across every credit wallet. */
+    creditDebt: creditDebt,
+    creditLimit: creditLimit,
+    /* What you could spend today and still clear every card: cash minus debt.
+       Identical to `liquidBalance` by construction — named separately because
+       "safe to spend" is the question the number answers, and because the two
+       will stop being identical the day a credit wallet is not mode 'expense'. */
+    safeToSpend: money_(cashBalance - creditDebt),
+    creditUtilization: creditLimit > 0 ? money_((creditDebt / creditLimit) * 100) : 0,
     investedCost: investedCost,
     investmentCash: investmentCash,
     monthIncome: monthIncome,

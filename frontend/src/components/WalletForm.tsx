@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
+import { ordinal } from '../lib/format';
 import { useSettings } from '../state/SettingsContext';
-import { Wallet, WalletKind, WalletMode } from '../types';
+import { Wallet, WalletKind, WalletMode, WalletType } from '../types';
 import {
   Alert,
   Button,
@@ -32,26 +33,70 @@ export interface WalletPayload {
   name: string;
   mode: WalletMode;
   kind: WalletKind;
+  /** Derived from `kind`, never picked separately — see the note below. */
+  type: WalletType;
   currency: string;
   openingBalance: number;
   color: string;
   icon: string;
   note: string;
+  creditLimit: number;
+  statementDate: number;
+  dueDate: number;
+  cashbackRate: number;
 }
 
-/** `openingBalance` stays a raw string while typing; see DecimalInput. */
-type FormState = Omit<WalletPayload, 'openingBalance'> & { openingBalance: string };
+/**
+ * Numeric fields stay raw strings while typing; see DecimalInput.
+ *
+ * `type` is absent on purpose: it is a function of `kind`, and offering both
+ * would be two controls for one decision, with the obvious failure mode of a
+ * wallet whose kind says "Credit card" and whose type says CASH. Code.gs
+ * applies the same rule from the other side, so neither client nor server can
+ * write a row where the two disagree.
+ */
+type FormState = Omit<
+  WalletPayload,
+  'openingBalance' | 'type' | 'creditLimit' | 'statementDate' | 'dueDate' | 'cashbackRate'
+> & {
+  openingBalance: string;
+  /** For a card this is the debt, entered positive. See `submit`. */
+  creditLimit: string;
+  statementDate: string;
+  dueDate: string;
+  cashbackRate: string;
+};
 
-function initialState(settingsCurrency: string, wallet?: Wallet): FormState {
+/** Day-of-month selects only ever offer 1-31. */
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+function initialState(
+  settingsCurrency: string,
+  wallet?: Wallet,
+  defaultKind: WalletKind = 'cash',
+): FormState {
+  const isCredit = wallet ? wallet.kind === 'credit' || wallet.type === 'CREDIT' : defaultKind === 'credit';
+
   return {
     name: wallet?.name ?? '',
     mode: wallet?.mode ?? 'expense',
-    kind: wallet?.kind ?? 'cash',
+    kind: wallet?.kind ?? defaultKind,
     currency: wallet?.currency ?? settingsCurrency,
-    openingBalance: decimalToInput(wallet?.openingBalance),
+    /* A card's opening balance is stored negative, like every other debt in the
+       ledger, but is edited as a positive "already owed" figure. Nobody thinks
+       of their card as minus five thousand baht. The flip happens here and in
+       `submit`, and nowhere else. */
+    openingBalance: isCredit
+      ? decimalToInput(Math.max(0, -(wallet?.openingBalance ?? 0)))
+      : decimalToInput(wallet?.openingBalance),
     color: wallet?.color ?? COLORS[0],
-    icon: wallet?.icon ?? ICONS[0],
+    icon: wallet?.icon ?? (defaultKind === 'credit' ? '💳' : ICONS[0]),
     note: wallet?.note ?? '',
+    // 0 means unset, and an empty field says that far better than a literal 0.
+    creditLimit: wallet?.creditLimit ? decimalToInput(wallet.creditLimit) : '',
+    statementDate: wallet?.statementDate ? String(wallet.statementDate) : '',
+    dueDate: wallet?.dueDate ? String(wallet.dueDate) : '',
+    cashbackRate: wallet?.cashbackRate ? String(wallet.cashbackRate) : '',
   };
 }
 
@@ -63,6 +108,7 @@ function initialState(settingsCurrency: string, wallet?: Wallet): FormState {
 export function WalletForm({
   open,
   wallet,
+  defaultKind = 'cash',
   busy,
   error,
   onClose,
@@ -70,13 +116,24 @@ export function WalletForm({
 }: {
   open: boolean;
   wallet?: Wallet;
+  /**
+   * What a *new* wallet starts as. Ignored when editing, where the row decides.
+   *
+   * Exists so "New card" on the Cards page opens a card rather than a cash
+   * wallet the user has to convert — the button already said what it meant, and
+   * making them repeat it in a dropdown is the kind of small friction that
+   * makes a feature feel bolted on.
+   */
+  defaultKind?: WalletKind;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
   onSubmit: (payload: WalletPayload) => Promise<void>;
 }) {
   const { settings } = useSettings();
-  const [form, setForm] = useState<FormState>(() => initialState(settings.currency, wallet));
+  const [form, setForm] = useState<FormState>(() =>
+    initialState(settings.currency, wallet, defaultKind),
+  );
   const [localError, setLocalError] = useState<string | null>(null);
 
   /* Reset when the sheet opens for a different wallet — not when the cached
@@ -86,11 +143,11 @@ export function WalletForm({
 
   useEffect(() => {
     if (open) {
-      setForm(initialState(currencyRef.current, wallet));
+      setForm(initialState(currencyRef.current, wallet, defaultKind));
       setLocalError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, wallet?.id]);
+  }, [open, wallet?.id, defaultKind]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -105,18 +162,41 @@ export function WalletForm({
     }));
   }
 
+  const isCredit = form.mode === 'expense' && form.kind === 'credit';
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!form.name.trim()) {
       setLocalError('Give the wallet a name');
       return;
     }
+
+    const owed = parseDecimal(form.openingBalance);
+    const limit = parseDecimal(form.creditLimit);
+
+    /* Caught here rather than left to the server because it is a mistake about
+       what the fields mean, not a validation failure — a limit lower than the
+       balance is legal on a real card, but entering a limit of 5,000 and a
+       balance of 50,000 is almost always the two fields the wrong way round. */
+    if (isCredit && limit > 0 && owed > limit * 10) {
+      setLocalError(
+        'That balance is more than ten times the limit — check the two fields are the right way round.',
+      );
+      return;
+    }
+
     setLocalError(null);
     try {
       await onSubmit({
         ...form,
         name: form.name.trim(),
-        openingBalance: parseDecimal(form.openingBalance),
+        type: isCredit ? 'CREDIT' : 'CASH',
+        // Back to the ledger's sign convention: debt is negative.
+        openingBalance: isCredit ? -owed : owed,
+        creditLimit: isCredit ? limit : 0,
+        statementDate: isCredit ? Number(form.statementDate) || 0 : 0,
+        dueDate: isCredit ? Number(form.dueDate) || 0 : 0,
+        cashbackRate: isCredit ? parseDecimal(form.cashbackRate) : 0,
       });
     } catch {
       // The parent surfaces the API message via `error`; keep the sheet open.
@@ -178,8 +258,23 @@ export function WalletForm({
           />
         </Field>
 
-        <Field label="Type">
-          <Select value={form.kind} onChange={(e) => patch('kind', e.target.value as WalletKind)}>
+        <Field
+          label="Type"
+          hint={isCredit ? 'Charges add to what you owe; a transfer in pays it off.' : undefined}
+        >
+          <Select
+            value={form.kind}
+            onChange={(e) => {
+              const kind = e.target.value as WalletKind;
+              setForm((prev) => ({
+                ...prev,
+                kind,
+                // The card icon is the obvious default for a card, but only
+                // when the user has not chosen something themselves.
+                icon: kind === 'credit' && prev.icon === ICONS[0] ? '💳' : prev.icon,
+              }));
+            }}
+          >
             {kinds.map((kind) => (
               <option key={kind.value} value={kind.value}>
                 {kind.label}
@@ -188,14 +283,76 @@ export function WalletForm({
           </Select>
         </Field>
 
-        <Field label="Opening balance" hint="What's in it right now. Negative is allowed for credit cards.">
+        <Field
+          label={isCredit ? 'Balance already owed' : 'Opening balance'}
+          hint={
+            isCredit
+              ? 'What the card owes today, as a positive number.'
+              : "What's in it right now."
+          }
+        >
           <DecimalInput
             value={form.openingBalance}
             onChange={(raw) => patch('openingBalance', raw)}
-            allowNegative
+            /* A card's debt is entered positive and negated on submit, so a
+               minus sign here would mean the opposite of what the label says. */
+            allowNegative={!isCredit}
             placeholder="0.00"
           />
         </Field>
+
+        {isCredit && (
+          <>
+            <div className="span-2 form-section-head">
+              <span className="section-label">Billing cycle</span>
+              <p className="field-hint">
+                Optional, but without both days the card cannot tell a statement balance from an
+                unbilled one, and nothing can fall due.
+              </p>
+            </div>
+
+            <Field label="Credit limit" hint="Leave empty if you'd rather not track utilisation.">
+              <DecimalInput
+                value={form.creditLimit}
+                onChange={(raw) => patch('creditLimit', raw)}
+                placeholder="0.00"
+              />
+            </Field>
+
+            <Field label="Cashback rate" hint="Percent. 1.5 means 1.5% back.">
+              <DecimalInput
+                value={form.cashbackRate}
+                onChange={(raw) => patch('cashbackRate', raw)}
+                placeholder="0"
+              />
+            </Field>
+
+            <Field label="Statement closes" hint="Day of month the bill is cut.">
+              <Select
+                value={form.statementDate}
+                onChange={(e) => patch('statementDate', e.target.value)}
+              >
+                <option value="">Not set</option>
+                {DAYS.map((day) => (
+                  <option key={day} value={day}>
+                    {ordinal(day)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Payment due" hint="Day of month it has to be paid.">
+              <Select value={form.dueDate} onChange={(e) => patch('dueDate', e.target.value)}>
+                <option value="">Not set</option>
+                {DAYS.map((day) => (
+                  <option key={day} value={day}>
+                    {ordinal(day)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        )}
 
         <Field label="Currency">
           <Input

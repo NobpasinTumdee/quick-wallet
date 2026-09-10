@@ -2,6 +2,16 @@
 
 export type WalletMode = 'expense' | 'investment';
 export type WalletKind = 'cash' | 'bank' | 'ewallet' | 'credit' | 'brokerage' | 'other';
+/**
+ * What the balance maths has to know about a wallet, as opposed to `kind`,
+ * which is the label the user picked for it.
+ *
+ * Uppercase because that is how it is stored, and the two stay in sync
+ * server-side: `kind: 'credit'` implies `type: 'CREDIT'` and vice versa. A row
+ * written before the column existed has no type at all, and the server reads
+ * that as CASH — see `walletType_` in Code.gs.
+ */
+export type WalletType = 'CASH' | 'CREDIT';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type InvestmentStatus = 'hold' | 'sold';
 export type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly';
@@ -42,6 +52,21 @@ export interface Wallet {
   archived: boolean;
   note: string;
   createdAt: string;
+
+  /* ---- Credit cards ----
+     Always present on anything the API returns; the server normalises a legacy
+     row's empty cells to 'CASH' and 0 before it leaves. They are only
+     meaningful when `type === 'CREDIT'`, and switching a card back to cash
+     clears them rather than leaving a stale limit behind. */
+  type: WalletType;
+  /** 0 means no limit set — utilisation is then unknowable, not 0%. */
+  creditLimit: number;
+  /** Day of month the statement closes, 1-31. 0 = no billing cycle yet. */
+  statementDate: number;
+  /** Day of month payment is due, 1-31. 0 = unset. */
+  dueDate: number;
+  /** Percent: 1.5 means 1.5% back. Informational only — never auto-posted. */
+  cashbackRate: number;
 }
 
 export interface WalletBalance extends Wallet {
@@ -63,6 +88,26 @@ export interface Transaction {
   note: string;
   date: string;
   createdAt: string;
+
+  /* ---- 0% installment plans ----
+     Empty on every ordinary transaction, which is all of them until someone
+     creates a plan. A plan is n of these rows sharing a group id, one per
+     month, each an otherwise completely normal expense — which is why nothing
+     that aggregates transactions needed to learn about installments. */
+  installmentGroupId: string;
+  /** "3/10". Empty when the row is not part of a plan. */
+  installmentIndex: string;
+}
+
+/** What `transactions.installment` answers with — the whole plan at once. */
+export interface InstallmentPlanResult {
+  /** Empty when `months` was 1: a one-chunk plan is just a transaction. */
+  groupId: string;
+  months: number;
+  /** The per-month figure. The first chunk carries any rounding remainder. */
+  monthly: number;
+  total: number;
+  transactions: Transaction[];
 }
 
 export interface Subscription {
@@ -235,7 +280,18 @@ export interface DashboardSummary {
   period: string;
   currency: string;
   netWorth: number;
+  /** Every spending wallet, credit cards included — unchanged meaning. */
   liquidBalance: number;
+  /** Spending wallets of type CASH only. */
+  cashBalance: number;
+  /** Positive = owed, summed across every credit wallet. */
+  creditDebt: number;
+  /** Summed `creditLimit` across every credit wallet. 0 when none is set. */
+  creditLimit: number;
+  /** `cashBalance - creditDebt`: spendable today with every card cleared. */
+  safeToSpend: number;
+  /** `creditDebt / creditLimit` as a percent. 0 when no limit is set. */
+  creditUtilization: number;
   investedCost: number;
   investmentCash: number;
   monthIncome: number;
