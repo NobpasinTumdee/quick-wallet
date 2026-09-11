@@ -1,6 +1,7 @@
 import { FileText, RefreshCw, X } from 'lucide-react';
 import {
   ButtonHTMLAttributes,
+  forwardRef,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
@@ -128,9 +129,16 @@ export function Field({
   );
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx('control', props.className)} />;
-}
+/**
+ * `forwardRef` so a caller can keep focus where it wants it — the bill splitter
+ * refocuses the name box after each chip is added, so four names are four
+ * keystrokes rather than four round trips to the mouse.
+ */
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input(props, ref) {
+    return <input {...props} ref={ref} className={cx('control', props.className)} />;
+  },
+);
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cx('control', props.className)} />;
@@ -224,60 +232,6 @@ export function Segmented<T extends string>({
           {option.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-/**
- * An on/off switch.
- *
- * A real `<button role="switch">` rather than a restyled checkbox: the checkbox
- * hack needs a hidden input, a label wired to it by id, and `:checked +` sibling
- * selectors that constrain the markup order — all to reproduce what
- * `aria-checked` says directly. The button also gets keyboard activation for
- * free, which the hidden-input version only gets back if the label is focusable.
- *
- * Prefer `Segmented` when the two states have names worth reading ("Equal" vs
- * "Custom"). Use this when the control is genuinely a yes/no and its label
- * already says which.
- */
-export function Toggle({
-  checked,
-  onChange,
-  label,
-  hint,
-  disabled,
-  id,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: ReactNode;
-  hint?: ReactNode;
-  disabled?: boolean;
-  id?: string;
-}) {
-  const generated = useId();
-  const labelId = id ?? generated;
-
-  return (
-    <div className={cx('toggle-row', disabled && 'is-disabled')}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-labelledby={`${labelId}-label`}
-        className={cx('toggle', checked && 'is-on')}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-      >
-        <span className="toggle-knob" aria-hidden="true" />
-      </button>
-      <span className="toggle-text">
-        <span className="toggle-label" id={`${labelId}-label`}>
-          {label}
-        </span>
-        {hint && <span className="field-hint">{hint}</span>}
-      </span>
     </div>
   );
 }

@@ -155,11 +155,15 @@ const NAMED_ACTIONS: Record<string, string> = {
      budgets/copy is listed. */
   'transactions/installment': 'transactions.installment',
   'transactions/cancel-installment': 'transactions.cancelInstallment',
-  /* Hyphenated in the path, camelCase in the action — the resolver below would
-     otherwise read "mark-paid" as a transaction id. Same reason budgets/copy
-     and the two installment routes are listed. */
-  'bill-splits': 'billSplits.list',
 };
+
+/* NOTE: `bill-splits` must NOT be listed above. NAMED_ACTIONS is consulted
+   before the method is, so an entry here would resolve *every* verb on the
+   collection to the same action — POST included, which would silently call
+   `billSplits.list`, hand the caller an array where it expected
+   `{ billSplit, transaction }`, and put an `undefined` into the cache that
+   crashes the next render. RESOURCE_ALIASES below already gives GET the right
+   action, and the method rules give POST its own. */
 
 /** `/bill-splits/:id/mark-paid` -> `billSplits.markPaid`. */
 const RESOURCE_ALIASES: Record<string, string> = {

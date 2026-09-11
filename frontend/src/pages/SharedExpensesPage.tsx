@@ -123,6 +123,9 @@ export function SharedExpensesPage() {
   const billCard = (bill: BillSplit) => {
     const wallet = payableFrom.find((w) => w.id === bill.walletId);
     const isSettled = bill.status === 'settled';
+    /* Defensive, not decorative: one malformed row in the cache used to take
+       the entire page down rather than just itself. */
+    const shares = bill.splits ?? [];
 
     return (
       <article key={bill.id} className={cx('split-card', isSettled && 'is-settled')}>
@@ -177,7 +180,7 @@ export function SharedExpensesPage() {
         </div>
 
         <ul className="split-people">
-          {bill.splits.map((share, index) => {
+          {shares.map((share, index) => {
             const key = `${bill.id}:${index}`;
             const busy = busyShare === key;
             return (
@@ -317,10 +320,10 @@ export function SharedExpensesPage() {
             </div>
           </section>
 
-          <div className="split-grid">{open.map(billCard)}</div>
+          <div className="split-grid">{open.filter(Boolean).map(billCard)}</div>
 
           {showSettled && settled.length > 0 && (
-            <div className="split-grid">{settled.map(billCard)}</div>
+            <div className="split-grid">{settled.filter(Boolean).map(billCard)}</div>
           )}
 
           {/* The accounting note, kept at the bottom where it answers the

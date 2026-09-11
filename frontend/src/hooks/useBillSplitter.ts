@@ -187,6 +187,15 @@ export function useBillSplitter(): BillSplitterState {
          trip and the form stays open until it lands. */
       const result = await api.post<BillSplitResult>('/api/bill-splits', input);
 
+      /* Belt and braces. A create that answers with anything but a bill means
+         the request was routed somewhere else — which is exactly what used to
+         happen, and the `undefined` it pushed into the cache took the whole
+         render tree down on the next paint. Failing loudly here keeps the
+         damage to one toast instead of a white screen. */
+      if (!result?.billSplit?.id) {
+        throw new Error('The server did not return the new bill');
+      }
+
       mutateMatching<BillSplit[]>('/api/bill-splits', (rows) => [result.billSplit, ...(rows ?? [])]);
       if (result.transaction) {
         addTransaction(result.transaction);
@@ -235,6 +244,7 @@ export function useBillSplitter(): BillSplitterState {
 
         /* The server is the authority on what actually happened — including
            "nothing", when the share was already settled by another tab. */
+        if (!result?.billSplit?.id) throw new Error('The server did not return the updated bill');
         replaceBill(result.billSplit);
         if (result.transaction) addTransaction(result.transaction);
         else if (result.alreadyPaid) {
@@ -263,6 +273,7 @@ export function useBillSplitter(): BillSplitterState {
         { index },
       );
 
+      if (!result?.billSplit?.id) throw new Error('The server did not return the updated bill');
       replaceBill(result.billSplit);
       if (result.removedTransactionId) {
         mutateMatching<Transaction[]>('/api/transactions', (rows) =>

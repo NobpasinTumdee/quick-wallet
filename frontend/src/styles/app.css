@@ -7173,175 +7173,6 @@ table.data.data--nested td {
 }
 
 /* ==========================================================================
-   Toggle switch
-   --------------------------------------------------------------------------
-   A real button with role="switch", so the track is the control rather than a
-   label pretending to be one. Only `transform` animates — the knob slides on
-   the compositor and the track just cross-fades its background.
-   ========================================================================== */
-
-.toggle-row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.toggle-row.is-disabled {
-  opacity: 0.55;
-}
-
-.toggle {
-  flex: none;
-  position: relative;
-  width: 42px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  cursor: pointer;
-  /* Nudged down so the knob's centre lines up with the label's first line
-     rather than its box, which is what the eye actually compares. */
-  margin-top: 1px;
-  transition:
-    background-color var(--dur-base) var(--ease-out),
-    border-color var(--dur-base) var(--ease-out);
-}
-
-.toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
-
-.toggle.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--dur-base) var(--ease-spring);
-}
-
-.toggle.is-on .toggle-knob {
-  transform: translateX(18px);
-}
-
-.toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.toggle-label {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-}
-
-/* ==========================================================================
-   Bill splitter — the form's split engine
-   ========================================================================== */
-
-.split-engine {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
-}
-
-.split-engine-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.split-engine-head .section-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.split-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.split-row {
-  display: grid;
-  /* Name takes the slack, amount is fixed so the column of figures aligns
-     down the list, delete is square. */
-  grid-template-columns: minmax(0, 1fr) 116px auto;
-  gap: var(--space-2);
-  align-items: center;
-  /* Rows are added and removed one at a time, so each animates in on its own
-     rather than the list reflowing all at once. */
-  animation: split-row-in var(--dur-base) var(--ease-out) both;
-}
-
-@keyframes split-row-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* A name typed twice. Marked on the row itself, because the alert above names
-   only one of the pair and the user has to find the other. */
-.split-row.is-duplicate .control {
-  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
-  background: color-mix(in srgb, var(--warning) 8%, transparent);
-}
-
-.split-amount {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.split-remove {
-  padding-inline: var(--space-2);
-  color: var(--text-faint);
-}
-
-.split-remove:hover {
-  color: var(--negative);
-}
-
-.split-add {
-  align-self: flex-start;
-}
-
-.split-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--divider);
-}
-
-/* ==========================================================================
    Shared expenses — the tracking page
    ========================================================================== */
 
@@ -7557,6 +7388,417 @@ table.data.data--nested td {
   }
 
   .toggle-knob {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Bill splitter — the creation sheet
+   --------------------------------------------------------------------------
+   Replaces the form-grid version. The whole layout is a single column with
+   generous rhythm rather than a two-column grid of labelled fields, because
+   the sheet is read top to bottom in one pass: the number, who was there, how
+   to divide it. Labels only reappear inside "Add details", where the fields
+   genuinely need naming.
+   ========================================================================== */
+
+.split-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---- Hero: the amount owns the top of the sheet ---- */
+
+.split-hero-input {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-5);
+  border-bottom: 1px solid var(--divider);
+}
+
+/* Chromeless on purpose. A box around a 44px numeral makes it look like a
+   field to be filled in; without one it reads as the figure itself, which is
+   what the user is actually thinking about. */
+.split-amount-xl {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text);
+}
+
+.split-amount-xl::placeholder {
+  color: var(--text-faint);
+  opacity: 0.55;
+}
+
+.split-amount-xl:focus,
+.split-amount-xl:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* The caret is the only focus affordance the big number needs — a ring around
+   it would put back the box the design just removed. So the underline lives on
+   the title beneath, where a normal-sized field does want one. */
+.split-title-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.split-title-input::placeholder {
+  color: var(--text-faint);
+}
+
+.split-title-input:focus,
+.split-title-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-bottom-color: var(--accent);
+}
+
+/* A pill, not a field. The wallet is a small decision and should look like one
+   next to the amount above it. */
+.split-wallet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.split-wallet-pill:focus-within {
+  border-color: var(--accent);
+}
+
+/* The native select is kept for its picker but stripped of its own chrome, so
+   the pill is the control the user sees. */
+.split-wallet-pill .control {
+  width: auto;
+  max-width: 190px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.split-wallet-pill .control:focus,
+.split-wallet-pill .control:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---- Sections ---- */
+
+.split-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.split-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+/* ---- Chips ---- */
+
+.split-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.split-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  /* Only transform and colour animate, so a chip appearing costs one
+     composited frame rather than a layout pass over the whole row. */
+  animation: split-chip-in var(--dur-base) var(--ease-spring) both;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+@keyframes split-chip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.split-chip.is-on {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text);
+}
+
+/* "Me" is a button, so it gets the press feedback the others do not need. */
+.split-chip.is-self {
+  cursor: pointer;
+}
+
+.split-chip.is-self:not(.is-on) {
+  /* Out of the split: present, clearly off, still obviously tappable. */
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.split-chip.is-self:active {
+  transform: scale(0.96);
+}
+
+.split-chip.is-self:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.split-chip.is-duplicate {
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.split-chip-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+}
+
+.split-chip:not(.is-on) .split-chip-mark {
+  background: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.split-chip-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.split-chip-x:hover {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  color: var(--negative);
+}
+
+.split-chip-x:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ---- The tally ---- */
+
+.split-per-person {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.split-tally {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-tally-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-sm);
+  animation: split-chip-in var(--dur-fast) var(--ease-out) both;
+}
+
+.split-tally-row.is-self {
+  color: var(--text-muted);
+}
+
+.split-tally-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+  white-space: nowrap;
+}
+
+.split-tally-input {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Details disclosure ---- */
+
+.split-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.split-details-toggle:hover {
+  color: var(--text);
+}
+
+.split-details-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
+
+.split-details-toggle svg {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.split-details-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.split-details {
+  animation: split-details-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes split-details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.split-explainer {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* ---- The remaining counter, in the footer beside submit ---- */
+
+.split-remaining {
+  margin-right: auto;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+/* Your own share. Not a problem — the most common outcome. */
+.split-remaining.is-own {
+  color: var(--text-muted);
+}
+
+/* Nobody is covering the difference. */
+.split-remaining.is-unassigned {
+  color: var(--warning);
+}
+
+/* Collecting more than was spent. The only state that blocks submit. */
+.split-remaining.is-over {
+  color: var(--negative);
+}
+
+@media (max-width: 480px) {
+  .split-amount-xl {
+    font-size: var(--text-xl);
+  }
+
+  /* The counter needs its own line once the two buttons fill the footer. */
+  .split-remaining {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: var(--space-2);
+    text-align: center;
+  }
+
+  .split-tally-input {
+    width: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-chip,
+  .split-tally-row,
+  .split-details {
+    animation: none;
+  }
+
+  .split-details-toggle svg {
     transition: none;
   }
 }
