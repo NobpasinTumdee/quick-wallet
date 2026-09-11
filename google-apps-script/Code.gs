@@ -208,6 +208,53 @@ var SHEETS = {
       { key: 'createdAt', header: 'Created At', type: 'date' }
     ]
   },
+  /**
+   * A bill one person paid and several people owe a share of.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THE SHARES ARE ONE JSON CELL AND NOT THEIR OWN SHEET
+   * -------------------------------------------------------------------------
+   * A share has no life of its own: it is never queried across bills, never
+   * reported on independently, and never outlives the bill it belongs to. A
+   * `BillSplitShares` sheet would therefore cost an extra getDataRange() and a
+   * billId filter on every read, to model a strict parent-child relationship
+   * the parent already fully contains. Apps Script bills per Sheets call, so
+   * that is the expensive shape, not the cheap one.
+   *
+   * The same reasoning the Settings sheet uses for its theme library.
+   */
+  BillSplits: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'title', header: 'Title', type: 'string' },
+      { key: 'totalAmount', header: 'Total Amount', type: 'number' },
+      /* The wallet that actually paid, and that every repayment returns to.
+         Held on the bill rather than re-derived from the expense row, because
+         the expense can be edited or deleted by the user from the Activity
+         screen and the bill still has to know where the money came from. */
+      { key: 'walletId', header: 'Wallet ID', type: 'string' },
+      { key: 'note', header: 'Note', type: 'string' },
+      /* [{ personName, amount, isPaid, repaymentTxId }] — see parseSplits_. */
+      { key: 'splitsJSON', header: 'Splits (JSON)', type: 'jsonlist' },
+      /* 'open' | 'settled'. Derived on every write from the shares themselves,
+         never set by the client: a status that can disagree with the rows it
+         summarises is worse than no status at all. */
+      { key: 'status', header: 'Status', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      /* -------------------------------------------------------------------
+         NOT IN THE ORIGINAL SPEC, AND LOAD-BEARING
+         -------------------------------------------------------------------
+         The id of the expense Transaction written when the bill was created.
+         Without it the bill is a dead end: nothing can delete the bill and its
+         expense as one act, nothing can tell you which row on the Activity
+         screen this bill produced, and a repayment has no way to prove it is
+         returning money the same wallet actually spent. One string column is a
+         cheap price for that. */
+      { key: 'expenseTxId', header: 'Expense Tx ID', type: 'string' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -374,6 +421,16 @@ function dispatch_(action, method, query, body, token) {
     'subscriptions.update': function () { return subscriptionsUpdate_(requireAuth_(token), query, body); },
     'subscriptions.delete': function () { return subscriptionsDelete_(requireAuth_(token), query); },
     'subscriptions.pay': function () { return subscriptionsPay_(requireAuth_(token), query, body); },
+
+    /* Bill splits. Create and markPaid each write a Transaction *and* a
+       BillSplits row in one locked call — see the note above the handlers. */
+    'billSplits.list': function () { return billSplitsList_(requireAuth_(token), query); },
+    'billSplits.get': function () { return billSplitsGet_(requireAuth_(token), query); },
+    'billSplits.create': function () { return billSplitsCreate_(requireAuth_(token), body); },
+    'billSplits.update': function () { return billSplitsUpdate_(requireAuth_(token), query, body); },
+    'billSplits.delete': function () { return billSplitsDelete_(requireAuth_(token), query); },
+    'billSplits.markPaid': function () { return billSplitsMarkPaid_(requireAuth_(token), query, body); },
+    'billSplits.markUnpaid': function () { return billSplitsMarkUnpaid_(requireAuth_(token), query, body); },
 
     'watchlist.list': function () { return watchlistList_(requireAuth_(token), query); },
     'watchlist.create': function () { return watchlistCreate_(requireAuth_(token), body); },
@@ -2775,6 +2832,416 @@ function themesActivate_(user, query) {
 
   wearTheme_(next, found.theme);
   return persistSettings_(user.id, next);
+}
+
+/* =========================================================================
+ * Bill splits
+ * -------------------------------------------------------------------------
+ * WHY BOTH HALVES ARE WRITTEN SERVER-SIDE
+ * -------------------------------------------------------------------------
+ * Creating a split bill is two writes that must not come apart: an expense
+ * Transaction for what was actually paid, and the BillSplits row that says who
+ * owes what back. Done as two calls from the client, a failure between them
+ * leaves either an expense nobody is tracking or a bill for money that never
+ * left the wallet — and the user has no way to tell which.
+ *
+ * So both land in one handler, inside the script lock the router already
+ * takes for every write. The same is true of a repayment: the income row and
+ * the isPaid flag are one fact, not two.
+ *
+ * Each handler answers with every row it touched, so the client can reconcile
+ * its optimistic patch against what the server actually decided rather than
+ * guessing. That is the shape subscriptionsPay_ established.
+ *
+ * -------------------------------------------------------------------------
+ * WHAT THE ARITHMETIC MEANS
+ * -------------------------------------------------------------------------
+ *   totalAmount          what left the wallet
+ *   sum(splits)          what other people owe back
+ *   totalAmount - sum    the payer's own share — never stored, always implied
+ *
+ * So the shares are allowed to sum to *less* than the total and usually do:
+ * you were at the dinner too. They may never sum to more, which would mean
+ * collecting more than was spent.
+ * ========================================================================= */
+
+var BILL_SPLIT_STATUSES = ['open', 'settled'];
+
+/** Money comparisons need a tolerance; two decimal places is as fine as it gets. */
+var SPLIT_EPSILON = 0.005;
+
+/**
+ * Validates the shares array and returns it normalised.
+ *
+ * `repaymentTxId` is preserved rather than recomputed: an edit that rewrites
+ * the shares must not silently orphan the income rows already written for the
+ * people who have paid.
+ */
+function parseSplits_(value, totalAmount) {
+  var raw = Object.prototype.toString.call(value) === '[object Array]' ? value : [];
+  if (!raw.length) throw bad_('Add at least one person to split with', 'NO_SPLITS');
+  if (raw.length > 50) throw bad_('A bill can be split between at most 50 people', 'TOO_MANY_SPLITS');
+
+  var seen = {};
+  var sum = 0;
+
+  var splits = raw.map(function (entry, index) {
+    var personName = str_(entry && entry.personName, 'personName', { max: 60 });
+
+    // Two "Nick"s on one bill is almost certainly a mistake, and it makes the
+    // row impossible to address by name in the UI.
+    var key = personName.toLowerCase();
+    if (seen[key]) throw bad_('"' + personName + '" is on this bill twice', 'DUPLICATE_PERSON');
+    seen[key] = true;
+
+    var amount = num_(entry && entry.amount, 'amount', { min: 0 });
+    if (!(amount > 0)) {
+      throw bad_('Every share must be greater than zero — check ' + personName, 'ZERO_SHARE');
+    }
+    sum += amount;
+
+    return {
+      personName: personName,
+      amount: money_(amount),
+      isPaid: bool_(entry && entry.isPaid, false),
+      repaymentTxId: str_(entry && entry.repaymentTxId, 'repaymentTxId', {
+        required: false, max: 60
+      }),
+      index: index
+    };
+  });
+
+  if (money_(sum) > money_(totalAmount) + SPLIT_EPSILON) {
+    throw bad_(
+      'The shares add up to ' + money_(sum) + ', which is more than the ' +
+        money_(totalAmount) + ' bill',
+      'SPLITS_EXCEED_TOTAL'
+    );
+  }
+
+  return splits;
+}
+
+/** 'settled' once nobody owes anything. Derived, never taken from the client. */
+function splitsStatus_(splits) {
+  var outstanding = splits.filter(function (s) { return !s.isPaid; }).length;
+  return outstanding === 0 ? 'settled' : 'open';
+}
+
+/** Adds the figures every screen would otherwise recompute identically. */
+function decorateBillSplit_(row) {
+  var splits = Object.prototype.toString.call(row.splitsJSON) === '[object Array]'
+    ? row.splitsJSON
+    : [];
+
+  var owedTotal = 0;
+  var recovered = 0;
+  splits.forEach(function (s) {
+    var amount = Number(s.amount) || 0;
+    owedTotal += amount;
+    if (s.isPaid) recovered += amount;
+  });
+
+  var total = Number(row.totalAmount) || 0;
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    totalAmount: money_(total),
+    walletId: row.walletId,
+    note: row.note,
+    splits: splits,
+    status: row.status || splitsStatus_(splits),
+    createdAt: row.createdAt,
+    expenseTxId: row.expenseTxId,
+
+    /* Everyone else's shares added up. */
+    owedTotal: money_(owedTotal),
+    recovered: money_(recovered),
+    outstanding: money_(owedTotal - recovered),
+    /* What the payer is genuinely out of pocket for — their own share of the
+       bill. Implied by the arithmetic rather than stored, so it cannot drift. */
+    ownShare: money_(total - owedTotal),
+    /* Percent of what is owed that has come back. 100 when nobody owes
+       anything, which reads better than 0 for a bill with no shares. */
+    recoveredPercent: owedTotal > 0 ? money_((recovered / owedTotal) * 100) : 100
+  };
+}
+
+function billSplitsList_(user, query) {
+  var rows = userRows_('BillSplits', user.id);
+
+  if (query && query.status) {
+    var wanted = oneOf_(query.status, 'status', BILL_SPLIT_STATUSES);
+    rows = rows.filter(function (r) { return (r.status || 'open') === wanted; });
+  }
+
+  // Newest first: an open bill is a thing you are chasing, and the one you
+  // just created is the one you are most likely to act on.
+  return rows
+    .slice()
+    .sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })
+    .map(decorateBillSplit_);
+}
+
+function billSplitsGet_(user, query) {
+  var row = findById_('BillSplits', str_(query.id, 'id'));
+  if (!row || row.userId !== user.id) {
+    throw apiError_('Bill split not found', 404, 'NOT_FOUND');
+  }
+  return decorateBillSplit_(row);
+}
+
+/**
+ * Creates the bill AND the expense it represents.
+ *
+ * Order matters: the Transaction is written first so that if the sheet refuses
+ * the BillSplits row, what survives is an ordinary expense the user can see and
+ * delete on the Activity screen. The other order would leave a bill claiming
+ * money that never moved, which is invisible and actively misleading.
+ */
+function billSplitsCreate_(user, body) {
+  var title = str_(body.title, 'title', { max: 120 });
+  var totalAmount = num_(body.totalAmount, 'totalAmount', { min: 0 });
+  if (!(totalAmount > 0)) throw bad_('"totalAmount" must be greater than zero');
+
+  var walletId = str_(body.walletId, 'walletId');
+  var wallet = ownedWallet_(user.id, walletId, 'Wallet');
+  if (wallet.mode === 'investment') {
+    throw bad_(
+      'A bill has to be paid from a spending wallet, not an investment one.',
+      'WRONG_WALLET_MODE'
+    );
+  }
+
+  var splits = parseSplits_(body.splits, totalAmount);
+  var note = str_(body.note, 'note', { required: false, max: 300 });
+  var date = isoDate_(body.date || toDateKey_(new Date()), 'date');
+  var category = str_(body.category, 'category', { required: false, max: 60 }) || 'Shared';
+
+  var now = new Date().toISOString();
+
+  /* The whole bill is the expense, not just the payer's share: the money left
+     the wallet in full, and each repayment brings part of it back as income.
+     Recording only the payer's share here would make the wallet balance wrong
+     for as long as anyone still owed. */
+  var tx = {
+    id: uuid_(),
+    userId: user.id,
+    walletId: walletId,
+    toWalletId: '',
+    type: 'expense',
+    amount: money_(totalAmount),
+    category: category,
+    note: note || title,
+    date: date,
+    createdAt: now,
+    installmentGroupId: '',
+    installmentIndex: ''
+  };
+  insertRow_('Transactions', tx);
+
+  var bill = {
+    id: uuid_(),
+    userId: user.id,
+    title: title,
+    totalAmount: money_(totalAmount),
+    walletId: walletId,
+    note: note,
+    splitsJSON: splits.map(function (s) {
+      return {
+        personName: s.personName, amount: s.amount, isPaid: s.isPaid,
+        repaymentTxId: s.repaymentTxId
+      };
+    }),
+    status: splitsStatus_(splits),
+    createdAt: now,
+    expenseTxId: tx.id
+  };
+  insertRow_('BillSplits', bill);
+
+  return { ok: true, billSplit: decorateBillSplit_(bill), transaction: tx };
+}
+
+/**
+ * Marks one person paid and books the money back into the wallet.
+ *
+ * Addressed by array index rather than by name: names are user-typed, and an
+ * edit that renames "Nick" to "Nicky" between the page painting and the button
+ * being pressed would otherwise settle nobody, or — worse, with two similar
+ * names — the wrong person.
+ */
+function billSplitsMarkPaid_(user, query, body) {
+  var bill = findById_('BillSplits', str_(query.id, 'id'));
+  if (!bill || bill.userId !== user.id) {
+    throw apiError_('Bill split not found', 404, 'NOT_FOUND');
+  }
+
+  var splits = Object.prototype.toString.call(bill.splitsJSON) === '[object Array]'
+    ? bill.splitsJSON.slice()
+    : [];
+
+  var index = Math.round(num_((body && body.index) !== undefined ? body.index : query.index,
+                              'index', { min: 0, required: true }));
+  var share = splits[index];
+  if (!share) throw apiError_('That person is not on this bill', 404, 'SPLIT_NOT_FOUND');
+
+  // Idempotent rather than an error: a double-tap on a slow connection should
+  // not book the money back twice.
+  if (share.isPaid) {
+    return { ok: true, billSplit: decorateBillSplit_(bill), transaction: null, alreadyPaid: true };
+  }
+
+  var amount = num_(share.amount, 'amount', { min: 0 });
+  if (!(amount > 0)) throw bad_('That share has no amount to collect', 'ZERO_SHARE');
+
+  // Re-checked now rather than trusted from the row: the wallet may have been
+  // archived or deleted since the bill was created.
+  ownedWallet_(user.id, bill.walletId, 'Wallet');
+
+  var tx = {
+    id: uuid_(),
+    userId: user.id,
+    walletId: bill.walletId,
+    toWalletId: '',
+    /* Income, because the money genuinely arrives in the wallet. The pair nets
+       out correctly over the bill's life: the full amount went out as expense,
+       each share comes back as income, and what is left is the payer's own
+       share — which is exactly what they spent. */
+    type: 'income',
+    amount: money_(amount),
+    category: 'Reimbursement',
+    note: share.personName + ' · ' + bill.title,
+    date: isoDate_((body && body.date) || toDateKey_(new Date()), 'date'),
+    createdAt: new Date().toISOString(),
+    installmentGroupId: '',
+    installmentIndex: ''
+  };
+  insertRow_('Transactions', tx);
+
+  splits[index] = {
+    personName: share.personName,
+    amount: money_(amount),
+    isPaid: true,
+    repaymentTxId: tx.id
+  };
+
+  var updated = updateRow_('BillSplits', bill.id, {
+    splitsJSON: splits,
+    status: splitsStatus_(splits)
+  });
+  delete updated._row;
+
+  return { ok: true, billSplit: decorateBillSplit_(updated), transaction: tx };
+}
+
+/**
+ * Undoes a repayment.
+ *
+ * Exists because "Mark as paid" is one tap on the wrong row away from being
+ * wrong, and the alternative correction — hunting the income row down on the
+ * Activity screen and deleting it by hand — leaves the bill still showing
+ * paid. The income row is removed here so the two cannot disagree.
+ */
+function billSplitsMarkUnpaid_(user, query, body) {
+  var bill = findById_('BillSplits', str_(query.id, 'id'));
+  if (!bill || bill.userId !== user.id) {
+    throw apiError_('Bill split not found', 404, 'NOT_FOUND');
+  }
+
+  var splits = Object.prototype.toString.call(bill.splitsJSON) === '[object Array]'
+    ? bill.splitsJSON.slice()
+    : [];
+
+  var index = Math.round(num_((body && body.index) !== undefined ? body.index : query.index,
+                              'index', { min: 0, required: true }));
+  var share = splits[index];
+  if (!share) throw apiError_('That person is not on this bill', 404, 'SPLIT_NOT_FOUND');
+
+  var removedTxId = str_(share.repaymentTxId, 'repaymentTxId', { required: false, max: 60 });
+  if (removedTxId) {
+    var tx = findById_('Transactions', removedTxId);
+    // Only ever deletes a row this user owns, and only the one the share
+    // itself points at — never a transaction found by matching amounts.
+    if (tx && tx.userId === user.id) deleteRow_('Transactions', removedTxId);
+  }
+
+  splits[index] = {
+    personName: share.personName,
+    amount: money_(Number(share.amount) || 0),
+    isPaid: false,
+    repaymentTxId: ''
+  };
+
+  var updated = updateRow_('BillSplits', bill.id, {
+    splitsJSON: splits,
+    status: splitsStatus_(splits)
+  });
+  delete updated._row;
+
+  return { ok: true, billSplit: decorateBillSplit_(updated), removedTransactionId: removedTxId };
+}
+
+/** Edits the parts of a bill that are safe to change after the fact. */
+function billSplitsUpdate_(user, query, body) {
+  var bill = findById_('BillSplits', str_(query.id, 'id'));
+  if (!bill || bill.userId !== user.id) {
+    throw apiError_('Bill split not found', 404, 'NOT_FOUND');
+  }
+
+  var patch = {};
+  if (body.title !== undefined) patch.title = str_(body.title, 'title', { max: 120 });
+  if (body.note !== undefined) patch.note = str_(body.note, 'note', { required: false, max: 300 });
+
+  /* The shares can be rewritten, but the total and the wallet cannot: both are
+     already recorded in an expense Transaction the user may have edited, and
+     silently rewriting one side of that pair is how the wallet balance and the
+     bill stop agreeing. Delete and recreate to change those. */
+  if (body.splits !== undefined) {
+    var splits = parseSplits_(body.splits, Number(bill.totalAmount) || 0);
+    patch.splitsJSON = splits.map(function (s) {
+      return {
+        personName: s.personName, amount: s.amount, isPaid: s.isPaid,
+        repaymentTxId: s.repaymentTxId
+      };
+    });
+    patch.status = splitsStatus_(splits);
+  }
+
+  var updated = updateRow_('BillSplits', bill.id, patch);
+  delete updated._row;
+  return decorateBillSplit_(updated);
+}
+
+/**
+ * Deletes the bill, and by default everything it wrote.
+ *
+ * `keepTransactions=true` leaves the ledger alone — for someone who wants the
+ * spending history but is done tracking who owed what.
+ */
+function billSplitsDelete_(user, query) {
+  var bill = findById_('BillSplits', str_(query.id, 'id'));
+  if (!bill || bill.userId !== user.id) {
+    throw apiError_('Bill split not found', 404, 'NOT_FOUND');
+  }
+
+  var keep = bool_(query.keepTransactions, false);
+  var removed = 0;
+
+  if (!keep) {
+    var ids = {};
+    if (bill.expenseTxId) ids[bill.expenseTxId] = true;
+    (Object.prototype.toString.call(bill.splitsJSON) === '[object Array]' ? bill.splitsJSON : [])
+      .forEach(function (s) { if (s && s.repaymentTxId) ids[s.repaymentTxId] = true; });
+
+    removed = deleteWhere_('Transactions', function (t) {
+      return t.userId === user.id && ids[t.id] === true;
+    });
+  }
+
+  deleteRow_('BillSplits', bill.id);
+  return { ok: true, removedTransactions: removed };
 }
 
 /* =========================================================================

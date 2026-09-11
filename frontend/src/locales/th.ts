@@ -43,6 +43,7 @@ import type { TranslationSchema } from './en';
 
 export const th: TranslationSchema = {
   nav: {
+    splits: 'หารบิล',
     dashboard: 'ภาพรวม',
     wallets: 'กระเป๋าเงิน',
     cards: 'บัตรเครดิต',
@@ -684,6 +685,107 @@ export const th: TranslationSchema = {
     customAccentColour: 'สีหลักแบบกำหนดเอง',
     revertChanges: 'ย้อนการแก้ไข',
     resetToDefault: 'คืนค่าเริ่มต้น',
+  },
+
+  split: {
+    owedLabel: 'พวกเขาค้างจ่าย',
+    youCoverLabel: 'คุณรับผิดชอบ',
+    leavesNowLabel: 'หักออกตอนนี้',
+    // ---- Page chrome ----
+    title: 'ค่าใช้จ่ายร่วม',
+    navLabel: 'หารบิล',
+    lede: 'จ่ายแทนเพื่อนไปก่อนใช่ไหม บันทึกยอดเต็มไว้ แล้วค่อยเก็บเงินคืนเข้ากระเป๋าเงินใบเดิมทีละคน',
+    refresh: 'รีเฟรชค่าใช้จ่ายร่วม',
+    newBill: 'หารบิล',
+    emptyTitle: 'ยังไม่มีบิลที่หารกัน',
+    emptyBody:
+      'จ่ายค่าอาหารหรือซื้อของเป็นกลุ่มมาใช่ไหม บันทึกบิลครั้งเดียว ระบุว่าใครต้องจ่ายเท่าไร แล้วติ๊กทีละคนเมื่อได้รับเงินคืน',
+    splitFirstBill: 'หารบิลแรกของคุณ',
+
+    // ---- Roll-up ----
+    owedToYou: 'ยอดที่ค้างรับ',
+    peopleOwing_one: 'ยังมี {{count}} คนค้างจ่าย',
+    peopleOwing_other: 'ยังมี {{count}} คนค้างจ่าย',
+    nobodyOwes: 'ทุกคนจ่ายครบแล้ว',
+    recoveredTotal: 'ได้รับคืนแล้ว',
+    openBills_one: 'บิลที่ยังไม่ปิด {{count}} รายการ',
+    openBills_other: 'บิลที่ยังไม่ปิด {{count}} รายการ',
+    settledBills: 'ปิดแล้ว',
+    showSettled: 'แสดงบิลที่ปิดแล้ว',
+    hideSettled: 'ซ่อนบิลที่ปิดแล้ว',
+
+    // ---- A bill card ----
+    statusOpen: 'ยังไม่ปิด',
+    statusSettled: 'ปิดแล้ว',
+    billTotal: 'ยอดรวม {{amount}}',
+    yourShare: 'ส่วนของคุณ {{amount}}',
+    paidFrom: 'จ่ายจาก{{wallet}}',
+    recoveredOf: 'ได้คืนแล้ว {{recovered}} จาก {{owed}}',
+    outstandingAmount: 'ยังค้างรับ {{amount}}',
+    owesAmount: 'ค้างจ่าย {{amount}}',
+    markPaid: 'ทำเครื่องหมายว่าจ่ายแล้ว',
+    markPaidFor: 'ทำเครื่องหมายว่า{{name}}จ่ายแล้ว',
+    paid: 'จ่ายแล้ว',
+    undo: 'ย้อนกลับ',
+    undoFor: 'ย้อนรายการของ{{name}} — จะลบรายรับที่บันทึกไว้ด้วย',
+    deleteBill: 'ลบบิล',
+    deleteConfirm:
+      'ลบ "{{title}}"? รายจ่ายและรายการรับเงินคืนทั้งหมดที่บันทึกไว้จะถูกลบออกจากบัญชีด้วย',
+    deleted: 'ลบ "{{title}}" แล้ว',
+    paidToast: '{{name}} จ่ายคืน {{amount}} เข้า{{wallet}}แล้ว',
+    paidToastTitle: 'บันทึกการรับเงินคืนแล้ว',
+    alreadyPaid: '{{name}} ถูกทำเครื่องหมายว่าจ่ายแล้วก่อนหน้านี้',
+    recordFailed: 'บันทึกการรับเงินคืนไม่สำเร็จ',
+
+    // ---- The form ----
+    formTitle: 'หารบิล',
+    formEditTitle: 'แก้ไข{{title}}',
+    billName: 'บิลค่าอะไร',
+    billNameHint: 'ตั้งชื่อที่คุณจะจำได้ภายหลัง เช่น "ชาบูมื้อเย็น" หรือ "ซื้อของบิ๊กซี"',
+    billNamePlaceholder: 'ชาบูมื้อเย็น',
+    totalPrice: 'ยอดรวมทั้งบิล',
+    totalPriceHint: 'ยอดเต็มของบิล รวมส่วนของคุณเองด้วย',
+    payFromWallet: 'จ่ายจาก',
+    payFromWalletHint: 'ยอดเต็มจะถูกหักออกจากกระเป๋าเงินใบนี้ทันที และเงินที่ได้คืนจะกลับเข้าใบเดิม',
+    noteHint: 'ไม่บังคับ จะแสดงทั้งบนบิลและบนรายการรายจ่าย',
+
+    // ---- The split engine ----
+    whoOwes: 'ใครต้องจ่ายบ้าง',
+    splitMode: 'วิธีหาร',
+    modeEqual: 'หารเท่ากัน',
+    modeCustom: 'กำหนดเอง',
+    includeSelf: 'นับตัวฉันร่วมหารด้วย',
+    includeSelfHint:
+      'เปิดไว้ {{total}} จะหารระหว่างคุณกับอีก {{count}} คน หากปิด ทั้งบิลจะเป็นของพวกเขาทั้งหมด',
+    addPerson: 'เพิ่มคน',
+    personName: 'ชื่อ',
+    personNamePlaceholder: 'นิค',
+    shareAmount: 'ค้างจ่าย',
+    removePerson: 'ลบ{{name}}',
+    removeRow: 'ลบคนนี้ออก',
+    eachOwes: 'คนละ {{amount}}',
+    noPeopleYet: 'เพิ่มรายชื่อคนที่ต้องจ่ายส่วนแบ่งให้คุณ',
+
+    // ---- Live validation ----
+    theyOwe: 'พวกเขาค้างจ่ายรวม {{amount}}',
+    youCover: 'คุณรับผิดชอบ {{amount}}',
+    exceedsTotal: 'ยอดที่หารรวมกันเกินบิลอยู่ {{amount}}',
+    exceedsTotalHint: 'ลดส่วนแบ่งของใครสักคน หรือเพิ่มยอดรวมทั้งบิล',
+    duplicateName: 'มี "{{name}}" อยู่ในบิลนี้ซ้ำกันสองครั้ง',
+    needAmount_one: 'ยังมี {{count}} คนที่ไม่ได้ระบุจำนวนเงิน',
+    needAmount_other: 'ยังมี {{count}} คนที่ไม่ได้ระบุจำนวนเงิน',
+    needName: 'ต้องระบุชื่อของทุกคน',
+    needTotal: 'กรุณากรอกยอดรวมทั้งบิลก่อน',
+    needWallet: 'กรุณาเลือกกระเป๋าเงินที่ใช้จ่าย',
+    needPeople: 'เพิ่มอย่างน้อยหนึ่งคน',
+    createBill: 'บันทึกบิล',
+    creating: 'กำลังบันทึก…',
+    createdToast: 'บันทึก {{amount}} แล้ว ค้างรับคืน {{owed}}',
+    createdToastTitle: 'หารบิลเรียบร้อย',
+
+    // ---- The explanation that stops the support question ----
+    ledgerExplainer:
+      'ระบบจะบันทึกยอดเต็ม {{total}} เป็นรายจ่ายทันที เพราะตราบใดที่ยังไม่มีใครจ่ายคืน คุณก็เสียเงินไปเท่านั้นจริง ๆ เมื่อได้รับเงินคืนแต่ละครั้งจะบันทึกเป็นรายรับกลับเข้ากระเป๋าเงินใบเดิม สุดท้ายเมื่อทุกคนจ่ายครบ คุณจะเหลือภาระเฉพาะส่วนของตัวเองเท่านั้น',
   },
 
   settings: {

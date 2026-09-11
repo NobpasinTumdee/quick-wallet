@@ -7171,3 +7171,392 @@ table.data.data--nested td {
      the selected option's endonym brightens with the rest of the pill. */
   opacity: 0.72;
 }
+
+/* ==========================================================================
+   Toggle switch
+   --------------------------------------------------------------------------
+   A real button with role="switch", so the track is the control rather than a
+   label pretending to be one. Only `transform` animates — the knob slides on
+   the compositor and the track just cross-fades its background.
+   ========================================================================== */
+
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.toggle-row.is-disabled {
+  opacity: 0.55;
+}
+
+.toggle {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  cursor: pointer;
+  /* Nudged down so the knob's centre lines up with the label's first line
+     rather than its box, which is what the eye actually compares. */
+  margin-top: 1px;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.toggle.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.toggle.is-on .toggle-knob {
+  transform: translateX(18px);
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toggle-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Bill splitter — the form's split engine
+   ========================================================================== */
+
+.split-engine {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.split-engine-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.split-engine-head .section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.split-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-row {
+  display: grid;
+  /* Name takes the slack, amount is fixed so the column of figures aligns
+     down the list, delete is square. */
+  grid-template-columns: minmax(0, 1fr) 116px auto;
+  gap: var(--space-2);
+  align-items: center;
+  /* Rows are added and removed one at a time, so each animates in on its own
+     rather than the list reflowing all at once. */
+  animation: split-row-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes split-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A name typed twice. Marked on the row itself, because the alert above names
+   only one of the pair and the user has to find the other. */
+.split-row.is-duplicate .control {
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.split-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.split-remove {
+  padding-inline: var(--space-2);
+  color: var(--text-faint);
+}
+
+.split-remove:hover {
+  color: var(--negative);
+}
+
+.split-add {
+  align-self: flex-start;
+}
+
+.split-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+/* ==========================================================================
+   Shared expenses — the tracking page
+   ========================================================================== */
+
+.split-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* Warm while money is out, calm once everyone has settled — the panel carries
+   the state before any figure is read. */
+.split-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    70% 120% at 0% 0%,
+    color-mix(in srgb, var(--warning) 12%, transparent),
+    transparent 60%
+  );
+}
+
+.split-hero.is-clear::before {
+  background: radial-gradient(
+    70% 120% at 0% 0%,
+    color-mix(in srgb, var(--positive) 11%, transparent),
+    transparent 60%
+  );
+}
+
+.split-hero-primary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.split-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* Settled bills are history. Present, findable, and visibly finished. */
+.split-card.is-settled {
+  opacity: 0.72;
+}
+
+.split-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.split-card-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.split-card-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.split-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.split-progress-legend {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- One person on a bill ---- */
+
+.split-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-person {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.split-person-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+
+.split-person.is-paid .split-person-mark {
+  background: color-mix(in srgb, var(--positive) 18%, transparent);
+  color: var(--positive);
+}
+
+.split-person-name {
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+
+.split-person-amount {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.split-person.is-paid .split-person-name,
+.split-person.is-paid .split-person-amount {
+  color: var(--positive);
+}
+
+.split-card-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.split-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+/* Two bills abreast once there is room for both without squeezing the person
+   rows, which are the part that stops being tappable first. */
+@media (min-width: 900px) {
+  .split-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* On a phone the amount column would squeeze the name to nothing, so the row
+   wraps its action onto its own line instead. */
+@media (max-width: 480px) {
+  .split-row {
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+  }
+
+  .split-person {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    row-gap: var(--space-2);
+  }
+
+  .split-person > :last-child {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-row,
+  .split-card {
+    animation: none;
+  }
+
+  .toggle-knob {
+    transition: none;
+  }
+}

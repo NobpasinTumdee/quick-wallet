@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   PanelLeftClose,
@@ -27,6 +28,7 @@ import { TranslationKey } from '../locales';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
 import { CreditCardsPage } from '../pages/CreditCardsPage';
+import { SharedExpensesPage } from '../pages/SharedExpensesPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -75,6 +77,7 @@ const NAV: NavItem[] = [
   { route: 'transactions', labelKey: 'nav.transactions', icon: Receipt },
   { route: 'investments', labelKey: 'nav.investments', icon: TrendingUp },
   { route: 'budgets', labelKey: 'nav.budgets', icon: Target },
+  { route: 'splits', labelKey: 'nav.splits', icon: HandCoins },
   { route: 'subscriptions', labelKey: 'nav.subscriptions', icon: Repeat2 },
 ];
 
@@ -106,7 +109,9 @@ const SETTINGS_ITEM: NavItem = {
  * The desktop sidebar is unaffected: it renders NAV in full and always has.
  */
 const MOBILE_PRIMARY: Route[] = ['dashboard', 'wallets', 'investments', 'transactions'];
-const MOBILE_SHORTCUTS: Route[] = ['cards', 'budgets', 'subscriptions', 'settings'];
+/* Five is the most the gesture arc can hold on a 320px phone — see arcRadius
+   in GestureNavWidget. Anything added beyond this needs a different menu. */
+const MOBILE_SHORTCUTS: Route[] = ['cards', 'budgets', 'splits', 'subscriptions', 'settings'];
 
 /** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
 function navItemFor(route: Route): NavItem {
@@ -150,6 +155,10 @@ function warmRoute(route: Route, period: string): void {
       prefetch('/api/budgets', { period });
       prefetch('/api/wallets');
       break;
+    case 'splits':
+      prefetch('/api/bill-splits');
+      prefetch('/api/wallets');
+      break;
     case 'subscriptions':
       prefetch('/api/subscriptions');
       prefetch('/api/wallets');
@@ -174,6 +183,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   transactions: ['/api/transactions', '/api/wallets'],
   investments: ['/api/investments', '/api/wallets', '/api/watchlist'],
   budgets: ['/api/budgets', '/api/wallets'],
+  splits: ['/api/bill-splits', '/api/wallets'],
   subscriptions: ['/api/subscriptions', '/api/wallets'],
   settings: ['/api/health'],
 };
@@ -422,6 +432,7 @@ export function AppShell() {
           {route === 'transactions' && <TransactionsPage period={period} />}
           {route === 'investments' && <InvestmentsPage />}
           {route === 'budgets' && <BudgetsPage period={period} />}
+          {route === 'splits' && <SharedExpensesPage />}
           {route === 'subscriptions' && <SubscriptionsPage />}
           {route === 'settings' && <SettingsPage />}
         </main>

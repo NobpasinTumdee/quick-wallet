@@ -77,8 +77,11 @@ const SLOP_PX = 12;
 /* Arc geometry                                                        */
 /* ------------------------------------------------------------------ */
 
-/** Distance from the button's centre to each item's centre. */
-const RADIUS = 112;
+/** The smallest arc we ever draw, whatever the item count. */
+const BASE_RADIUS = 112;
+/** Diameter of one arc item, and the clear space wanted between two. */
+const ITEM_SIZE = 60;
+const ITEM_GAP = 8;
 /**
  * The arc sweeps from 150° to 30°, measured anticlockwise from the positive
  * x-axis — an upward fan that stays clear of the bar below it.
@@ -104,14 +107,37 @@ export interface Shortcut {
  * shortcut is added — the failure mode of hand-placed coordinates is that they
  * keep working and quietly stop being an arc.
  */
+/**
+ * The radius that keeps adjacent items `ITEM_GAP` apart at this count.
+ *
+ * A fixed radius only works for a fixed number of shortcuts. The arc spans a
+ * constant 120°, so every item added narrows the angle between neighbours and
+ * at five they collide — 58px of chord for 60px items. Solving for the radius
+ * instead means the arc simply grows, and adding a sixth shortcut later cannot
+ * silently produce overlapping buttons.
+ *
+ * `chord = 2R·sin(step/2)`, so `R = chord / (2·sin(step/2))`.
+ *
+ * There is a ceiling: at six shortcuts the arc is 172px wide either side, which
+ * does not fit a 320px phone. Five is the most this shape holds — past that the
+ * menu needs a different geometry, not a bigger radius.
+ */
+function arcRadius(count: number): number {
+  if (count < 2) return BASE_RADIUS;
+  const stepRad = (((ARC_START_DEG - ARC_END_DEG) / (count - 1)) * Math.PI) / 180;
+  const needed = (ITEM_SIZE + ITEM_GAP) / (2 * Math.sin(stepRad / 2));
+  return Math.max(BASE_RADIUS, Math.round(needed));
+}
+
 function arcOffset(index: number, count: number): { x: number; y: number } {
   const t = count > 1 ? index / (count - 1) : 0.5;
   const degrees = ARC_START_DEG + (ARC_END_DEG - ARC_START_DEG) * t;
   const radians = (degrees * Math.PI) / 180;
+  const radius = arcRadius(count);
   return {
-    x: Math.round(RADIUS * Math.cos(radians)),
+    x: Math.round(radius * Math.cos(radians)),
     // Negated because screen y grows downward and the arc opens upward.
-    y: Math.round(-RADIUS * Math.sin(radians)),
+    y: Math.round(-radius * Math.sin(radians)),
   };
 }
 

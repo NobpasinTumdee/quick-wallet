@@ -79,6 +79,20 @@ const RESOURCES: Record<string, ResourceConfig> = {
     // a timeline reads forwards while a ledger reads backwards.
     sort: (a, b) => String(a.nextDueDate ?? '').localeCompare(String(b.nextDueDate ?? '')),
   },
+  'bill-splits': {
+    /* A bill writes an expense when it is created and an income row every time
+       someone pays you back, so the ledger, balances and budget progress are
+       all downstream of it — the same blast radius a subscription payment has. */
+    invalidates: [
+      '/api/bill-splits',
+      '/api/transactions',
+      '/api/wallets',
+      '/api/budgets',
+      '/api/dashboard',
+    ],
+    // Newest first, matching the server's own ordering.
+    sort: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
+  },
   watchlist: {
     // Nothing is derived from a watched symbol — it has no cost, no balance and
     // no effect on any total — so this is the one resource whose writes do not

@@ -31,6 +31,7 @@
 
 export const en = {
   nav: {
+    splits: 'Shared',
     dashboard: 'Overview',
     wallets: 'Wallets',
     cards: 'Cards',
@@ -673,6 +674,107 @@ export const en = {
     customAccentColour: 'Custom accent colour',
     revertChanges: 'Revert changes',
     resetToDefault: 'Reset to default',
+  },
+
+  split: {
+    owedLabel: 'They owe',
+    youCoverLabel: 'You cover',
+    leavesNowLabel: 'Leaves now',
+    // ---- Page chrome ----
+    title: 'Shared expenses',
+    navLabel: 'Shared',
+    lede: 'Paid for the group? Record the whole bill, then collect each share back into the same wallet.',
+    refresh: 'Refresh shared expenses',
+    newBill: 'Split a bill',
+    emptyTitle: 'Nothing split yet',
+    emptyBody:
+      'Paid for a dinner or a group shop? Record the bill once, list who owes what, and mark each person off as they pay you back.',
+    splitFirstBill: 'Split your first bill',
+
+    // ---- Roll-up ----
+    owedToYou: 'Owed to you',
+    peopleOwing_one: '{{count}} person still owes you',
+    peopleOwing_other: '{{count}} people still owe you',
+    nobodyOwes: 'Everyone has settled up',
+    recoveredTotal: 'Recovered',
+    openBills_one: '{{count}} open bill',
+    openBills_other: '{{count}} open bills',
+    settledBills: 'Settled',
+    showSettled: 'Show settled',
+    hideSettled: 'Hide settled',
+
+    // ---- A bill card ----
+    statusOpen: 'Open',
+    statusSettled: 'Settled',
+    billTotal: 'Total {{amount}}',
+    yourShare: 'Your share {{amount}}',
+    paidFrom: 'Paid from {{wallet}}',
+    recoveredOf: '{{recovered}} of {{owed}} back',
+    outstandingAmount: '{{amount}} still out',
+    owesAmount: 'Owes {{amount}}',
+    markPaid: 'Mark as paid',
+    markPaidFor: 'Mark {{name}} as paid',
+    paid: 'Paid',
+    undo: 'Undo',
+    undoFor: 'Undo {{name}} — removes the income it recorded',
+    deleteBill: 'Delete bill',
+    deleteConfirm:
+      'Delete "{{title}}"? The expense and every repayment it recorded are removed from your ledger too.',
+    deleted: 'Deleted "{{title}}".',
+    paidToast: '{{name}} paid {{amount}} back to {{wallet}}.',
+    paidToastTitle: 'Repayment recorded',
+    alreadyPaid: '{{name}} was already marked paid.',
+    recordFailed: 'Could not record the payment',
+
+    // ---- The form ----
+    formTitle: 'Split a bill',
+    formEditTitle: 'Edit {{title}}',
+    billName: 'What was it',
+    billNameHint: 'What you would call it later — "Dinner at Shabu", "Big C run".',
+    billNamePlaceholder: 'Dinner at Shabu',
+    totalPrice: 'Total price',
+    totalPriceHint: 'The whole bill, including your own share.',
+    payFromWallet: 'Paid from',
+    payFromWalletHint: 'The full amount comes out of here now, and each repayment goes back in.',
+    noteHint: 'Optional. Shown on the bill and on the expense row.',
+
+    // ---- The split engine ----
+    whoOwes: 'Who owes a share',
+    splitMode: 'How to split',
+    modeEqual: 'Split equally',
+    modeCustom: 'Custom amounts',
+    includeSelf: 'Count me in the split',
+    includeSelfHint:
+      'On, {{total}} divides between you and {{count}} others. Off, the whole bill is theirs.',
+    addPerson: 'Add a person',
+    personName: 'Name',
+    personNamePlaceholder: 'Nick',
+    shareAmount: 'Owes',
+    removePerson: 'Remove {{name}}',
+    removeRow: 'Remove this person',
+    eachOwes: 'Each owes {{amount}}',
+    noPeopleYet: 'Add the people who owe you a share.',
+
+    // ---- Live validation ----
+    theyOwe: 'They owe {{amount}}',
+    youCover: 'You cover {{amount}}',
+    exceedsTotal: 'The shares are {{amount}} over the bill.',
+    exceedsTotalHint: 'Lower a share, or raise the total price.',
+    duplicateName: '"{{name}}" is on this bill twice.',
+    needAmount_one: '{{count}} person has no amount yet.',
+    needAmount_other: '{{count}} people have no amount yet.',
+    needName: 'Every person needs a name.',
+    needTotal: 'Enter the total price first.',
+    needWallet: 'Choose the wallet that paid.',
+    needPeople: 'Add at least one person.',
+    createBill: 'Record bill',
+    creating: 'Recording…',
+    createdToast: '{{amount}} recorded, {{owed}} owed back.',
+    createdToastTitle: 'Bill split',
+
+    // ---- The explanation that stops the support question ----
+    ledgerExplainer:
+      'The full {{total}} is recorded as an expense now, because until someone pays you back you really are down that much. Each repayment comes back as income to the same wallet, so once everyone has settled you are out only your own share.',
   },
 
   settings: {

@@ -155,6 +155,20 @@ const NAMED_ACTIONS: Record<string, string> = {
      budgets/copy is listed. */
   'transactions/installment': 'transactions.installment',
   'transactions/cancel-installment': 'transactions.cancelInstallment',
+  /* Hyphenated in the path, camelCase in the action — the resolver below would
+     otherwise read "mark-paid" as a transaction id. Same reason budgets/copy
+     and the two installment routes are listed. */
+  'bill-splits': 'billSplits.list',
+};
+
+/** `/bill-splits/:id/mark-paid` -> `billSplits.markPaid`. */
+const RESOURCE_ALIASES: Record<string, string> = {
+  'bill-splits': 'billSplits',
+};
+
+const ACTION_ALIASES: Record<string, string> = {
+  'mark-paid': 'markPaid',
+  'mark-unpaid': 'markUnpaid',
 };
 
 function resolve(path: string, method: HttpMethod, params?: QueryParams): ResolvedCall {
@@ -179,12 +193,16 @@ function resolve(path: string, method: HttpMethod, params?: QueryParams): Resolv
   const named = NAMED_ACTIONS[segments.join('/')];
   if (named) return { action: named, query };
 
-  const [resource, second, third] = segments;
-  if (!resource) throw new ApiError(`Cannot route "${path}"`, 500, 'BAD_ROUTE');
+  const [rawResource, second, third] = segments;
+  if (!rawResource) throw new ApiError(`Cannot route "${path}"`, 500, 'BAD_ROUTE');
+  const resource = RESOURCE_ALIASES[rawResource] ?? rawResource;
 
-  // /investments/:id/sell
+  // /investments/:id/sell, /bill-splits/:id/mark-paid
   if (third) {
-    return { action: `${resource}.${third}`, query: { ...query, id: second } };
+    return {
+      action: `${resource}.${ACTION_ALIASES[third] ?? third}`,
+      query: { ...query, id: second },
+    };
   }
 
   // /wallets/:id — anything in the second slot at this point is an id.

@@ -110,6 +110,70 @@ export interface InstallmentPlanResult {
   transactions: Transaction[];
 }
 
+/* ------------------------------------------------------------------ */
+/* Bill splits                                                         */
+/* ------------------------------------------------------------------ */
+
+export type BillSplitStatus = 'open' | 'settled';
+
+/** One person's share of a bill. Stored inside the bill's `splitsJSON` cell. */
+export interface BillSplitShare {
+  personName: string;
+  amount: number;
+  isPaid: boolean;
+  /** The income Transaction that settled this share. Empty while unpaid. */
+  repaymentTxId: string;
+}
+
+/**
+ * A bill one person paid and several people owe a share of.
+ *
+ * The figures below `expenseTxId` are computed server-side by
+ * `decorateBillSplit_` so that every screen reads the same arithmetic rather
+ * than each re-deriving it — and so `ownShare` in particular can never drift
+ * from `totalAmount - owedTotal`.
+ */
+export interface BillSplit {
+  id: string;
+  userId: string;
+  title: string;
+  totalAmount: number;
+  /** The wallet that paid, and that every repayment returns to. */
+  walletId: string;
+  note: string;
+  splits: BillSplitShare[];
+  status: BillSplitStatus;
+  createdAt: string;
+  /** The expense Transaction written when the bill was created. */
+  expenseTxId: string;
+
+  /* computed server-side */
+  /** Everyone else's shares added up. Never more than `totalAmount`. */
+  owedTotal: number;
+  recovered: number;
+  outstanding: number;
+  /** `totalAmount - owedTotal` — what the payer is genuinely out of pocket. */
+  ownShare: number;
+  /** Percent of `owedTotal` that has come back. 100 when nothing is owed. */
+  recoveredPercent: number;
+}
+
+/** What `billSplits.create` and `billSplits.markPaid` answer with. */
+export interface BillSplitResult {
+  ok: boolean;
+  billSplit: BillSplit;
+  /** Null when `markPaid` was a no-op because the share was already settled. */
+  transaction: Transaction | null;
+  alreadyPaid?: boolean;
+}
+
+export interface BillSplitUnpaidResult {
+  ok: boolean;
+  billSplit: BillSplit;
+  /** The income row that was removed. Empty when there was nothing to undo. */
+  removedTransactionId: string;
+}
+
 export interface Subscription {
   id: string;
   userId: string;
