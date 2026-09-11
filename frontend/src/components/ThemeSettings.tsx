@@ -1,5 +1,6 @@
 import { Check, Copy, Eye, Palette, Pencil, Plus, RotateCcw, Trash2, Undo2, X } from 'lucide-react';
 import { memo, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { FONTS, FontOption, fontOption } from '../lib/fonts';
 import { cx } from '../lib/format';
@@ -133,6 +134,7 @@ const FontCard = memo(function FontCard({
 /* ------------------------------------------------------------------ */
 
 export function ThemeSettings() {
+  const { t } = useTranslation();
   const {
     settings,
     customThemes,
@@ -197,37 +199,37 @@ export function ThemeSettings() {
         <div className="preview-bar" role="status">
           <span className="preview-bar-pulse" aria-hidden="true" />
           <div className="preview-bar-text">
-            <strong>Previewing {draft.name.trim() || 'your new theme'}</strong>
+            <strong>{t('theme.previewing', { name: draft.name.trim() || t('theme.yourNewTheme') })}</strong>
             <span className="text-muted">
               {dirty
-                ? 'Nothing is saved yet — look around the app, then save or discard.'
-                : 'Adjust the colours below. Changes stay on this device until you save.'}
+                ? t('theme.unsavedHint')
+                : t('theme.adjustHint')}
             </span>
           </div>
           <div className="preview-bar-actions">
             <Button size="sm" variant="ghost" onClick={discardDraft} disabled={busy}>
               <Icon icon={X} size="sm" />
-              Discard
+              {t('theme.discard')}
             </Button>
             <Button size="sm" variant="primary" onClick={() => void saveDraft()} loading={busy}>
               <Icon icon={Check} size="sm" />
-              Save theme
+              {t('theme.saveTheme')}
             </Button>
           </div>
         </div>
       )}
 
       <Card
-        title="Theme library"
-        subtitle="Your saved palettes and the built-in ones. Everything here is plain CSS variables."
+        title={t('theme.library')}
+        subtitle={t('theme.librarySubtitle')}
         actions={
           <Button size="sm" variant="primary" onClick={createDraft}>
             <Icon icon={Plus} size="sm" />
-            New theme
+            {t('theme.newTheme')}
           </Button>
         }
       >
-        <div className="theme-grid" role="radiogroup" aria-label="Theme">
+        <div className="theme-grid" role="radiogroup" aria-label={t('theme.themeGroup')}>
           <fieldset className="theme-group">
             <legend className="section-label">
               Yours
@@ -239,9 +241,9 @@ export function ThemeSettings() {
                 <span className="theme-card-new-icon" aria-hidden="true">
                   <Icon icon={Palette} />
                 </span>
-                <span className="theme-card-name">Make your first theme</span>
+                <span className="theme-card-name">{t('theme.makeFirstTheme')}</span>
                 <span className="theme-card-blurb">
-                  Start from the palette you're wearing and change what you like.
+                  {t('theme.makeFirstThemeBody')}
                 </span>
               </button>
             ) : (
@@ -258,7 +260,7 @@ export function ThemeSettings() {
                         className="theme-card-hit"
                         onClick={() => void applyCustomTheme(saved.id)}
                         disabled={busy}
-                        title={`Use ${saved.name}`}
+                        title={t('theme.useTheme', { name: saved.name })}
                       >
                         <ThemeChip swatches={customSwatches(saved.colors)} />
                         <span className="theme-card-name">
@@ -266,7 +268,7 @@ export function ThemeSettings() {
                           <span className="truncate">{saved.name}</span>
                         </span>
                         <span className="theme-card-blurb truncate">
-                          {editing ? 'Editing now' : active ? 'In use' : 'Saved theme'}
+                          {t(editing ? 'theme.editingNow' : active ? 'theme.inUse' : 'theme.savedTheme')}
                           {' · '}
                           {fontOption(saved.fontFamily).label}
                         </span>
@@ -283,8 +285,8 @@ export function ThemeSettings() {
                           type="button"
                           className="icon-btn"
                           onClick={() => editDraft(saved)}
-                          aria-label={`Edit ${saved.name}`}
-                          title="Edit"
+                          aria-label={t('theme.editNamed', { name: saved.name })}
+                          title={t('common.edit')}
                         >
                           <Icon icon={Pencil} size="sm" />
                         </button>
@@ -292,8 +294,8 @@ export function ThemeSettings() {
                           type="button"
                           className="icon-btn"
                           onClick={() => duplicateDraft(saved)}
-                          aria-label={`Duplicate ${saved.name}`}
-                          title="Duplicate"
+                          aria-label={t('theme.duplicateNamed', { name: saved.name })}
+                          title={t('theme.duplicate')}
                         >
                           <Icon icon={Copy} size="sm" />
                         </button>
@@ -304,10 +306,10 @@ export function ThemeSettings() {
                           onBlur={() => setConfirmingDelete((id) => (id === saved.id ? null : id))}
                           aria-label={
                             confirmingDelete === saved.id
-                              ? `Confirm deleting ${saved.name}`
-                              : `Delete ${saved.name}`
+                              ? t('theme.confirmDeleting', { name: saved.name })
+                              : t('theme.deleteNamed', { name: saved.name })
                           }
-                          title={confirmingDelete === saved.id ? 'Click again to delete' : 'Delete'}
+                          title={t(confirmingDelete === saved.id ? 'theme.clickAgainToDelete' : 'common.delete')}
                         >
                           <Icon icon={Trash2} size="sm" />
                         </button>
@@ -322,7 +324,7 @@ export function ThemeSettings() {
           {/* Grouped by scheme so a light theme is never a surprise. */}
           {(['light', 'dark'] as const).map((scheme) => (
             <fieldset key={scheme} className="theme-group">
-              <legend className="section-label">{scheme === 'light' ? 'Light' : 'Dark'}</legend>
+              <legend className="section-label">{t(scheme === 'light' ? 'theme.schemeLight' : 'theme.schemeDark')}</legend>
               <div className="theme-row">
                 {THEME_PRESETS.filter((preset) => preset.scheme === scheme).map((preset) => {
                   const active = activeKey === `preset:${preset.value}`;
@@ -357,9 +359,9 @@ export function ThemeSettings() {
         </div>
 
         <Field
-          label="Accent colour"
+          label={t('theme.accentColour')}
           className="span-2"
-          hint="Applied on top of whichever theme is active. Picking a theme resets it to that theme's own accent."
+          hint={t('theme.accentHint')}
         >
           <div className="swatches" style={{ marginTop: 4 }}>
             {ACCENTS.map((color) => (
@@ -369,7 +371,7 @@ export function ThemeSettings() {
                 className={cx('swatch', settings.accent === color && 'is-active')}
                 style={{ background: color }}
                 onClick={() => void setAccent(color)}
-                aria-label={`Accent ${color}`}
+                aria-label={t('theme.accentNamed', { colour: color })}
               />
             ))}
             {/* `onBlur`, not `onChange`: the accent is a committed setting, so it
@@ -383,11 +385,11 @@ export function ThemeSettings() {
               defaultValue={settings.accent}
               key={settings.accent}
               onBlur={(e) => void setAccent(e.target.value)}
-              aria-label="Custom accent colour"
+              aria-label={t('theme.customAccentColour')}
             />
             <Button size="sm" variant="ghost" onClick={() => void setAccent(activePreset.accent)}>
               <Icon icon={RotateCcw} size="sm" />
-              Match theme
+              {t('theme.matchTheme')}
             </Button>
           </div>
         </Field>
@@ -401,26 +403,26 @@ export function ThemeSettings() {
 
       {draft && (
         <Card
-          title={draft.id ? 'Edit theme' : 'Create theme'}
-          subtitle="Every change shows instantly across the whole app. Nothing reaches the sheet until you save."
+          title={t(draft.id ? 'theme.editTheme' : 'theme.createTheme')}
+          subtitle={t('theme.editorSubtitle')}
           actions={
             <span className="preview-tag">
               <Icon icon={Eye} size="sm" />
-              Live preview
+              {t('theme.livePreview')}
             </span>
           }
         >
           <div className="creator">
             <div className="creator-head">
               <Field
-                label="Theme name"
-                hint="What you'll see in the library — e.g. Cyberpunk, Forest, Monday morning."
+                label={t('theme.themeName')}
+                hint={t('theme.themeNameHint')}
                 className="creator-name"
               >
                 <Input
                   value={draft.name}
                   onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="Untitled theme"
+                  placeholder={t('theme.untitledTheme')}
                   maxLength={40}
                   autoFocus
                 />
@@ -429,7 +431,7 @@ export function ThemeSettings() {
               <div className="creator-chip">
                 <ThemeChip swatches={customSwatches(draftColors)} />
                 <span className="creator-chip-text">
-                  <span className="text-muted">{draft.id ? 'Editing a saved theme' : 'New theme'}</span>
+                  <span className="text-muted">{draft.id ? t('theme.editingSaved') : t('theme.newTheme')}</span>
                   <span style={{ fontFamily: fontOption(draft.font).stack }}>
                     {fontOption(draft.font).label}
                   </span>
@@ -438,7 +440,7 @@ export function ThemeSettings() {
             </div>
 
             <div className="creator-section">
-              <h3 className="section-label">Palette</h3>
+              <h3 className="section-label">{t('theme.palette')}</h3>
               <div className="color-grid">
               {THEME_VARS.map((variable) => (
                 <ColorField
@@ -457,12 +459,12 @@ export function ThemeSettings() {
             </div>
 
             <div className="creator-section">
-              <h3 className="section-label">Typography</h3>
+              <h3 className="section-label">{t('theme.typography')}</h3>
               <p className="creator-section-hint">
                 Sets the body and heading faces. Figures and tickers stay monospaced so
                 columns keep lining up. Thai-capable faces are marked with a Thai sample.
               </p>
-              <div className="font-grid" role="radiogroup" aria-label="Typeface">
+              <div className="font-grid" role="radiogroup" aria-label={t('theme.typefaceGroup')}>
                 {FONTS.map((font) => (
                   <FontCard
                     key={font.id}
@@ -479,15 +481,15 @@ export function ThemeSettings() {
                   back what I started with, versus wipe the slate. */}
               <Button variant="ghost" onClick={() => handleReset('origin')} disabled={busy || !dirty}>
                 <Icon icon={Undo2} size="sm" />
-                Revert changes
+                {t('theme.revertChanges')}
               </Button>
               <Button variant="ghost" onClick={() => handleReset('default')} disabled={busy}>
                 <Icon icon={RotateCcw} size="sm" />
-                Reset to default
+                {t('theme.resetToDefault')}
               </Button>
               <span className="spacer" />
               <Button variant="ghost" onClick={discardDraft} disabled={busy}>
-                Discard
+                {t('theme.discard')}
               </Button>
               <Button
                 variant="primary"
@@ -496,7 +498,7 @@ export function ThemeSettings() {
                 disabled={!draft.name.trim()}
               >
                 <Icon icon={Check} size="sm" />
-                {draft.id ? 'Save changes' : 'Save theme'}
+                {t(draft.id ? 'common.saveChanges' : 'theme.saveTheme')}
               </Button>
             </div>
           </div>

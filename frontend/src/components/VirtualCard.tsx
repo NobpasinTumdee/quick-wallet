@@ -15,6 +15,8 @@
  * actually needs and cannot get anywhere else on the screen.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { CardState, utilizationTone } from '../lib/creditMath';
 import { cx, formatPercent, ordinal } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
@@ -27,6 +29,7 @@ export function VirtualCard({
   card: CardState;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
   const money = useMoneyFormatter();
   const { wallet } = card;
   const tone = utilizationTone(card.utilization);
@@ -56,11 +59,11 @@ export function VirtualCard({
           {wallet.icon || '💳'}
         </span>
         {card.overdue ? (
-          <Badge tone="negative">Overdue</Badge>
+          <Badge tone="negative">{t('cards.overdueBadge')}</Badge>
         ) : card.dueSoon ? (
-          <Badge tone="warning">Due soon</Badge>
+          <Badge tone="warning">{t('cards.dueSoonBadge')}</Badge>
         ) : wallet.cashbackRate > 0 ? (
-          <Badge tone="accent">{formatPercent(wallet.cashbackRate, 1)} back</Badge>
+          <Badge tone="accent">{t('cards.cashbackBadge', { percent: formatPercent(wallet.cashbackRate, 1) })}</Badge>
         ) : null}
       </header>
 
@@ -72,7 +75,7 @@ export function VirtualCard({
       </div>
 
       <div className="vcard-owed">
-        <span className="vcard-owed-label">Owed</span>
+        <span className="vcard-owed-label">{t('wallets.owed')}</span>
         {/* Always positive: computeCardState flipped the ledger's sign once so
             nothing downstream has to think about it. */}
         <span className="vcard-owed-value">{money(Math.max(0, card.currentBalance))}</span>
@@ -84,8 +87,8 @@ export function VirtualCard({
             <div className="vcard-meter-fill" />
           </div>
           <div className="vcard-meter-legend">
-            <span>{formatPercent(card.utilization, 0)} used</span>
-            <span>{money(wallet.creditLimit, { compact: true })} limit</span>
+            <span>{t('cards.percentUsedShort', { percent: formatPercent(card.utilization, 0) })}</span>
+            <span>{t('cards.limitShort', { amount: money(wallet.creditLimit, { compact: true }) })}</span>
           </div>
         </div>
       )}
@@ -94,15 +97,15 @@ export function VirtualCard({
         <span className="vcard-name truncate">{wallet.name}</span>
         {wallet.statementDate > 0 && wallet.dueDate > 0 ? (
           <span className="vcard-cycle">
-            <span className="vcard-cycle-label">closes / due</span>
+            <span className="vcard-cycle-label">{t('cards.closesDue')}</span>
             <span className="vcard-cycle-value">
               {ordinal(wallet.statementDate)} / {ordinal(wallet.dueDate)}
             </span>
           </span>
         ) : (
           <span className="vcard-cycle">
-            <span className="vcard-cycle-label">cycle</span>
-            <span className="vcard-cycle-value">not set</span>
+            <span className="vcard-cycle-label">{t('cards.cycle')}</span>
+            <span className="vcard-cycle-value">{t('cards.cycleNotSet')}</span>
           </span>
         )}
       </footer>

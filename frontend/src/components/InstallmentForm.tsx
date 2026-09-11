@@ -240,7 +240,7 @@ export function InstallmentForm({
           <Input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="iPhone 17 Pro"
+            placeholder={t('forms.installmentNotePlaceholder')}
             maxLength={300}
           />
         </Field>

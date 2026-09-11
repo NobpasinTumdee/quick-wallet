@@ -320,7 +320,11 @@ export function InvestmentsPage() {
   }
 
   async function removeLot(lot: Investment) {
-    const label = `${lot.symbol} — ${formatNumber(lot.quantity, 8, settings.locale)} bought ${formatDate(lot.buyDate, settings.locale)}`;
+    const label = t('invest.lotLabel', {
+      symbol: lot.symbol,
+      quantity: formatNumber(lot.quantity, 8, settings.locale),
+      date: formatDate(lot.buyDate, settings.locale),
+    });
     if (!window.confirm(t('invest.deletePurchaseConfirm', { label }))) return;
     await investments.remove(lot.id);
   }
@@ -605,7 +609,7 @@ export function InvestmentsPage() {
       {/* ---- Holdings / Watchlist ----
           One tab bar over two lists that share the chart above. The holdings
           side below is unchanged. */}
-      <div className="invest-tabs" role="tablist" aria-label="Investment view">
+      <div className="invest-tabs" role="tablist" aria-label={t('invest.investmentView')}>
         <button
           type="button"
           role="tab"
@@ -699,7 +703,7 @@ export function InvestmentsPage() {
         {(view === 'hold' ? visibleHoldings.length : visibleSoldLots.length) === 0 ? (
           <EmptyState
             icon={<Icon icon={TrendingUp} size="xl" />}
-            title={view === 'hold' ? 'No open positions' : 'Nothing sold yet'}
+            title={view === 'hold' ? t('invest.noOpenPositions') : t('invest.nothingSoldYet')}
             description={
               view === 'hold'
                 ? t('invest.emptyHoldingsBody')
@@ -784,7 +788,7 @@ export function InvestmentsPage() {
                       <td className="num">
                         {brokerRate > 0 ? (
                           <>
-                            <span className="price-native" title="Converted at today's rate">
+                            <span className="price-native" title={t('invest.convertedToday')}>
                               {formatMoney(holding.avgCost / brokerRate, brokerCurrency, settings.locale)}
                             </span>
                             <div className="list-item-sub">{money(holding.costBasis)} total</div>
@@ -822,7 +826,7 @@ export function InvestmentsPage() {
                       <td className="num">
                         {money(holding.marketValue)}
                         {holding.converted && (
-                          <div className="list-item-sub" title={`Converted at ${holding.fxRate.toFixed(4)}`}>
+                          <div className="list-item-sub" title={t('invest.convertedAt', { rate: holding.fxRate.toFixed(4) })}>
                             @ {holding.fxRate.toFixed(2)} {holding.nativeCurrency}/{money.base}
                           </div>
                         )}

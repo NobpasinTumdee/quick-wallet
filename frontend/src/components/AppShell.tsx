@@ -180,6 +180,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
 
 /** Warns when database.xlsx can't be written — almost always "open in Excel". */
 function DbStatusBanner() {
+  const { t } = useTranslation();
   const { data } = useExcelQuery<DbHealth>('/api/health', undefined, { refreshInterval: 20_000 });
   const [dismissed, setDismissed] = useState(false);
 
@@ -189,7 +190,7 @@ function DbStatusBanner() {
   return (
     <Alert
       tone={data.fileLocked ? 'warning' : 'error'}
-      title={data.fileLocked ? 'database.xlsx is open elsewhere' : 'Could not save the workbook'}
+      title={t(data.fileLocked ? 'settings.workbookLocked' : 'settings.workbookSaveFailed')}
       onDismiss={() => setDismissed(true)}
     >
       {data.hint ?? data.lastError}
@@ -281,7 +282,7 @@ export function AppShell() {
       <aside className="sidebar">
         <div className="sidebar-brand">
           <Logo size={30} />
-          <span className="sidebar-label">Quick Wallet</span>
+          <span className="sidebar-label">{t('auth.appName')}</span>
         </div>
 
         {/* Only rendered where the sidebar exists at all — below 1000px the tab
@@ -339,7 +340,7 @@ export function AppShell() {
       <div className="main">
         <header className="topbar">
           {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
-          <Logo size={30} className="topbar-logo" label="Quick Wallet" />
+          <Logo size={30} className="topbar-logo" label={t('auth.appName')} />
           <div className="topbar-title">
             <h1>{t(active.labelKey)}</h1>
             <span>

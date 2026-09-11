@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
 import { Logo } from '../components/Logo';
@@ -32,6 +33,7 @@ interface AuthStatusResponse {
 }
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { login, register } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -67,7 +69,7 @@ export function LoginPage() {
       if (mode === 'login') await login(username.trim(), password);
       else await register(username.trim(), password, displayName.trim() || username.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      setError(err instanceof Error ? err.message : t('auth.signInFailed'));
     } finally {
       setBusy(false);
     }
@@ -79,18 +81,18 @@ export function LoginPage() {
     <div className="auth">
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-brand">
-          <Logo size={72} className="auth-logo" /> Quick Wallet
+          <Logo size={72} className="auth-logo" /> {t('auth.appName')}
         </div>
         <p className="auth-sub">
           {mode === 'login'
-            ? 'Sign in to your workbook.'
+            ? t('auth.signInBlurb')
             : isFirstRun
-              ? 'Create the first profile for this workbook.'
-              : 'Add another profile to this workbook.'}
+              ? t('auth.firstProfileBlurb')
+              : t('auth.anotherProfileBlurb')}
         </p>
 
         <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
-          <Field label="Username">
+          <Field label={t('auth.username')}>
             <Input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -106,12 +108,12 @@ export function LoginPage() {
           </Field>
 
           {mode === 'register' && (
-            <Field label="Display name" hint="Shown in the sidebar. Defaults to your username.">
+            <Field label={t('auth.displayName')} hint={t('auth.displayNameHint')}>
               <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
             </Field>
           )}
 
-          <Field label="Password" hint={mode === 'register' ? 'At least 4 characters.' : undefined}>
+          <Field label={t('auth.password')} hint={mode === 'register' ? t('auth.passwordHint') : undefined}>
             <Input
               type="password"
               value={password}
@@ -124,7 +126,7 @@ export function LoginPage() {
           {error && <Alert tone="error">{error}</Alert>}
 
           <Button type="submit" variant="primary" loading={busy}>
-            {mode === 'login' ? 'Sign in' : 'Create profile'}
+            {t(mode === 'login' ? 'auth.signIn' : 'auth.createProfile')}
           </Button>
         </div>
 
@@ -141,7 +143,7 @@ export function LoginPage() {
                 setError(null);
               }}
             >
-              {mode === 'login' ? 'Create profile' : 'Sign in'}
+              {t(mode === 'login' ? 'auth.createProfile' : 'auth.signIn')}
             </button>
           </p>
         )}

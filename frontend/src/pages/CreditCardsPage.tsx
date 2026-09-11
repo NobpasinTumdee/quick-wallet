@@ -16,6 +16,7 @@
 
 import { CreditCard, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
 import { InstallmentForm, InstallmentPayload } from '../components/InstallmentForm';
@@ -32,6 +33,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
 
 export function CreditCardsPage() {
+  const { t } = useTranslation();
   const money = useMoneyFormatter();
   const { settings } = useSettings();
   const credit = useCreditCards();
@@ -69,12 +71,12 @@ export function CreditCardsPage() {
     try {
       await credit.payBill({ card: payingCard, ...payload });
       toast.success(
-        `${money(payload.amount)} paid to ${payingCard.wallet.name}.`,
-        'Bill paid',
+        t('cards.billPaidBody', { amount: money(payload.amount), name: payingCard.wallet.name }),
+        t('cards.billPaid'),
       );
       setPayingCard(null);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Payment failed');
+      setActionError(err instanceof Error ? err.message : t('cards.paymentFailed'));
       throw err;
     } finally {
       setBusy(false);
@@ -91,12 +93,16 @@ export function CreditCardsPage() {
         ...payload,
       });
       toast.success(
-        `${plan.months} monthly charges of about ${money(plan.monthly)} on ${planningCard.wallet.name}.`,
-        'Installment plan created',
+        t('cards.planCreatedBody', {
+          count: plan.months,
+          amount: money(plan.monthly),
+          name: planningCard.wallet.name,
+        }),
+        t('cards.planCreated'),
       );
       setPlanningCard(null);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not create the plan');
+      setActionError(err instanceof Error ? err.message : t('cards.planFailed'));
       throw err;
     } finally {
       setBusy(false);
@@ -123,41 +129,41 @@ export function CreditCardsPage() {
                 card.overdue ? 'metric--negative' : card.dueSoon ? 'metric--accent' : undefined,
               )}
             >
-              <span className="section-label">Statement balance</span>
+              <span className="section-label">{t('cards.statementBalance')}</span>
               <span className="metric-value">{money(card.statementBalance)}</span>
               <span className="metric-hint">
                 {card.paymentDueDate ? (
                   <>
-                    Due {formatDate(card.paymentDueDate, settings.locale)}
+                    {t('cards.dueOn', { date: formatDate(card.paymentDueDate, settings.locale) })}
                     {card.daysUntilDue !== null && (
                       <>
                         {' · '}
                         {card.daysUntilDue < 0
-                          ? `${Math.abs(card.daysUntilDue)} day${Math.abs(card.daysUntilDue) === 1 ? '' : 's'} late`
+                          ? t('cards.daysLate', { count: Math.abs(card.daysUntilDue) })
                           : card.daysUntilDue === 0
-                            ? 'today'
-                            : `in ${card.daysUntilDue} day${card.daysUntilDue === 1 ? '' : 's'}`}
+                            ? t('cards.dueToday')
+                            : t('cards.dueInDays', { count: card.daysUntilDue })}
                       </>
                     )}
                   </>
                 ) : (
-                  'Set a billing cycle to track this'
+                  t('cards.setCycleHint')
                 )}
               </span>
             </div>
 
             <div className="metric">
-              <span className="section-label">Unbilled</span>
+              <span className="section-label">{t('cards.unbilled')}</span>
               <span className="metric-value">{money(card.unbilledBalance)}</span>
               <span className="metric-hint">
                 {card.nextStatementDate
-                  ? `Bills ${formatDate(card.nextStatementDate, settings.locale)}`
-                  : 'Since the account opened'}
+                  ? t('cards.billsOn', { date: formatDate(card.nextStatementDate, settings.locale) })
+                  : t('cards.sinceOpened')}
               </span>
             </div>
 
             <div className={cx('metric', card.availableCredit < 0 && 'metric--negative')}>
-              <span className="section-label">Available credit</span>
+              <span className="section-label">{t('cards.availableCredit')}</span>
               <span
                 className={cx('metric-value', card.availableCredit < 0 && 'text-negative')}
               >
@@ -165,24 +171,26 @@ export function CreditCardsPage() {
               </span>
               <span className="metric-hint">
                 {card.hasLimit
-                  ? `${formatPercent(card.utilization, 0)} of ${money(wallet.creditLimit, { compact: true })} used`
-                  : 'No limit set'}
+                  ? t('cards.percentOfUsed', {
+                      percent: formatPercent(card.utilization, 0),
+                      amount: money(wallet.creditLimit, { compact: true }),
+                    })
+                  : t('cards.noLimitSet')}
               </span>
             </div>
 
             {card.scheduledBalance > 0 && (
               <div className="metric metric--accent">
-                <span className="section-label">Scheduled</span>
+                <span className="section-label">{t('cards.scheduled')}</span>
                 <span className="metric-value">{money(card.scheduledBalance)}</span>
-                <span className="metric-hint">Installment chunks still to be billed</span>
+                <span className="metric-hint">{t('cards.scheduledHint')}</span>
               </div>
             )}
           </div>
 
           {noCycle && (
             <Alert tone="info">
-              No billing cycle on this card yet. Add the statement and due days and it can tell you
-              what has been billed and when it falls due.
+              {t('cards.noCycleWarning')}
             </Alert>
           )}
 
@@ -195,9 +203,9 @@ export function CreditCardsPage() {
                 setPayingCard(card);
               }}
               disabled={card.currentBalance <= 0}
-              title={card.currentBalance <= 0 ? 'Nothing owed on this card' : undefined}
+              title={card.currentBalance <= 0 ? t('cards.nothingOwed') : undefined}
             >
-              Pay bill
+              {t('cards.payBill')}
             </Button>
             <Button
               size="sm"
@@ -206,7 +214,7 @@ export function CreditCardsPage() {
                 setPlanningCard(card);
               }}
             >
-              New installment
+              {t('cards.newInstallment')}
             </Button>
             <Button
               size="sm"
@@ -217,7 +225,7 @@ export function CreditCardsPage() {
                 setFormOpen(true);
               }}
             >
-              Edit
+              {t('common.edit')}
             </Button>
           </footer>
         </div>
@@ -233,18 +241,17 @@ export function CreditCardsPage() {
     <>
       <div className="page-head">
         <div className="stack" style={{ gap: 4 }}>
-          <span className="section-label">Debt</span>
-          <h1 className="page-title">Cards</h1>
+          <span className="section-label">{t('cards.debt')}</span>
+          <h1 className="page-title">{t('cards.title')}</h1>
           <p className="page-lede">
-            Charges add to what you owe; paying a bill is a transfer from a cash wallet, so it never
-            counts as spending twice.
+            {t('cards.lede')}
           </p>
         </div>
         <div className="cluster">
-          <RefreshButton onRefresh={credit.refresh} busy={credit.isValidating} label="Refresh cards" />
+          <RefreshButton onRefresh={credit.refresh} busy={credit.isValidating} label={t('cards.refresh')} />
           <Button size="sm" variant="primary" onClick={openNewCard}>
             <Icon icon={Plus} size="sm" />
-            New card
+            {t('cards.newCard')}
           </Button>
         </div>
       </div>
@@ -261,17 +268,21 @@ export function CreditCardsPage() {
       )}
 
       {summary.overdue.length > 0 && (
-        <Alert tone="error" title="Payment overdue">
-          {summary.overdue.map((card) => card.wallet.name).join(', ')} — due date has passed with a
-          balance outstanding.
+        <Alert tone="error" title={t('cards.overdueTitle')}>
+          {t('cards.overdueBody', {
+            names: summary.overdue.map((card) => card.wallet.name).join(', '),
+          })}
         </Alert>
       )}
       {summary.dueSoon.length > 0 && (
-        <Alert tone="warning" title="Due within three days">
+        <Alert tone="warning" title={t('cards.dueSoonTitle')}>
           {summary.dueSoon
-            .map(
-              (card) =>
-                `${card.wallet.name} · ${money(card.statementBalance)} on ${formatDate(card.paymentDueDate ?? '', settings.locale)}`,
+            .map((card) =>
+              t('cards.dueSoonEntry', {
+                name: card.wallet.name,
+                amount: money(card.statementBalance),
+                date: formatDate(card.paymentDueDate ?? '', settings.locale),
+              }),
             )
             .join(' · ')}
         </Alert>
@@ -287,11 +298,11 @@ export function CreditCardsPage() {
         <Card>
           <EmptyState
             icon={<Icon icon={CreditCard} size="xl" />}
-            title="No credit cards yet"
-            description="Add one to track what you owe, when the statement closes, and what is still unbilled. Existing wallets are unaffected — they stay cash."
+            title={t('cards.emptyTitle')}
+            description={t('cards.emptyBody')}
             action={
               <Button variant="primary" onClick={openNewCard}>
-                Add a card
+                {t('cards.addCard')}
               </Button>
             }
           />
@@ -301,30 +312,32 @@ export function CreditCardsPage() {
           {/* ---- Roll-up across every card ---- */}
           <section className={cx('debt-hero', `debt-hero--${tone}`)}>
             <div className="debt-hero-primary">
-              <span className="section-label">Total owed</span>
+              <span className="section-label">{t('cards.totalOwed')}</span>
               <span className="hero-value">{money(summary.totalDebt)}</span>
               <div className="hero-meta">
                 <Badge tone={summary.totalStatementBalance > 0 ? 'warning' : 'positive'}>
-                  {money(summary.totalStatementBalance)} billed
+                  {t('cards.billed', { amount: money(summary.totalStatementBalance) })}
                 </Badge>
                 <span>
-                  across {cards.length} card{cards.length === 1 ? '' : 's'}
+                  {t('cards.acrossCards', { count: cards.length })}
                   {summary.totalScheduled > 0 &&
-                    ` · ${money(summary.totalScheduled, { compact: true })} scheduled`}
+                    t('cards.scheduledSuffix', {
+                      amount: money(summary.totalScheduled, { compact: true }),
+                    })}
                 </span>
               </div>
             </div>
 
             <div className="hero-metrics">
               <div className="metric">
-                <span className="section-label">Available credit</span>
+                <span className="section-label">{t('cards.availableCredit')}</span>
                 <span className="metric-value">
                   {summary.totalLimit > 0 ? money(summary.totalAvailable, { compact: true }) : '—'}
                 </span>
                 <span className="metric-hint">
                   {summary.totalLimit > 0
-                    ? `of ${money(summary.totalLimit, { compact: true })}`
-                    : 'No limits set'}
+                    ? t('cards.ofLimit', { amount: money(summary.totalLimit, { compact: true }) })
+                    : t('cards.noLimits')}
                 </span>
               </div>
               <div
@@ -333,14 +346,20 @@ export function CreditCardsPage() {
                   tone === 'ok' ? 'metric--positive' : tone === 'warning' ? 'metric--accent' : 'metric--negative',
                 )}
               >
-                <span className="section-label">Utilisation</span>
+                <span className="section-label">{t('cards.utilisation')}</span>
                 <span className="metric-value">
                   {summary.totalLimit > 0 ? formatPercent(summary.utilization, 0) : '—'}
                 </span>
                 <span className="metric-hint">
                   {/* 30% is the figure credit scoring actually uses, so it is
                       worth naming rather than leaving the bar to imply it. */}
-                  {tone === 'ok' ? 'Under 30% — healthy' : tone === 'warning' ? 'Over 30%' : 'Over the limit'}
+                  {t(
+                    tone === 'ok'
+                      ? 'cards.utilisationHealthy'
+                      : tone === 'warning'
+                        ? 'cards.utilisationHigh'
+                        : 'cards.utilisationOver',
+                  )}
                 </span>
               </div>
             </div>

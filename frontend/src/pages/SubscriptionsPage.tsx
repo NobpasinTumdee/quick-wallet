@@ -144,7 +144,7 @@ export function SubscriptionsPage() {
   }
 
   async function remove(subscription: Subscription) {
-    if (!window.confirm(`Delete the "${subscription.name}" subscription? Past payments are kept.`)) return;
+    if (!window.confirm(t('recurring.deleteConfirm', { name: subscription.name }))) return;
     await subscriptions.remove(subscription.id).catch(() => undefined);
   }
 
@@ -152,8 +152,8 @@ export function SubscriptionsPage() {
     <>
       <div className="page-head">
         <div className="stack" style={{ gap: 4 }}>
-          <span className="section-label">Recurring</span>
-          <h1 className="page-title">Subscriptions</h1>
+          <span className="section-label">{t('recurring.title')}</span>
+          <h1 className="page-title">{t('recurring.subscriptions')}</h1>
           <p className="page-lede">
             Bills you pay on a cycle. Nothing is charged automatically — confirm a payment and it
             records the expense, then moves to the next cycle.
@@ -175,7 +175,7 @@ export function SubscriptionsPage() {
             }}
             disabled={wallets.items.length === 0}
           >
-            New subscription
+            {t('recurring.newSubscription')}
           </Button>
         </div>
       </div>
@@ -305,7 +305,7 @@ export function SubscriptionsPage() {
                                 disabled={pending}
                                 onClick={() => void confirmPayment(subscription)}
                               >
-                                Confirm payment
+                                {t('recurring.markPaid')}
                               </Button>
                             )}
                             <Button
@@ -317,7 +317,7 @@ export function SubscriptionsPage() {
                                 setFormOpen(true);
                               }}
                             >
-                              Edit
+                              {t('common.edit')}
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => void remove(subscription)}>
                               ✕

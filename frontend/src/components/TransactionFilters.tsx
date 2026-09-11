@@ -78,7 +78,7 @@ export function TransactionFilters({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
-  const walletName = (id: string) => wallets.find((w) => w.id === id)?.name ?? 'Unknown wallet';
+  const walletName = (id: string) => wallets.find((w) => w.id === id)?.name ?? t('recurring.unknownWallet');
   const chips = activeFilters(filters, { walletName });
 
   /** True when this preset's window is exactly what's set — drives the chips. */
@@ -108,7 +108,7 @@ export function TransactionFilters({
               type="button"
               className="filter-chip"
               onClick={() => onChange(chip.clear)}
-              aria-label={`Remove filter: ${chip.label}`}
+              aria-label={t('activity.removeFilter', { label: chip.label })}
             >
               {chip.label}
               <Icon icon={X} size="sm" />
@@ -133,7 +133,7 @@ export function TransactionFilters({
         {chips.length > 0 && (
           <Button size="sm" variant="ghost" onClick={() => onChange(EMPTY_FILTERS)}>
             <Icon icon={RotateCcw} size="sm" />
-            Clear
+            {t('activity.clear')}
           </Button>
         )}
       </div>
@@ -144,7 +144,7 @@ export function TransactionFilters({
           <section className="filter-group">
             <h3 className="filter-group-title">
               <Icon icon={CalendarRange} size="sm" />
-              Date range
+              {t('activity.dateRange')}
             </h3>
 
             <div className="filter-preset-row">
@@ -193,7 +193,7 @@ export function TransactionFilters({
           <section className="filter-group">
             <h3 className="filter-group-title">
               <Icon icon={Clock} size="sm" />
-              Time of day
+              {t('activity.timeOfDay')}
             </h3>
 
             <div className="filter-preset-row">
@@ -241,7 +241,7 @@ export function TransactionFilters({
                 at". Setting an end before the start reads as an overnight
                 window, which is the useful interpretation of 22:00 → 02:00. */}
             <p className="field-hint">
-              Matches when a transaction was <strong>recorded</strong> — the date field itself
+              {t('activity.timeOfDayHint')} <strong>recorded</strong> — the date field itself
               carries no clock time. An end earlier than the start spans midnight.
             </p>
           </section>
@@ -250,7 +250,7 @@ export function TransactionFilters({
           <section className="filter-group">
             <h3 className="filter-group-title">
               <Icon icon={Wallet} size="sm" />
-              Wallet &amp; type
+              {t('activity.walletAndType')}
             </h3>
 
             <div className="filter-pair">
@@ -287,7 +287,7 @@ export function TransactionFilters({
           <section className="filter-group">
             <h3 className="filter-group-title">
               <Icon icon={Tag} size="sm" />
-              Category
+              {t('common.category')}
             </h3>
             <Select
               value={filters.category}
@@ -306,7 +306,7 @@ export function TransactionFilters({
           <section className="filter-group">
             <h3 className="filter-group-title">
               <Icon icon={Coins} size="sm" />
-              Amount
+              {t('common.amount')}
             </h3>
             <div className="filter-pair">
               <Field label={t('activity.filterAtLeast')}>
@@ -329,7 +329,7 @@ export function TransactionFilters({
           <section className="filter-group filter-group--wide">
             <h3 className="filter-group-title">
               <Icon icon={Search} size="sm" />
-              Search
+              {t('common.search')}
             </h3>
             <Input
               placeholder={t('activity.filterSearchPlaceholder')}

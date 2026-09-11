@@ -187,7 +187,7 @@ export function TransactionsPage({ period }: { period: string }) {
                 <Button onClick={() => setFilters(EMPTY_FILTERS)}>{t('common.clearFilters')}</Button>
               ) : wallets.items.length > 0 ? (
                 <Button variant="primary" onClick={() => setFormOpen(true)}>
-                  Add a transaction
+                  {t('activity.addTransaction')}
                 </Button>
               ) : undefined
             }
@@ -202,7 +202,7 @@ export function TransactionsPage({ period }: { period: string }) {
                   <th>{t('activity.categoryOrRoute')}</th>
                   <th>{t('common.wallet')}</th>
                   <th>{t('common.note')}</th>
-                  <th className="num">Amount</th>
+                  <th className="num">{t('common.amount')}</th>
                   <th className="num" />
                 </tr>
               </thead>
@@ -253,7 +253,7 @@ export function TransactionsPage({ period }: { period: string }) {
                             setFormOpen(true);
                           }}
                         >
-                          Edit
+                          {t('common.edit')}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => void remove(tx)}>
                           ✕

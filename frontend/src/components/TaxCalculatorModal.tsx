@@ -7,6 +7,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
 import { cx, formatDate, formatPercent } from '../lib/format';
@@ -84,6 +85,7 @@ function toDeductions(form: DeductionForm): AdditionalDeductions {
 }
 
 export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const { user } = useAuth();
   const money = useMoneyFormatter();
@@ -159,7 +161,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
       if ((error as Error)?.name === 'AbortError') return;
       setRun({
         status: 'failed',
-        message: error instanceof Error ? error.message : 'Could not load transactions',
+        message: error instanceof Error ? error.message : t('tax.loadFailed'),
       });
     }
   }
@@ -172,7 +174,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
     } catch (error) {
       setRun({
         status: 'failed',
-        message: error instanceof Error ? error.message : 'Could not build the PDF',
+        message: error instanceof Error ? error.message : t('tax.pdfFailed'),
       });
     } finally {
       setExporting(false);
@@ -193,18 +195,15 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
     allowance.applied > 0 && (
       <div className="tax-line">
         <span className="tax-line-label">
-          Less: {label}
+          {t('tax.lessLabel', { label })}
           <em>
             {thai}
-            {allowance.capped ? (
-              <>
-                {' '}
-                · {money.formatBase(allowance.requested)} entered, capped at{' '}
-                {money.formatBase(allowance.cap ?? 0)}
-              </>
-            ) : (
-              hint && <> · {hint}</>
-            )}
+            {allowance.capped
+              ? t('tax.allowanceCapped', {
+                  requested: money.formatBase(allowance.requested),
+                  cap: money.formatBase(allowance.cap ?? 0),
+                })
+              : hint && t('tax.allowanceHintSuffix', { hint })}
           </em>
         </span>
         <span className="tax-line-value tax-line-value--minus">
@@ -219,18 +218,18 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
       title={
         <span className="tax-title">
           <Icon icon={FileText} size="sm" />
-          Thai income tax estimate
+          {t('tax.estimateHeading')}
         </span>
       }
       onClose={onClose}
       width={720}
       footer={
         <>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t('common.close')}</Button>
           {result && (
             <Button onClick={() => void download(result)} loading={exporting}>
               <Icon icon={Download} size="sm" />
-              Export as PDF
+              {t('tax.exportPdf')}
             </Button>
           )}
           <Button
@@ -240,14 +239,14 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
             disabled={invalidRange}
           >
             <Icon icon={Calculator} size="sm" />
-            {result ? 'Recalculate' : 'Run calculation'}
+            {t(result ? 'tax.recalculate' : 'tax.runCalculation')}
           </Button>
         </>
       }
     >
       {/* ---- Range ---- */}
       <div className="tax-range">
-        <Field label="From">
+        <Field label={t('tax.from')}>
           <Input
             type="date"
             value={range.from}
@@ -255,7 +254,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
             onChange={(event) => patchRange({ from: event.target.value })}
           />
         </Field>
-        <Field label="To">
+        <Field label={t('tax.to')}>
           <Input
             type="date"
             value={range.to}
@@ -289,9 +288,9 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
           aria-expanded={deductionsOpen}
           onClick={() => setDeductionsOpen((current) => !current)}
         >
-          <span>Additional deductions</span>
+          <span>{t('tax.additionalDeductions')}</span>
           <span className="tax-deductions-state">
-            {enteredCount > 0 ? `${enteredCount} entered` : 'Optional'}
+            {enteredCount > 0 ? t('tax.entered', { count: enteredCount }) : t('common.optional')}
           </span>
           <Icon
             icon={ChevronDown}
@@ -303,8 +302,8 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
         {deductionsOpen && (
           <div className="tax-deductions-body">
             <Field
-              label="Social security"
-              hint={`ประกันสังคม · max ${money.formatBase(SOCIAL_SECURITY_CAP)} a year`}
+              label={t('tax.socialSecurity')}
+              hint={t('tax.socialSecurityHint', { amount: money.formatBase(SOCIAL_SECURITY_CAP) })}
             >
               <DecimalInput
                 value={deductions.socialSecurity}
@@ -314,8 +313,8 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
             </Field>
 
             <Field
-              label="Life &amp; health insurance"
-              hint={`ประกันชีวิตและสุขภาพ · max ${money.formatBase(INSURANCE_CAP)}`}
+              label={t('tax.lifeHealthInsurance')}
+              hint={t('tax.insuranceHint', { amount: money.formatBase(INSURANCE_CAP) })}
             >
               <DecimalInput
                 value={deductions.insurance}
@@ -325,8 +324,8 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
             </Field>
 
             <Field
-              label="Investment funds"
-              hint="กองทุนรวม SSF / RMF / Thai ESG · enter your own total, already within your limits"
+              label={t('tax.investmentFunds')}
+              hint={t('tax.fundsHint')}
             >
               <DecimalInput
                 value={deductions.funds}
@@ -336,8 +335,8 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
             </Field>
 
             <Field
-              label="Withholding tax already paid"
-              hint="ภาษีหัก ณ ที่จ่าย · from your 50 Tawi certificate. Credited against the tax, not deducted from income."
+              label={t('tax.withholding')}
+              hint={t('tax.withholdingHint')}
             >
               <DecimalInput
                 value={deductions.withholdingTax}
@@ -349,13 +348,11 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
         )}
       </div>
 
-      {invalidRange && <Alert tone="error">The start date is after the end date.</Alert>}
+      {invalidRange && <Alert tone="error">{t('tax.dateRangeError')}</Alert>}
 
       {wrongCurrency && (
-        <Alert tone="warning" title={`Your books are in ${currency}, not THB`}>
-          Thai tax bands are fixed baht amounts, so a {currency} total is compared against THB
-          thresholds and the result below is not meaningful. Switch the bookkeeping currency in
-          Settings, or read this as a shape rather than a figure.
+        <Alert tone="warning" title={t('tax.wrongCurrencyTitle', { currency })}>
+          {t('tax.wrongCurrencyBody', { currency })}
         </Alert>
       )}
 
@@ -366,16 +363,20 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
         <div className="tax-idle">
           <Icon icon={Calculator} size="xl" />
           <p>
-            Nothing is calculated until you ask. Choose a range and press{' '}
-            <strong>Run calculation</strong> — it reads your income transactions for those dates
-            and works through the 0–35% bands.
+            {/* `Trans` because the button's name is emphasised mid-sentence, and
+                where that emphasis falls moves between languages. */}
+            <Trans
+              i18nKey="tax.idleBody"
+              values={{ action: t('tax.runCalculation') }}
+              components={{ 1: <strong /> }}
+            />
           </p>
         </div>
       )}
 
       {run.status === 'running' && (
         <div className="tax-idle">
-          <p>Reading transactions…</p>
+          <p>{t('tax.readingTransactions')}</p>
         </div>
       )}
 
@@ -387,9 +388,9 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
               <span className="section-label">
                 {result.withholdingTax > 0
                   ? result.isRefund
-                    ? 'Estimated refund due'
-                    : 'Tax still to pay'
-                  : 'Estimated tax payable'}
+                    ? t('tax.refundDue')
+                    : t('tax.stillToPay')
+                  : t('tax.estimatedPayable')}
               </span>
               <div className={cx('tax-total', result.isRefund && 'text-positive')}>
                 {money.formatBase(
@@ -412,36 +413,32 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
           </header>
 
           {result.transactionCount === 0 && (
-            <Alert tone="info" title="No income recorded in this range">
-              The calculation is correct for what is in the app, but a ฿0 result usually means the
-              income for these dates has not been entered yet.
+            <Alert tone="info" title={t('tax.noIncomeInRange')}>
+              {t('tax.noIncomeBody')}
             </Alert>
           )}
 
           {/* ---- Steps 1–4 ---- */}
           <section className="tax-block">
-            <h3 className="tax-block-title">How the taxable figure is reached</h3>
+            <h3 className="tax-block-title">{t('tax.howTaxableReached')}</h3>
 
             <div className="tax-line">
               <span className="tax-line-label">
-                Gross assessable income
-                <em>เงินได้พึงประเมิน · all income in range</em>
+                {t('tax.grossIncome')}
+                <em>{t('tax.grossIncomeSub')}</em>
               </span>
               <span className="tax-line-value">{money.formatBase(result.grossIncome)}</span>
             </div>
 
             <div className="tax-line">
               <span className="tax-line-label">
-                Less: standard expense deduction
+                {t('tax.expenseDeduction')}
                 <em>
-                  ค่าใช้จ่าย · 50% of income, capped at {money.formatBase(EXPENSE_DEDUCTION_CAP)}
-                  {result.expenseDeductionCapped && (
-                    <>
-                      {' '}
-                      — 50% would be {money.formatBase(result.expenseDeductionUncapped)}, so the cap
-                      applies
-                    </>
-                  )}
+                  {t('tax.expenseDeductionSub', { amount: money.formatBase(EXPENSE_DEDUCTION_CAP) })}
+                  {result.expenseDeductionCapped &&
+                    t('tax.expenseDeductionCapped', {
+                      amount: money.formatBase(result.expenseDeductionUncapped),
+                    })}
                 </em>
               </span>
               <span className="tax-line-value tax-line-value--minus">
@@ -451,31 +448,31 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
 
             <div className="tax-line">
               <span className="tax-line-label">
-                Less: personal allowance
-                <em>ค่าลดหย่อนส่วนตัว · the taxpayer&rsquo;s own allowance</em>
+                {t('tax.personalAllowance')}
+                <em>{t('tax.personalAllowanceSub')}</em>
               </span>
               <span className="tax-line-value tax-line-value--minus">
                 −{money.formatBase(result.allowances.personal)}
               </span>
             </div>
 
-            {allowanceLine('social security', 'ประกันสังคม', result.allowances.socialSecurity)}
+            {allowanceLine(t('tax.allowanceSocialSecurity'), 'ประกันสังคม', result.allowances.socialSecurity)}
             {allowanceLine(
-              'life and health insurance',
+              t('tax.allowanceInsurance'),
               'ประกันชีวิตและสุขภาพ',
               result.allowances.insurance,
             )}
             {allowanceLine(
-              'investment funds',
+              t('tax.allowanceFunds'),
               'กองทุนรวม SSF / RMF / Thai ESG',
               result.allowances.funds,
-              'as entered; own limits not verified',
+              t('tax.allowanceFundsHint'),
             )}
 
             <div className="tax-line tax-line--net">
               <span className="tax-line-label">
-                Net taxable income
-                <em>เงินได้สุทธิ · what the bands below are applied to</em>
+                {t('tax.netTaxableIncome')}
+                <em>{t('tax.netTaxableIncomeSub')}</em>
               </span>
               <span className="tax-line-value">{money.formatBase(result.netTaxableIncome)}</span>
             </div>
@@ -484,10 +481,10 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
           {/* ---- The ladder ---- */}
           <section className="tax-block">
             <h3 className="tax-block-title">
-              Progressive bands
+              {t('tax.progressiveBands')}
               <span className="tax-block-note">
                 <Icon icon={Info} size="sm" />
-                Each rate applies only to the slice of income inside its own band
+                {t('tax.bandLadderHint')}
               </span>
             </h3>
 
@@ -495,10 +492,10 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
               <table className="data data--nested tax-bands">
                 <thead>
                   <tr>
-                    <th>Band</th>
-                    <th className="num">Rate</th>
-                    <th className="num">Taxable here</th>
-                    <th className="num">Tax</th>
+                    <th>{t('tax.band')}</th>
+                    <th className="num">{t('tax.rate')}</th>
+                    <th className="num">{t('tax.taxableHere')}</th>
+                    <th className="num">{t('tax.taxColumn')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -514,9 +511,12 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
                     >
                       <td>
                         {bracket.upTo === Infinity
-                          ? `Over ${bracket.from.toLocaleString()}`
-                          : `${(bracket.from === 0 ? 0 : bracket.from + 1).toLocaleString()} – ${bracket.upTo.toLocaleString()}`}
-                        {bracket.isMarginal && <span className="tax-marginal">your rate</span>}
+                          ? t('tax.bandOver', { from: bracket.from.toLocaleString() })
+                          : t('tax.bandRange', {
+                              from: (bracket.from === 0 ? 0 : bracket.from + 1).toLocaleString(),
+                              to: bracket.upTo.toLocaleString(),
+                            })}
+                        {bracket.isMarginal && <span className="tax-marginal">{t('tax.yourRate')}</span>}
                       </td>
                       <td className="num">{(bracket.rate * 100).toFixed(0)}%</td>
                       <td className="num">
@@ -543,7 +543,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
           {/* ---- The answer, and what it means month to month ---- */}
           <section className="tax-summary">
             <div className="tax-summary-figure">
-              <span className="section-label">Tax payable</span>
+              <span className="section-label">{t('tax.taxPayable')}</span>
               <strong>{money.formatBase(result.taxPayable)}</strong>
             </div>
 
@@ -553,7 +553,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
               <div className="tax-settle">
                 <div className="tax-settle-row">
                   <span>
-                    Less: withholding tax already paid
+                    {t('tax.lessWithholding')}
                     <em>ภาษีหัก ณ ที่จ่าย</em>
                   </span>
                   <span className="tax-line-value tax-line-value--minus">
@@ -563,7 +563,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
 
                 <div className={cx('tax-settle-total', result.isRefund && 'is-refund')}>
                   <span>
-                    {result.isRefund ? 'Estimated refund due' : 'Tax still to pay'}
+                    {t(result.isRefund ? 'tax.refundDue' : 'tax.stillToPay')}
                     <em>{result.isRefund ? 'เงินภาษีที่ได้คืน' : 'ภาษีที่ต้องชำระเพิ่ม'}</em>
                   </span>
                   <strong>
@@ -575,19 +575,19 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
 
             <div className="tax-summary-stats">
               <div>
-                <span className="section-label">Effective rate</span>
+                <span className="section-label">{t('tax.effectiveRate')}</span>
                 <strong>{formatPercent(result.effectiveRate, 2)}</strong>
               </div>
               <div>
-                <span className="section-label">Marginal rate</span>
+                <span className="section-label">{t('tax.marginalRate')}</span>
                 <strong>{formatPercent(result.marginalRate, 0)}</strong>
               </div>
               <div>
-                <span className="section-label">Per month</span>
+                <span className="section-label">{t('tax.perMonth')}</span>
                 <strong>{money.formatBase(result.monthlyEquivalent)}</strong>
               </div>
               <div>
-                <span className="section-label">After tax</span>
+                <span className="section-label">{t('tax.afterTax')}</span>
                 <strong>{money.formatBase(result.netAfterTax)}</strong>
               </div>
             </div>
@@ -599,7 +599,7 @@ export function TaxCalculatorModal({ open, onClose }: { open: boolean; onClose: 
           <section className="tax-assumptions">
             <h3 className="tax-block-title">
               <Icon icon={TriangleAlert} size="sm" />
-              What this estimate assumes
+              {t('tax.assumptionsHeading')}
             </h3>
             <ul>
               {result.assumptions.map((assumption) => (

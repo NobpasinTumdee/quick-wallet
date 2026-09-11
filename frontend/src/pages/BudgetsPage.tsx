@@ -1,5 +1,6 @@
 import { Target } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { invalidate, mutateMatching } from '../api/cache';
 import { Icon } from '../components/Icon';
@@ -14,6 +15,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
 
 export function BudgetsPage({ period }: { period: string }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const wallets = useExcelDB<WalletBalance>('wallets');
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<BudgetResponse>('/api/budgets', {
@@ -46,7 +48,7 @@ export function BudgetsPage({ period }: { period: string }) {
       })
       .catch((err: unknown) => {
         rollback();
-        toast.error(err instanceof Error ? err.message : 'Could not save the budget');
+        toast.error(err instanceof Error ? err.message : t('budgets.saveFailed'));
         throw err;
       });
   }
@@ -73,7 +75,7 @@ export function BudgetsPage({ period }: { period: string }) {
       payload.scope === 'wallet'
         ? (wallets.items.find((w) => w.id === payload.targetId)?.name ?? payload.targetId)
         : payload.scope === 'global'
-          ? 'All spending'
+          ? t('dashboard.allSpending')
           : payload.targetId;
 
     const pending = runOptimistic(
@@ -133,7 +135,7 @@ export function BudgetsPage({ period }: { period: string }) {
   }
 
   async function remove(budget: BudgetProgress) {
-    if (!window.confirm(`Delete the "${budget.targetLabel}" budget?`)) return;
+    if (!window.confirm(t('budgets.deleteConfirm', { label: budget.targetLabel }))) return;
     await runOptimistic(
       (current) =>
         current
@@ -161,9 +163,14 @@ export function BudgetsPage({ period }: { period: string }) {
         to: period,
       });
       await refresh();
-      setNotice(`Copied ${result.copied} budget(s)${result.skipped ? `, skipped ${result.skipped} already set` : ''}.`);
+      setNotice(
+        t('budgets.copied', {
+          count: result.copied,
+          skipped: result.skipped ? t('budgets.copiedSkipped', { count: result.skipped }) : '',
+        }),
+      );
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Copy failed');
+      setNotice(err instanceof Error ? err.message : t('budgets.copyFailed'));
     }
   }
 
@@ -182,9 +189,9 @@ export function BudgetsPage({ period }: { period: string }) {
       <div className="page-head">
         <div className="stack" style={{ gap: 4 }}>
           <span className="section-label">{formatPeriod(period, settings.locale)}</span>
-          <h1 className="page-title">Budgets</h1>
+          <h1 className="page-title">{t('budgets.title')}</h1>
           <p className="page-lede">
-            Percentage budgets track a share of your income; fixed budgets track a flat amount.
+            {t('budgets.lede')}
           </p>
         </div>
         <div className="cluster">
@@ -193,13 +200,13 @@ export function BudgetsPage({ period }: { period: string }) {
           <RefreshButton
             onRefresh={() => Promise.all([refresh(), wallets.refresh()])}
             busy={isValidating || wallets.isValidating}
-            label="Refresh budgets"
+            label={t('budgets.refresh')}
           />
           <Button size="sm" onClick={() => void copyLastMonth()}>
-            Copy last month
+            {t('budgets.copyPrevious')}
           </Button>
           <Button size="sm" variant="primary" onClick={openNew}>
-            New budget
+            {t('budgets.newBudget')}
           </Button>
         </div>
       </div>
@@ -207,14 +214,16 @@ export function BudgetsPage({ period }: { period: string }) {
       {/* ---- Plan summary ---- */}
       <section className="hero">
         <div className="hero-primary">
-          <span className="section-label">Budgeted this month</span>
+          <span className="section-label">{t('budgets.budgetedThisMonth')}</span>
           <span className="hero-value">{money(totals?.limit ?? 0)}</span>
           <div className="hero-meta">
             <Badge tone={spentShare > 100 ? 'negative' : spentShare > 80 ? 'warning' : 'positive'}>
-              {money(totals?.spent ?? 0)} spent
+              {t('budgets.spentBadge', { amount: money(totals?.spent ?? 0) })}
             </Badge>
             <span>
-              {totals && totals.limit > 0 ? `${formatPercent(spentShare)} of plan used` : 'Nothing planned yet'}
+              {totals && totals.limit > 0
+                ? t('budgets.planUsed', { percent: formatPercent(spentShare) })
+                : t('budgets.nothingPlanned')}
             </span>
           </div>
 
@@ -225,10 +234,10 @@ export function BudgetsPage({ period }: { period: string }) {
             </div>
             <div className="allocation-legend">
               <span>
-                <strong>{formatPercent(allocated, 0)}</strong> of income allocated
+                <strong>{formatPercent(allocated, 0)}</strong> {t('budgets.ofIncomeAllocated')}
               </span>
               <span className="text-faint">
-                {formatPercent(Math.max(0, 100 - allocated), 0)} unallocated
+                {t('budgets.unallocatedShare', { percent: formatPercent(Math.max(0, 100 - allocated), 0) })}
               </span>
             </div>
           </div>
@@ -236,25 +245,25 @@ export function BudgetsPage({ period }: { period: string }) {
 
         <div className="hero-metrics">
           <div className="metric metric--accent">
-            <span className="section-label">Base income</span>
+            <span className="section-label">{t('budgets.baseIncome')}</span>
             <span className="metric-value">{money(baseIncome, { compact: true })}</span>
             <span className="metric-hint">
-              {settings.monthlyIncome > 0 ? 'From Settings' : 'From recorded income'}
+              {t(settings.monthlyIncome > 0 ? 'budgets.fromSettings' : 'budgets.fromRecordedIncome')}
             </span>
           </div>
           <div className="metric">
-            <span className="section-label">Budget lines</span>
+            <span className="section-label">{t('budgets.budgetLines')}</span>
             <span className="metric-value">{budgets.length}</span>
             <span className="metric-hint">
-              {budgets.filter((b) => b.status === 'over').length} over limit
+              {t('budgets.overLimitCount', { count: budgets.filter((b) => b.status === 'over').length })}
             </span>
           </div>
           <div className="metric metric--negative">
-            <span className="section-label">Remaining</span>
+            <span className="section-label">{t('budgets.remaining')}</span>
             <span className="metric-value">
               {money(Math.max(0, (totals?.limit ?? 0) - (totals?.spent ?? 0)), { compact: true })}
             </span>
-            <span className="metric-hint">Across all budgets</span>
+            <span className="metric-hint">{t('budgets.acrossAll')}</span>
           </div>
         </div>
       </section>
@@ -273,11 +282,11 @@ export function BudgetsPage({ period }: { period: string }) {
         ) : budgets.length === 0 ? (
           <EmptyState
             icon={<Icon icon={Target} size="xl" />}
-            title="No budgets for this month"
-            description="Try a 40 / 10 / 20 split — Invest 40%, Save 10%, Needs 20% — or set flat amounts per category."
+            title={t('budgets.emptyThisMonth')}
+            description={t('budgets.emptyBodyFull')}
             action={
               <Button variant="primary" onClick={openNew}>
-                Create a budget
+                {t('budgets.createBudget')}
               </Button>
             }
           />
@@ -291,13 +300,13 @@ export function BudgetsPage({ period }: { period: string }) {
               <div key={budget.id} className={unconfirmed ? 'budget-item is-pending' : 'budget-item'}>
                 <div className="budget-head">
                   <span className="budget-name truncate">
-                    {budget.targetLabel || 'All spending'}
+                    {budget.targetLabel || t('dashboard.allSpending')}
                     {budget.mode === 'percent' ? (
-                      <Badge tone="accent">{budget.value}% of income</Badge>
+                      <Badge tone="accent">{t('budgets.percentOfIncome', { percent: budget.value })}</Badge>
                     ) : (
-                      <Badge>fixed</Badge>
+                      <Badge>{t('budgets.fixedBadge')}</Badge>
                     )}
-                    {budget.status === 'over' && <Badge tone="negative">over</Badge>}
+                    {budget.status === 'over' && <Badge tone="negative">{t('budgets.overBadge')}</Badge>}
                   </span>
                   <span className="budget-numbers">
                     {unconfirmed ? <span className="text-faint">—</span> : money(budget.spent)}{' '}
@@ -308,20 +317,22 @@ export function BudgetsPage({ period }: { period: string }) {
                 <ProgressBar
                   percent={unconfirmed ? 0 : budget.percentUsed}
                   tone={budget.status}
-                  label={`${budget.targetLabel}: ${formatPercent(budget.percentUsed)} used`}
+                  label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
                 />
 
                 <div className="budget-foot">
                   <span className="truncate">
-                    {unconfirmed ? 'Saving…' : `${formatPercent(budget.percentUsed)} used`}
-                    {budget.mode === 'percent' && ` · base ${money(budget.base)}`}
-                    {budget.note ? ` · ${budget.note}` : ''}
+                    {unconfirmed
+                      ? t('budgets.savingEllipsis')
+                      : t('budgets.percentUsed', { percent: formatPercent(budget.percentUsed) })}
+                    {budget.mode === 'percent' && t('budgets.baseSuffix', { amount: money(budget.base) })}
+                    {budget.note ? t('budgets.noteSuffix', { note: budget.note }) : ''}
                   </span>
                   <span className="cluster" style={{ flexWrap: 'nowrap' }}>
                     <span className={budget.remaining < 0 ? 'text-negative' : 'text-muted'}>
                       {budget.remaining < 0
-                        ? `${money(Math.abs(budget.remaining))} over`
-                        : `${money(budget.remaining)} left`}
+                        ? t('budgets.amountOver', { amount: money(Math.abs(budget.remaining)) })
+                        : t('budgets.amountLeft', { amount: money(budget.remaining) })}
                     </span>
                     <span className="row-actions">
                       <Button
@@ -333,7 +344,7 @@ export function BudgetsPage({ period }: { period: string }) {
                           setFormOpen(true);
                         }}
                       >
-                        Edit
+                        {t('common.edit')}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => void remove(budget)}>
                         ✕
