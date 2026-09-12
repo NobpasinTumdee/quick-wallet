@@ -7,8 +7,26 @@ data stays a spreadsheet you can open and edit at any time.
 There is no server to run. The frontend talks straight to an Apps Script Web App.
 
 > **Migrating from the old local build?** The Node/Express backend in `backend/`
-> is no longer used. See [§7 Retiring the Node backend](#7-retiring-the-node-backend)
+> is no longer used. See [§8 Retiring the Node backend](#8-retiring-the-node-backend)
 > — in particular the password step, which is required before anyone can sign in.
+
+---
+
+## What's in it
+
+| | |
+|---|---|
+| **Wallets & activity** | Cash, bank and e-wallet accounts; income, expenses and transfers. A transfer is one row, not two. |
+| **Credit cards** | Statement vs unbilled split, due-date reminders, 0% installment plans as real rows. |
+| **Budgets** | Fixed or percentage, per category, wallet or global. |
+| **Investments** | Positions grouped into holdings with a blended average cost, live quotes, purchase history per lot, and a watchlist for symbols you do not own. |
+| **Goals** | Sinking funds — earmark cash without moving it. |
+| **Shared expenses** | Split a bill, track who has paid back. |
+| **Recurring** | Subscriptions that roll their own due date when confirmed. |
+| **Analytics** | Savings-rate trend, spending heatmap, category treemap, top payees, a cash-flow Sankey and a ten-year net-worth projection. |
+| **Thai income tax** | An on-demand ภ.ง.ด. 90/91 estimate with a printable PDF. |
+| **Receipt scanning** | On-device OCR of a slip, in Thai and English — see §3. |
+| **Two languages** | English and ไทย, switchable at runtime — see §7. |
 
 ---
 
@@ -25,29 +43,32 @@ quick-wallet/
 │
 └── frontend/
     ├── .env.example              # VITE_GAS_WEB_APP_URL + stock API key
-    ├── index.html
+    ├── index.html                # carries the pre-paint theme script — see §6
     ├── public/                   # logo / favicons, served at the site root
     ├── vite.config.ts            # no dev proxy — the app calls Apps Script directly
     └── src/
         ├── App.tsx               # providers + auth gate
         ├── types.ts
         ├── api/
+        │   ├── cache.ts          # stale-while-revalidate store, outside React
         │   └── client.ts         # GAS transport: path→action routing, CORS-safe
         │                         # request shaping, token handling, ApiError
-        ├── hooks/
-        │   ├── useExcelDB.ts     # useExcelQuery + useExcelDB (CRUD)
-        │   ├── useGoogleSheet.ts # same hooks under Sheet-appropriate names
-        │   └── useStockQuotes.ts # quotes → unrealised P&L
-        ├── services/
-        │   ├── stockApi.ts       # Finnhub / Twelve Data / simulated
-        │   └── fxApi.ts          # optional exchange-rate lookup (USD → THB, …)
-        ├── state/
-        │   ├── AuthContext.tsx
-        │   └── SettingsContext.tsx
-        ├── components/           # AppShell, Logo, ui.tsx, the four forms
-        ├── pages/                # Login, Dashboard, Wallets, Cards,
-        │                         # Transactions, Investments, Budgets, Settings
-        ├── lib/                  # format.ts, router.ts, creditMath.ts
+        ├── hooks/                # useExcelDB (CRUD), plus one hook per feature:
+        │                         # credit cards, goals, watchlist, bill splits,
+        │                         # quotes, candles, FX, receipt scanning, theme
+        ├── services/             # stockApi (quotes), candleApi (charts),
+        │                         # fxApi — see the dual-provider note in §3
+        ├── state/                # Auth, Settings, Theme contexts
+        ├── locales/              # en.ts / th.ts / index.ts — see §7
+        ├── components/           # AppShell, ui.tsx, the forms, chart widgets
+        ├── pages/                # Login, Dashboard, Analytics, Wallets, Cards,
+        │                         # Transactions, Investments, Goals, Budgets,
+        │                         # Shared, Recurring, Settings, NotFound
+        ├── lib/                  # pure logic, no React — the arithmetic lives
+        │                         # here so it can be tested without a browser:
+        │                         # creditMath, splitMath, goalMath, positions,
+        │                         # projectionMath, analyticsMath, thaiTaxEngine,
+        │                         # receiptParser, txFilters, sankey, cashflow
         └── styles/
             ├── theme.css         # design tokens — light / dark / custom
             └── app.css           # layout & components
@@ -103,6 +124,43 @@ them as such. For live quotes get a free key from
 and set `VITE_STOCK_API_PROVIDER` / `VITE_STOCK_API_KEY`. Both send permissive CORS
 headers, so the browser calls them directly; quotes are cached in `sessionStorage`.
 
+**Quotes and candles use different vendors on purpose.** `stockApi.ts` fetches
+prices, `candleApi.ts` fetches the chart history, and they hold separate keys and
+separate budgets — otherwise opening one chart would starve every price on the
+screen. Free tiers are strict (Finnhub 60/min, Twelve Data 8/min), so `stockApi`
+keeps a sliding-window rate limiter and de-duplicates in-flight requests per
+symbol: a ticker that is both held and watched costs one request, not two.
+
+### Receipt scanning
+
+Reads a photo of a slip and fills in the amount, date and merchant. **The image
+never leaves the machine** — [tesseract.js](https://tesseract.projectnaptha.com/)
+runs the OCR in a Web Worker in the browser. There is no vision API and no key to
+configure.
+
+One caveat worth knowing before the first scan: the **language models** are
+downloaded from a CDN on first use (~2 MB for `eng`, ~4 MB for `tha`) and cached
+by the browser afterwards. That is a fetch of static model files, not of your
+image, but it is a network request — on a locked-down network the first scan will
+fail. `OCR_LANG_PATH` in `hooks/useReceiptScanner.ts` points at a self-hosted copy
+if you need one.
+
+Turning the OCR text into fields is `lib/receiptParser.ts`, and it is tuned for
+Thai bank slips rather than being a generic number-grabber. Two things it gets
+right that a naive parser does not:
+
+- **The biggest number on a Thai slip is the account balance**, not the transfer.
+  Amounts are chosen by what their line says — `จำนวนเงิน`, `ยอดชำระ`, Total —
+  and lines announcing a balance, fee or VAT are excluded before anything is
+  compared. Largest-number is only the last-resort fallback.
+- **Years are printed in the Buddhist Era.** `2568` naively parsed is a date 543
+  years in the future, which passes every plausibility check and looks fine in the
+  form. Anything above 2400 is converted, and two-digit years are read as BE
+  whenever the CE reading would be in the future.
+
+When nothing parses, the scan still hands back the text it read so you can use the
+first line as a note rather than starting over.
+
 ---
 
 ## 4. How the request shape works (and why it's odd)
@@ -153,10 +211,19 @@ budgets.list              budgets.get          budgets.create       budgets.upda
 budgets.delete            budgets.copy
 subscriptions.list        subscriptions.get    subscriptions.create subscriptions.update
 subscriptions.delete      subscriptions.pay
+billSplits.list           billSplits.get       billSplits.create    billSplits.update
+billSplits.delete         billSplits.markPaid  billSplits.markUnpaid
+goals.list                goals.create         goals.update         goals.fund          goals.delete
 watchlist.list            watchlist.create     watchlist.update     watchlist.delete
+themes.list               themes.create        themes.update        themes.delete       themes.activate
 settings.get              settings.save
 dashboard.get             dashboard.periods
 ```
+
+`goals.fund` is the one action that is not plain CRUD, and deliberately so: it
+takes a **delta**, not a new balance. A client that read `savedAmount`, added to
+it and PATCHed the result would lose a deposit any time two tabs did it at once.
+The script resolves the delta against the stored row under its own lock.
 
 Everything except `health`, `flush`, `auth.status`, `auth.login`, `auth.register`
 and `auth.resetPassword` requires a valid token, and every query is scoped to the
@@ -175,6 +242,8 @@ user that token resolves to.
 | `Budgets` | `ID` | One row per period + scope + target. |
 | `Subscriptions` | `ID` | `Next Due Date` rolls forward when a payment is confirmed. |
 | `Watchlist` | `ID` | Symbols tracked but not owned — no quantity, no cost basis. |
+| `BillSplits` | `ID` | One shared bill. The shares live in `Splits (JSON)`; `Expense Tx ID` links back to the expense row it wrote, so bill and transaction can be deleted as one act. |
+| `Goals` | `ID` | Sinking funds. `Saved Amount` is only ever moved by `goals.fund` — see below. |
 | `Settings` | `User ID` | Theme, accent, custom CSS vars, **the saved theme library**, currency, display currency + FX rate, locale, categories. |
 
 Column headers must match `SHEETS` in `Code.gs` exactly — `setup()` checks this,
@@ -188,6 +257,10 @@ and appends any column it adds — without touching existing data.
 > empty reads as `CASH`, so every balance, budget and net-worth figure is exactly
 > what it was — except a wallet already saved with kind `credit`, which reads as
 > `CREDIT` and picks up the card UI without being edited.
+
+> **Upgrading to shared expenses and goals:** run `createMissingSheets()` once.
+> It creates the `BillSplits` and `Goals` sheets with the headers `readTable_`
+> expects. Existing data is untouched — both are new tables, not new columns.
 
 > **Upgrading to the theme library:** run `createMissingSheets()` once from the
 > Apps Script editor. It appends `Custom Themes (JSON)`, `Active Custom Theme ID`
@@ -221,6 +294,17 @@ An **installment plan** is real rows, not a projection, so each monthly chunk is
 ordinary expense in its own month — this month's spending carries one chunk while
 the card's balance carries the whole amount still owed to the bank. Every existing
 aggregate (budgets, the trend chart, the Sankey) is right for free as a result.
+
+**Goals move no money.** A sinking fund is a *label on cash you already have*:
+funding one writes no Transaction, touches no wallet, and changes no balance. It
+is the only feature here that adds a figure without adding a row, and that is
+the point — if funding a goal wrote an expense, the money would leave your net
+worth for a purchase you have not made, your savings rate would collapse the
+month you started saving, and every budget would count the transfer as spending.
+The Goals screen derives what is left as `spendable cash − Σ saved`, and lets
+that go negative rather than flooring it: over-committing is a real state, and
+hiding it behind a cheerful zero removes the only signal that the plan and the
+balance have drifted apart.
 
 **Budgets** can be a fixed amount or a percentage. A percentage resolves against the
 first available of: the budget's own base override → Settings → monthly income →
@@ -328,7 +412,40 @@ change needed. Sizes are 32, 64, 128, 180 (iOS) and 512.
 
 ---
 
-## 7. Retiring the Node backend
+## 7. Language
+
+English and Thai, switchable at runtime from Settings. Adding a third is one file
+and one line:
+
+1. copy `src/locales/en.ts` to `<code>.ts`, translate the values, type it
+   `TranslationSchema`
+2. add one entry to `LANGUAGES` in `src/locales/index.ts`
+
+That is the whole job — the switcher renders from `LANGUAGES`, i18next's resources
+are built from it, and `Language` widens automatically.
+
+**Missing keys are a compile error, not a runtime surprise.** `en.ts` *is* the
+schema: `TranslationSchema` is derived from its shape, every other language is
+typed against it, and `i18next.d.ts` feeds the key union back into `t()`. A typo
+in a key fails the build at the call site, and a key you forgot to translate fails
+the build in that language's file. JSON would give up all three and happily show
+`nav.dashbaord` to a user.
+
+Two conventions worth keeping:
+
+- **Never assemble a sentence in a component.** Word order is not the same in
+  every language, so `` `Recorded at ${time}` `` hard-codes English somewhere a
+  translator cannot reach. Use one interpolated string — `'Recorded at {{time}}'`
+  — and let the translation move the pieces.
+- **A language carries a locale.** i18next works in codes like `th`; `Intl` needs
+  a full tag like `th-TH`, and that is what formats every amount and date. They
+  are mapped together in `LANGUAGES`, because keeping them as two independent
+  settings is how you get a Thai interface printing `September 2026` and
+  `$1,234.56`.
+
+---
+
+## 8. Retiring the Node backend
 
 **Passwords must be reset once.** The Express backend hashed with `scrypt`, which
 Apps Script has no equivalent for — it only offers SHA-256/HMAC. Migrated hashes are
@@ -347,7 +464,7 @@ Once you can sign in, `backend/` is dead weight and can be deleted along with it
 
 ---
 
-## 8. Known limits
+## 9. Known limits
 
 - **The Web App is a public URL.** Deployed to "Anyone", the endpoint is reachable by
   anyone who has it. Reads and writes still require a valid session token, but treat
@@ -366,3 +483,19 @@ Once you can sign in, `backend/` is dead weight and can be deleted along with it
 - Display conversion uses one flat current rate — a March transaction is shown at
   today's rate, not March's.
 - Investment P&L assumes your bookkeeping currency matches the market's.
+- **OCR is OCR.** Tesseract on a phone photo of a crumpled slip gets it wrong
+  sometimes, so the scanner shows what it found as chips rather than silently
+  overwriting the form. Check the amount before saving. A first scan also pays a
+  one-off model download — see §3.
+- **The Thai tax figure is an estimate, not a filing.** It covers salaried
+  income under s.40(1)/(2) and the allowances the form exposes; it does not know
+  about spouse or child allowances, provident funds, or anything withheld that
+  you have not typed in. Every caveat that applies to a given result is printed
+  on the result itself and on the PDF.
+- **Analytics reads one month plus the dashboard trend**, not the whole ledger.
+  The heatmap and the category and payee breakdowns are for the selected month;
+  the savings-rate chart is the trailing window the dashboard already fetches.
+- The main JS bundle is past Vite's 500 kB warning. Recharts, jsPDF, Tesseract
+  and the candle chart are all split out and load on demand, so a first paint
+  does not pay for them — but the shell itself has grown and would benefit from
+  a `manualChunks` pass.
