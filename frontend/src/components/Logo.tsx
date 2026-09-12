@@ -4,8 +4,13 @@ import { cx } from '../lib/format';
  * The app mark. Files live in `frontend/public/`, so they're referenced by URL
  * rather than imported — Vite serves them as-is and they stay out of the bundle.
  *
- * The transparent PNG is used everywhere in the UI so it sits correctly on any
- * theme; the white-background original is reserved for iOS home-screen icons.
+ * The mark is transparent, so it sits on any theme without a plate behind it —
+ * and `.logo`'s drop-shadow traces the mascot's own silhouette rather than the
+ * edge of a badge.
+ *
+ * The one asset that is *not* transparent is `apple-touch-icon.png`: iOS
+ * ignores alpha on a home-screen icon and flattens it onto black, so that size
+ * ships pre-composited onto white.
  */
 export function Logo({
   size = 28,

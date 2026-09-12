@@ -1,22 +1,147 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { ApiError, QueryParams, api, buildPath } from '../api/client';
+import {
+  getEntry,
+  invalidate,
+  mutateMatching,
+  prefetch as prefetchKey,
+  revalidate,
+  subscribe,
+} from '../api/cache';
+import { QueryParams, api, buildPath } from '../api/client';
+import { toast } from '../lib/toast';
 
 /**
- * Data-fetching hooks for the Excel-backed API.
+ * Data hooks for the Google Sheet API.
  *
- * `useExcelQuery`  — read one endpoint (dashboard, settings, …)
- * `useExcelDB`     — full CRUD over a collection endpoint (wallets, budgets, …)
+ *   useExcelQuery  — read one endpoint, stale-while-revalidate
+ *   useExcelDB     — full CRUD over a collection, with optimistic writes
  *
- * Both are deliberately small: the workbook lives on localhost, so requests are
- * sub-millisecond and there is no need for a caching library.
+ * The public shape is unchanged from the pre-cache version, so no page needed
+ * editing. What changed underneath:
+ *
+ *   - state lives in `api/cache.ts`, not in the component, so remounting a page
+ *     paints from cache immediately and refreshes in the background
+ *   - `initialLoading` is only true when there is genuinely nothing to show;
+ *     a background refresh sets `isValidating` instead
+ *   - create/update/delete patch the cache first and reconcile after, so the UI
+ *     never waits on the 1–3s round trip; a failure rolls back and toasts
  */
+
+/* ------------------------------------------------------------------ */
+/* Resource metadata                                                   */
+/* ------------------------------------------------------------------ */
+
+type Row = Record<string, unknown> & { id: string };
+
+/** Newest first, matching the server's `date + createdAt` ordering. */
+function byDateDesc(dateField: string) {
+  return (a: Row, b: Row) =>
+    String(`${b[dateField] ?? ''}${b.createdAt ?? ''}`).localeCompare(
+      String(`${a[dateField] ?? ''}${a.createdAt ?? ''}`),
+    );
+}
+
+interface ResourceConfig {
+  /** Cache prefixes to refresh once a write lands. */
+  invalidates: string[];
+  /** Keeps an optimistic row in the position the server would put it. */
+  sort?: (a: Row, b: Row) => number;
+}
+
+const RESOURCES: Record<string, ResourceConfig> = {
+  wallets: {
+    invalidates: ['/api/wallets', '/api/dashboard'],
+  },
+  transactions: {
+    // A transaction moves balances and budget progress too.
+    invalidates: ['/api/transactions', '/api/wallets', '/api/budgets', '/api/dashboard'],
+    sort: byDateDesc('date'),
+  },
+  investments: {
+    invalidates: ['/api/investments', '/api/wallets', '/api/dashboard'],
+    sort: byDateDesc('buyDate'),
+  },
+  budgets: {
+    invalidates: ['/api/budgets', '/api/dashboard'],
+  },
+  subscriptions: {
+    // Paying one writes a real expense, so balances, budget progress and the
+    // dashboard are all downstream of it.
+    invalidates: [
+      '/api/subscriptions',
+      '/api/transactions',
+      '/api/wallets',
+      '/api/budgets',
+      '/api/dashboard',
+    ],
+    // Soonest due first — the opposite of every other resource here, because
+    // a timeline reads forwards while a ledger reads backwards.
+    sort: (a, b) => String(a.nextDueDate ?? '').localeCompare(String(b.nextDueDate ?? '')),
+  },
+  'bill-splits': {
+    /* A bill writes an expense when it is created and an income row every time
+       someone pays you back, so the ledger, balances and budget progress are
+       all downstream of it — the same blast radius a subscription payment has. */
+    invalidates: [
+      '/api/bill-splits',
+      '/api/transactions',
+      '/api/wallets',
+      '/api/budgets',
+      '/api/dashboard',
+    ],
+    // Newest first, matching the server's own ordering.
+    sort: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
+  },
+  goals: {
+    /* A goal owns no Transactions and changes no balance, so nothing downstream
+       of it needs refreshing — the wallets and the dashboard are untouched by
+       funding one. That is the whole design, restated as a cache rule. */
+    invalidates: ['/api/goals'],
+    sort: (a, b) =>
+      Number(Boolean(a.complete)) - Number(Boolean(b.complete)) ||
+      String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')) ||
+      String(a.title ?? '').localeCompare(String(b.title ?? '')),
+  },
+  watchlist: {
+    // Nothing is derived from a watched symbol — it has no cost, no balance and
+    // no effect on any total — so this is the one resource whose writes do not
+    // touch the dashboard.
+    invalidates: ['/api/watchlist'],
+    // Same order the server returns, so an optimistic row lands in the section
+    // it will still be in once the write comes back.
+    sort: (a, b) =>
+      String(a.category ?? '').localeCompare(String(b.category ?? '')) ||
+      String(a.symbol ?? '').localeCompare(String(b.symbol ?? '')),
+  },
+};
+
+function configFor(resource: string): ResourceConfig {
+  return RESOURCES[resource] ?? { invalidates: [`/api/${resource}`, '/api/dashboard'] };
+}
+
+/** Optimistic rows carry a temporary id until the server returns the real one. */
+const OPTIMISTIC_PREFIX = 'optimistic:';
+
+export function isOptimistic(row: { id?: string }): boolean {
+  return typeof row?.id === 'string' && row.id.startsWith(OPTIMISTIC_PREFIX);
+}
+
+function temporaryId(): string {
+  return `${OPTIMISTIC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* useExcelQuery                                                       */
+/* ------------------------------------------------------------------ */
 
 export interface QueryState<T> {
   data: T | null;
   loading: boolean;
-  /** True only for the very first load — use it to show skeletons, not spinners. */
+  /** True only when there is nothing cached to render — drives skeletons. */
   initialLoading: boolean;
+  /** True while refreshing data that is already on screen. */
+  isValidating: boolean;
   error: string | null;
   errorCode: string | null;
   refresh: () => Promise<void>;
@@ -35,78 +160,57 @@ export function useExcelQuery<T>(
 ): QueryState<T> {
   const { enabled = true, refreshInterval } = options;
 
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(enabled);
-  const [initialLoading, setInitialLoading] = useState(enabled);
-  const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-
-  // Serialising params keeps the effect from re-firing on every render when the
-  // caller passes an inline object literal.
+  // Serialised so an inline object literal doesn't produce a new key each render.
   const key = useMemo(() => buildPath(path, params), [path, JSON.stringify(params ?? {})]);
 
-  const requestId = useRef(0);
-  const mounted = useRef(true);
+  const entry = useSyncExternalStore(
+    useCallback((onChange: () => void) => (enabled ? subscribe(key, onChange) : () => {}), [key, enabled]),
+    useCallback(() => getEntry<T>(key), [key]),
+    useCallback(() => getEntry<T>(key), [key]),
+  );
 
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  const run = useCallback(async () => {
     if (!enabled) return;
-    const id = ++requestId.current;
-    setLoading(true);
-    try {
-      const result = await api.get<T>(key);
-      // A newer request already started — throw this result away.
-      if (id !== requestId.current || !mounted.current) return;
-      setData(result);
-      setError(null);
-      setErrorCode(null);
-    } catch (err) {
-      if (id !== requestId.current || !mounted.current) return;
-      if ((err as Error).name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : 'Request failed');
-      setErrorCode(err instanceof ApiError ? err.code : 'UNKNOWN');
-    } finally {
-      if (id === requestId.current && mounted.current) {
-        setLoading(false);
-        setInitialLoading(false);
-      }
-    }
+    void revalidate<T>(key);
   }, [key, enabled]);
 
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      setInitialLoading(false);
-      return;
-    }
-    void run();
-  }, [run, enabled]);
-
-  useEffect(() => {
     if (!enabled || !refreshInterval) return undefined;
-    const timer = window.setInterval(() => void run(), refreshInterval);
+    const timer = window.setInterval(() => void revalidate<T>(key, { force: true }), refreshInterval);
     return () => window.clearInterval(timer);
-  }, [run, enabled, refreshInterval]);
+  }, [key, enabled, refreshInterval]);
 
-  return { data, loading, initialLoading, error, errorCode, refresh: run };
+  const refresh = useCallback(async () => {
+    await revalidate<T>(key, { force: true });
+  }, [key]);
+
+  const hasData = entry.data !== undefined;
+
+  return {
+    data: hasData ? (entry.data as T) : null,
+    loading: entry.validating,
+    initialLoading: enabled && !hasData && entry.error === null,
+    isValidating: entry.validating && hasData,
+    error: entry.error,
+    errorCode: entry.errorCode,
+    refresh,
+  };
 }
+
+/* ------------------------------------------------------------------ */
+/* useExcelDB                                                          */
+/* ------------------------------------------------------------------ */
 
 export interface CollectionState<T> extends QueryState<T[]> {
   items: T[];
-  /** True while a create/update/delete is in flight. */
+  /** True while a create/update/delete is settling on the server. */
   mutating: boolean;
   mutationError: string | null;
   clearMutationError: () => void;
   create: (payload: Partial<T> | Record<string, unknown>) => Promise<T>;
   update: (id: string, payload: Partial<T> | Record<string, unknown>) => Promise<T>;
   remove: (id: string, params?: QueryParams) => Promise<void>;
-  /** POST to `/{resource}/{id}/{action}` — used by things like "sell position". */
+  /** POST to `/{resource}/{id}/{action}` — e.g. "sell position". */
   action: <R = T>(id: string, actionName: string, payload?: unknown) => Promise<R>;
 }
 
@@ -117,52 +221,124 @@ export function useExcelDB<T extends { id: string }>(
 ): CollectionState<T> {
   const path = `/api/${resource}`;
   const query = useExcelQuery<T[]>(path, params, options);
+  const config = useMemo(() => configFor(resource), [resource]);
 
   const [mutating, setMutating] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const mounted = useRef(true);
 
-  const wrap = useCallback(
-    async <R>(fn: () => Promise<R>): Promise<R> => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /**
+   * The heart of the optimistic flow.
+   *
+   * 1. patch every cached copy of this resource straight away
+   * 2. fire the request
+   * 3. on success, reconcile with the server row and refresh derived views
+   * 4. on failure, roll the cache back to exactly what it was and toast
+   */
+  const optimistic = useCallback(
+    async <R>(
+      apply: (rows: T[]) => T[],
+      send: () => Promise<R>,
+      reconcile?: (rows: T[], result: R) => T[],
+      failureTitle?: string,
+    ): Promise<R> => {
+      const rollback = mutateMatching<T[]>(path, (rows) => apply(rows ?? []));
+
       setMutating(true);
       setMutationError(null);
+
       try {
-        const result = await fn();
-        await query.refresh();
+        const result = await send();
+        if (reconcile) mutateMatching<T[]>(path, (rows) => reconcile(rows ?? [], result));
+        // Balances, budget progress and the dashboard are all derived from this
+        // write, so refresh whatever the user is currently looking at.
+        invalidate(config.invalidates);
         return result;
       } catch (err) {
+        rollback();
         const message = err instanceof Error ? err.message : 'Something went wrong';
-        setMutationError(message);
+        if (mounted.current) setMutationError(message);
+        toast.error(message, failureTitle);
         // Re-thrown so forms can keep their values instead of closing.
         throw err;
       } finally {
-        setMutating(false);
+        if (mounted.current) setMutating(false);
       }
     },
-    [query.refresh],
+    [path, config],
+  );
+
+  const sortRows = useCallback(
+    (rows: T[]) => (config.sort ? [...rows].sort(config.sort as (a: T, b: T) => number) : rows),
+    [config],
   );
 
   const create = useCallback(
-    (payload: Partial<T> | Record<string, unknown>) => wrap(() => api.post<T>(path, payload)),
-    [wrap, path],
+    (payload: Partial<T> | Record<string, unknown>) => {
+      const draft = {
+        ...(payload as Record<string, unknown>),
+        id: temporaryId(),
+        createdAt: new Date().toISOString(),
+      } as unknown as T;
+
+      return optimistic<T>(
+        (rows) => sortRows([draft, ...rows]),
+        () => api.post<T>(path, payload),
+        // Swap the placeholder for the server's row (real id, computed fields).
+        (rows, saved) => sortRows(rows.map((row) => (row.id === draft.id ? saved : row))),
+        'Could not save',
+      );
+    },
+    [optimistic, sortRows, path],
   );
 
   const update = useCallback(
     (id: string, payload: Partial<T> | Record<string, unknown>) =>
-      wrap(() => api.patch<T>(`${path}/${id}`, payload)),
-    [wrap, path],
+      optimistic<T>(
+        (rows) =>
+          sortRows(
+            rows.map((row) =>
+              row.id === id ? ({ ...row, ...(payload as Record<string, unknown>) } as T) : row,
+            ),
+          ),
+        () => api.patch<T>(`${path}/${id}`, payload),
+        (rows, saved) => sortRows(rows.map((row) => (row.id === id ? saved : row))),
+        'Could not save',
+      ),
+    [optimistic, sortRows, path],
   );
 
   const remove = useCallback(
     async (id: string, deleteParams?: QueryParams) => {
-      await wrap(() => api.delete<{ ok: boolean }>(`${path}/${id}`, deleteParams));
+      await optimistic<{ ok: boolean }>(
+        (rows) => rows.filter((row) => row.id !== id),
+        () => api.delete<{ ok: boolean }>(`${path}/${id}`, deleteParams),
+        undefined,
+        'Could not delete',
+      );
     },
-    [wrap, path],
+    [optimistic, path],
   );
 
   const action = useCallback(
     <R,>(id: string, actionName: string, payload?: unknown) =>
-      wrap(() => api.post<R>(`${path}/${id}/${actionName}`, payload)),
-    [wrap, path],
+      optimistic<R>(
+        // The server owns the resulting shape here, so only mark the row busy;
+        // the reconcile step below writes the real values.
+        (rows) => rows,
+        () => api.post<R>(`${path}/${id}/${actionName}`, payload),
+        (rows, saved) =>
+          sortRows(rows.map((row) => (row.id === id ? ({ ...row, ...(saved as object) } as T) : row))),
+        'Action failed',
+      ),
+    [optimistic, sortRows, path],
   );
 
   return {
@@ -176,4 +352,13 @@ export function useExcelDB<T extends { id: string }>(
     remove,
     action,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Prefetching                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Warms a path before it is needed — e.g. on nav hover. */
+export function prefetch(path: string, params?: QueryParams): void {
+  prefetchKey(buildPath(path, params));
 }

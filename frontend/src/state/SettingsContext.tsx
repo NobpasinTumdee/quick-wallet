@@ -2,6 +2,7 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, 
 
 import { api } from '../api/client';
 import { formatMoney } from '../lib/format';
+import { applyTheme, readCachedTheme, writeCachedTheme } from '../lib/themeStorage';
 import { Settings, ThemeName } from '../types';
 import { useAuth } from './AuthContext';
 
@@ -9,6 +10,12 @@ import { useAuth } from './AuthContext';
  * Holds the signed-in user's Settings row and applies it to the DOM:
  * `data-theme` picks a palette from theme.css, and `--accent` / custom vars are
  * written as inline custom properties on <html>.
+ *
+ * The palette is also mirrored into localStorage so the next load can paint it
+ * before React exists — see `lib/themeStorage.ts` and the boot script in
+ * index.html. This provider seeds its own initial state from that same cache,
+ * so the first render agrees with what is already on screen rather than
+ * correcting it a frame later.
  */
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -16,6 +23,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   accent: '#4f8cff',
   customVars: {},
+  customThemes: [],
+  activeCustomThemeId: '',
+  fontFamily: '',
   currency: 'USD',
   displayCurrency: '',
   fxRate: 1,
@@ -33,27 +43,41 @@ interface SettingsContextValue {
   save: (patch: Partial<Settings>) => Promise<void>;
   setTheme: (theme: ThemeName) => Promise<void>;
   reload: () => Promise<void>;
+  /**
+   * Swap in a whole Settings row the server has already saved.
+   *
+   * The themes.* endpoints answer with the complete row, so the theme library
+   * writes with them and then lands the result here — one round trip instead of
+   * a write followed by a re-read. Everything downstream (applyTheme, the
+   * localStorage mirror) is driven by state, so it all follows for free.
+   */
+  replace: (settings: Settings) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
-function applyToDocument(settings: Settings): void {
-  const root = document.documentElement;
-  root.dataset.theme = settings.theme;
-
-  // Custom vars first, then accent, so an explicit accent always wins.
-  root.style.cssText = '';
-  if (settings.theme === 'custom') {
-    for (const [key, value] of Object.entries(settings.customVars ?? {})) {
-      if (key.startsWith('--')) root.style.setProperty(key, value);
-    }
-  }
-  if (settings.accent) root.style.setProperty('--accent', settings.accent);
-}
+/**
+ * The defaults, overlaid with whatever the boot script already painted.
+ *
+ * Computed once at module load rather than per render: this is the state the
+ * app starts in and the state it returns to on sign-out, and both must match
+ * the DOM to avoid a flash in either direction.
+ */
+const SEEDED_SETTINGS: Settings = (() => {
+  const cached = readCachedTheme();
+  if (!cached) return DEFAULT_SETTINGS;
+  return {
+    ...DEFAULT_SETTINGS,
+    theme: cached.theme ?? DEFAULT_SETTINGS.theme,
+    accent: cached.accent ?? DEFAULT_SETTINGS.accent,
+    customVars: cached.customVars ?? DEFAULT_SETTINGS.customVars,
+    fontFamily: cached.fontId ?? DEFAULT_SETTINGS.fontFamily,
+  };
+})();
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(SEEDED_SETTINGS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,15 +97,31 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      setSettings(DEFAULT_SETTINGS);
+      /* Back to the seeded palette, not the raw defaults: signing out should
+         not throw a light-theme user onto a dark login screen. */
+      setSettings(SEEDED_SETTINGS);
       return;
     }
     void reload();
   }, [user, reload]);
 
   useEffect(() => {
-    applyToDocument(settings);
+    applyTheme(settings);
   }, [settings]);
+
+  /**
+   * Mirror the palette for the next boot.
+   *
+   * Guarded on `user` deliberately. Signing out resets state to the seed, and
+   * persisting that would be a no-op — but a failed settings load also falls
+   * back to defaults, and writing *those* would quietly overwrite a good cached
+   * palette with the stock one. Only a signed-in session's settings are worth
+   * remembering.
+   */
+  useEffect(() => {
+    if (!user) return;
+    writeCachedTheme(settings);
+  }, [user, settings.theme, settings.accent, settings.customVars, settings.fontFamily]);
 
   const save = useCallback(
     async (patch: Partial<Settings>) => {
@@ -105,9 +145,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((theme: ThemeName) => save({ theme }), [save]);
 
+  const replace = useCallback((next: Settings) => {
+    setSettings(next);
+    setError(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ settings, loading, error, save, setTheme, reload }),
-    [settings, loading, error, save, setTheme, reload],
+    () => ({ settings, loading, error, save, setTheme, reload, replace }),
+    [settings, loading, error, save, setTheme, reload, replace],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

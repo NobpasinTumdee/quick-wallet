@@ -1,8 +1,12 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { todayKey } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
+import { ReceiptScanner } from './ReceiptScanner';
+import { ReceiptScan } from '../hooks/useReceiptScanner';
 import {
   Alert,
   Button,
@@ -61,17 +65,44 @@ export function TransactionForm({
   onClose: () => void;
   onSubmit: (payload: TransactionPayload) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
   const [form, setForm] = useState<FormState>(() => initialState(wallets, transaction));
+  /**
+   * Applies whatever the scan could read.
+   *
+   * Only fields the scan actually returned are touched, and only the amount and
+   * date are overwritten outright — the note is *appended to* rather than
+   * replaced, because a user who typed "dinner with Mai" before scanning should
+   * not lose it to a merchant name. Type, wallet and category are never touched:
+   * a receipt cannot know which of your wallets paid.
+   */
+  function applyScan(scan: ReceiptScan) {
+    setForm((prev) => ({
+      ...prev,
+      amount: scan.amount !== undefined ? String(scan.amount) : prev.amount,
+      date: scan.date || prev.date,
+      note: scan.note
+        ? prev.note.trim()
+          ? `${prev.note.trim()} · ${scan.note}`
+          : scan.note
+        : prev.note,
+    }));
+  }
   const [localError, setLocalError] = useState<string | null>(null);
+
+  /* Only on open / a different record — see the note in InvestmentForm. */
+  const walletsRef = useRef(wallets);
+  walletsRef.current = wallets;
 
   useEffect(() => {
     if (open) {
-      setForm(initialState(wallets, transaction));
+      setForm(initialState(walletsRef.current, transaction));
       setLocalError(null);
     }
-  }, [open, transaction, wallets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, transaction?.id]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -99,19 +130,19 @@ export function TransactionForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!form.walletId) {
-      setLocalError('Pick a wallet');
+      setLocalError(t('forms.pickWallet'));
       return;
     }
     if (amount <= 0) {
-      setLocalError('Amount must be greater than zero');
+      setLocalError(t('forms.amountPositive'));
       return;
     }
     if (form.type === 'transfer' && !form.toWalletId) {
-      setLocalError('Pick a destination wallet');
+      setLocalError(t('forms.pickDestination'));
       return;
     }
     if (form.type !== 'transfer' && !form.category) {
-      setLocalError('Pick a category');
+      setLocalError(t('forms.pickCategory'));
       return;
     }
     setLocalError(null);
@@ -125,36 +156,46 @@ export function TransactionForm({
   return (
     <Modal
       open={open}
-      title={transaction ? 'Edit transaction' : 'New transaction'}
+      title={transaction ? t('forms.editTransaction') : t('forms.newTransaction')}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy}>
-            {transaction ? 'Save' : 'Add'}
+            {transaction ? t('common.save') : t('common.add')}
           </Button>
         </>
       }
     >
       <form className="form-grid" onSubmit={submit}>
+        {/* First in the form, because it fills the fields below it — putting it
+            after them would ask the user to type and then be overwritten. Only
+            offered for new rows: re-scanning an existing transaction would
+            silently rewrite figures that are already reconciled. */}
+        {!transaction && (
+          <div className="span-2">
+            <ReceiptScanner onFilled={applyScan} disabled={busy} />
+          </div>
+        )}
+
         <div className="span-2">
           <Segmented<TransactionType>
             value={form.type}
-            ariaLabel="Transaction type"
+            ariaLabel={t('forms.transactionType')}
             onChange={setType}
             options={[
-              { value: 'expense', label: '↓ Expense' },
-              { value: 'income', label: '↑ Income' },
-              { value: 'transfer', label: '⇄ Transfer' },
+              { value: 'expense', label: `↓ ${t('forms.typeExpense')}` },
+              { value: 'income', label: `↑ ${t('forms.typeIncome')}` },
+              { value: 'transfer', label: `⇄ ${t('forms.typeTransfer')}` },
             ]}
           />
         </div>
 
-        <Field label={form.type === 'transfer' ? 'From wallet' : 'Wallet'}>
+        <Field label={t('forms.fromWallet')}>
           <Select value={form.walletId} onChange={(e) => patch('walletId', e.target.value)} required>
-            {sourceOptions.length === 0 && <option value="">No eligible wallet</option>}
+            {sourceOptions.length === 0 && <option value="">{t('forms.noEligibleWallet')}</option>}
             {sourceOptions.map((wallet) => (
               <option key={wallet.id} value={wallet.id}>
                 {wallet.icon} {wallet.name}
@@ -164,9 +205,9 @@ export function TransactionForm({
         </Field>
 
         {form.type === 'transfer' ? (
-          <Field label="To wallet">
+          <Field label={t('forms.toWallet')}>
             <Select value={form.toWalletId} onChange={(e) => patch('toWalletId', e.target.value)} required>
-              <option value="">Select…</option>
+              <option value="">{t('forms.selectPlaceholder')}</option>
               {targetOptions.map((wallet) => (
                 <option key={wallet.id} value={wallet.id}>
                   {wallet.icon} {wallet.name}
@@ -176,9 +217,9 @@ export function TransactionForm({
             </Select>
           </Field>
         ) : (
-          <Field label="Category">
+          <Field label={t('common.category')}>
             <Select value={form.category} onChange={(e) => patch('category', e.target.value)} required>
-              <option value="">Select…</option>
+              <option value="">{t('forms.selectPlaceholder')}</option>
               {settings.categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
@@ -189,8 +230,8 @@ export function TransactionForm({
         )}
 
         <Field
-          label={`Amount (${money.base})`}
-          hint={money.converting && amount > 0 ? `≈ ${money(amount)}` : undefined}
+          label={t('forms.amountIn', { currency: money.base })}
+          hint={money.converting && amount > 0 ? t('forms.approxAmount', { amount: money(amount) }) : undefined}
         >
           <DecimalInput
             value={form.amount}
@@ -201,16 +242,16 @@ export function TransactionForm({
           />
         </Field>
 
-        <Field label="Date">
+        <Field label={t('common.date')}>
           <Input type="date" value={form.date} onChange={(e) => patch('date', e.target.value)} required />
         </Field>
 
-        <Field label="Note" className="span-2">
+        <Field label={t('common.note')} className="span-2">
           <Textarea
             value={form.note}
             onChange={(e) => patch('note', e.target.value)}
             maxLength={300}
-            placeholder="Optional"
+            placeholder={t('common.optional')}
           />
         </Field>
 

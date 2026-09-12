@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
+import { ThemeSettings } from '../components/ThemeSettings';
 import {
   Alert,
   Badge,
@@ -9,6 +11,7 @@ import {
   DecimalInput,
   Field,
   Input,
+  RefreshButton,
   Select,
   decimalToInput,
   parseDecimal,
@@ -17,33 +20,15 @@ import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
-import { DbHealth, ThemeName } from '../types';
-
-const THEMES: { value: ThemeName; label: string; swatches: string[] }[] = [
-  { value: 'light', label: '☀️ Light', swatches: ['#f4f6fb', '#ffffff', '#3b6fff', '#14203a'] },
-  { value: 'dark', label: '🌙 Dark', swatches: ['#0d1220', '#151c2e', '#5b8cff', '#e9eefb'] },
-  { value: 'custom', label: '🎨 Custom', swatches: ['#0f1a1c', '#16262a', '#46c2a4', '#e6f4f1'] },
-];
-
-const ACCENTS = ['#3b6fff', '#5b8cff', '#46c2a4', '#0f9d6b', '#d98324', '#dc3a56', '#8b5cf6', '#ec4899'];
-
-/** The subset of CSS variables the custom theme exposes. */
-const CUSTOM_VARS: { key: string; label: string; fallback: string }[] = [
-  { key: '--bg', label: 'Page background', fallback: '#0f1a1c' },
-  { key: '--surface', label: 'Card surface', fallback: '#16262a' },
-  { key: '--surface-2', label: 'Input surface', fallback: '#1d3237' },
-  { key: '--border', label: 'Borders', fallback: '#26414a' },
-  { key: '--text', label: 'Text', fallback: '#e6f4f1' },
-  { key: '--text-muted', label: 'Muted text', fallback: '#9ab5b5' },
-  { key: '--positive', label: 'Positive', fallback: '#4fd1a5' },
-  { key: '--negative', label: 'Negative', fallback: '#ff7a8a' },
-];
+import { DbHealth } from '../types';
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
-  const { settings, save, error } = useSettings();
+  const { settings, save, reload: reloadSettings } = useSettings();
   const health = useExcelQuery<DbHealth>('/api/health', undefined, { refreshInterval: 30_000 });
 
   const [currency, setCurrency] = useState(settings.currency);
@@ -90,14 +75,17 @@ export function SettingsPage() {
     const rate = parseDecimal(fxRate);
 
     if (target && target !== currency.toUpperCase() && rate <= 0) {
-      setFxMessage({ tone: 'error', text: 'Enter an exchange rate above zero, or fetch one.' });
+      setFxMessage({ tone: 'error', text: t('settings.rateAboveZero') });
       return;
     }
 
     await save({ displayCurrency: target, fxRate: target ? rate || 1 : 1 });
     setFxMessage({
       tone: 'success',
-      text: target && target !== currency.toUpperCase() ? `Amounts now display in ${target}.` : 'Conversion turned off.',
+      text:
+        target && target !== currency.toUpperCase()
+          ? t('settings.amountsNowIn', { currency: target })
+          : t('settings.conversionOff'),
     });
   }
 
@@ -109,12 +97,15 @@ export function SettingsPage() {
       setFxRate(String(result.rate));
       setFxMessage({
         tone: 'success',
-        text: `1 ${currency.toUpperCase()} = ${result.rate} ${displayCurrency.toUpperCase()}${
-          result.asOf ? ` (as of ${result.asOf})` : ''
-        }. Press Save to keep it.`,
+        text: t('settings.rateFetched', {
+          from: currency.toUpperCase(),
+          rate: result.rate,
+          to: displayCurrency.toUpperCase(),
+          asOf: result.asOf ? t('settings.rateAsOf', { date: result.asOf }) : '',
+        }),
       });
     } catch (err) {
-      setFxMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Rate lookup failed' });
+      setFxMessage({ tone: 'error', text: err instanceof Error ? err.message : t('settings.rateLookupFailed') });
     } finally {
       setFxBusy(false);
     }
@@ -125,99 +116,32 @@ export function SettingsPage() {
     setPasswordMessage(null);
     try {
       await api.post('/api/auth/change-password', { currentPassword, newPassword });
-      setPasswordMessage({ tone: 'success', text: 'Password updated.' });
+      setPasswordMessage({ tone: 'success', text: t('settings.passwordUpdated') });
       setCurrentPassword('');
       setNewPassword('');
     } catch (err) {
-      setPasswordMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Could not change password' });
+      setPasswordMessage({ tone: 'error', text: err instanceof Error ? err.message : t('settings.passwordChangeFailed') });
     }
   }
 
-  const customVars = settings.customVars ?? {};
-
   return (
     <>
-      <Card title="Appearance" subtitle="Themes are plain CSS variables on :root — saved to the Settings sheet.">
-        <div className="theme-preview">
-          {THEMES.map((theme) => (
-            <button
-              key={theme.value}
-              type="button"
-              className={cx('theme-option', settings.theme === theme.value && 'is-active')}
-              onClick={() => void save({ theme: theme.value })}
-            >
-              <strong>{theme.label}</strong>
-              <div className="theme-swatch-row">
-                {theme.swatches.map((color) => (
-                  <span key={color} className="theme-swatch" style={{ background: color }} />
-                ))}
-              </div>
-            </button>
-          ))}
-        </div>
+      <ThemeSettings />
 
-        <Field label="Accent colour" className="span-2" hint="Applied on top of whichever theme is active.">
-          <div className="swatches" style={{ marginTop: 4 }}>
-            {ACCENTS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className={cx('swatch', settings.accent === color && 'is-active')}
-                style={{ background: color }}
-                onClick={() => void save({ accent: color })}
-                aria-label={`Accent ${color}`}
-              />
-            ))}
-            <input
-              type="color"
-              className="control swatch"
-              style={{ width: 44 }}
-              value={settings.accent}
-              onChange={(e) => void save({ accent: e.target.value })}
-              aria-label="Custom accent colour"
-            />
-          </div>
-        </Field>
-
-        {settings.theme === 'custom' && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <h3 style={{ fontSize: '0.9rem', marginBottom: 8 }}>Custom palette</h3>
-            <div className="form-grid">
-              {CUSTOM_VARS.map((variable) => (
-                <Field key={variable.key} label={variable.label} hint={variable.key}>
-                  <input
-                    type="color"
-                    className="control"
-                    value={customVars[variable.key] ?? variable.fallback}
-                    onChange={(e) =>
-                      void save({ customVars: { ...customVars, [variable.key]: e.target.value } })
-                    }
-                  />
-                </Field>
-              ))}
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <Button size="sm" onClick={() => void save({ customVars: {} })}>
-                Reset custom palette
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div style={{ marginTop: 12 }}>
-            <Alert tone="error">{error}</Alert>
-          </div>
-        )}
-      </Card>
-
-      <Card title="Preferences">
+      <Card title={t('settings.preferences')}>
         <form className="form-grid" onSubmit={savePreferences}>
-          <Field label="Currency" hint="What amounts are stored in. ISO code, e.g. USD, THB, EUR.">
+          <Field label={t('settings.currency')} hint={t('settings.currencyHint')}>
             <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={8} />
           </Field>
 
-          <Field label="Locale" hint="Controls number and date formatting.">
+          {/* First in the card, and outside the form: it applies immediately
+              rather than waiting for "Save preferences". A control whose whole
+              job is to change what you are looking at should not need a second
+              click to take effect — and it persists itself, through
+              `useLanguage`, which also keeps the Locale field below in step. */}
+          <LanguageSelector className="span-2" />
+
+          <Field label={t('settings.locale')} hint={t('settings.localeHint')}>
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
               {['en-US', 'en-GB', 'th-TH', 'de-DE', 'fr-FR', 'es-ES', 'id-ID', 'ja-JP', 'zh-CN'].map((code) => (
                 <option key={code} value={code}>
@@ -228,43 +152,43 @@ export function SettingsPage() {
           </Field>
 
           <Field
-            label="Monthly income"
+            label={t('settings.monthlyIncome')}
             className="span-2"
-            hint="Base for percentage budgets. Leave blank to use the income you actually record each month."
+            hint={t('settings.monthlyIncomeHint')}
           >
             <DecimalInput value={monthlyIncome} onChange={setMonthlyIncome} placeholder="0.00" />
           </Field>
 
-          <Field label="Categories" className="span-2" hint="Comma separated. Used by transactions and budgets.">
+          <Field label={t('settings.categories')} className="span-2" hint={t('settings.categoriesHint')}>
             <Input value={categoryText} onChange={(e) => setCategoryText(e.target.value)} />
           </Field>
 
           <div className="span-2 form-actions">
-            {saved && <Badge tone="positive">Saved</Badge>}
+            {saved && <Badge tone="positive">{t('common.saved')}</Badge>}
             <Button type="submit" variant="primary">
-              Save preferences
+              {t('settings.savePreferences')}
             </Button>
           </div>
         </form>
       </Card>
 
       <Card
-        title="Display in another currency"
-        subtitle="Convert every amount on screen — e.g. keep books in USD but read them in Thai baht. Stored values never change, so you can switch back any time."
+        title={t('settings.conversionTitle')}
+        subtitle={t('settings.conversionSubtitle')}
       >
         <form className="form-grid" onSubmit={saveConversion}>
-          <Field label="Show amounts in" hint={`Leave blank to keep everything in ${currency.toUpperCase()}.`}>
+          <Field label={t('settings.showAmountsIn')} hint={t('settings.keepEverythingIn', { currency: currency.toUpperCase() })}>
             <Input
               value={displayCurrency}
               onChange={(e) => setDisplayCurrency(e.target.value.toUpperCase())}
-              placeholder={`${currency.toUpperCase()} (no conversion)`}
+              placeholder={t('settings.noConversion', { currency: currency.toUpperCase() })}
               maxLength={8}
             />
           </Field>
 
           <Field
-            label={`Rate: 1 ${currency.toUpperCase()} = ? ${displayCurrency.toUpperCase() || currency.toUpperCase()}`}
-            hint="Type it yourself, or fetch today's rate."
+            label={t('settings.rateLabel', { from: currency.toUpperCase(), to: displayCurrency.toUpperCase() || currency.toUpperCase() })}
+            hint={t('settings.rateHint')}
           >
             <DecimalInput value={fxRate} onChange={setFxRate} placeholder="1" />
           </Field>
@@ -287,7 +211,7 @@ export function SettingsPage() {
 
           {displayCurrency && displayCurrency !== currency.toUpperCase() && parseDecimal(fxRate) > 0 && (
             <div className="span-2">
-              <Alert tone="info" title="Preview">
+              <Alert tone="info" title={t('settings.preview')}>
                 {formatMoney(1000, currency, locale)} shows as{' '}
                 <strong>{formatMoney(1000 * parseDecimal(fxRate), displayCurrency, locale)}</strong>
               </Alert>
@@ -313,42 +237,60 @@ export function SettingsPage() {
               loading={fxBusy}
               disabled={!displayCurrency || displayCurrency === currency.toUpperCase()}
             >
-              Fetch today's rate
+              {t('settings.fetchRate')}
             </Button>
             <Button type="submit" variant="primary">
-              Save conversion
+              {t('settings.saveConversion')}
             </Button>
           </div>
         </form>
       </Card>
 
-      <Card title="Stock quotes">
+      <Card title={t('settings.quotesTitle')}>
         <p className="text-muted" style={{ fontSize: '0.87rem' }}>
-          Provider: <strong>{providerName()}</strong>
-          {hasLiveQuotes() ? ' · live quotes enabled' : ' · no API key, prices are simulated'}
+          {t('settings.providerLabel')} <strong>{providerName()}</strong>
+          {t(hasLiveQuotes() ? 'settings.liveQuotesOn' : 'settings.liveQuotesOff')}
         </p>
         <p className="text-muted" style={{ fontSize: '0.87rem', marginTop: 8 }}>
-          Set <code>VITE_STOCK_API_PROVIDER</code> and <code>VITE_STOCK_API_KEY</code> in{' '}
-          <code>frontend/.env.local</code>, then restart the dev server.
+          {/* `Trans` keeps the three <code> spans as components the translator
+              can reposition — the variable *names* stay untranslated inside. */}
+          <Trans
+            i18nKey="settings.envHint"
+            values={{
+              provider: 'VITE_STOCK_API_PROVIDER',
+              key: 'VITE_STOCK_API_KEY',
+              file: 'frontend/.env.local',
+            }}
+            components={{ 1: <code />, 3: <code />, 5: <code /> }}
+          />
         </p>
         {settings.currency !== 'USD' && (
           <div style={{ marginTop: 12 }}>
-            <Alert tone="warning" title={`Your books are in ${settings.currency}`}>
-              Quotes come back in the market's own currency (USD for US tickers) and are compared directly
-              against your stored cost basis. For accurate P&amp;L, keep the currency above as USD and use the
-              display conversion below to read totals in {settings.displayCurrency || 'another currency'}.
+            <Alert tone="warning" title={t('settings.booksAreIn', { currency: settings.currency })}>
+              {t('settings.quotesCurrencyWarning', {
+                currency: settings.displayCurrency || t('settings.anotherCurrency'),
+              })}
             </Alert>
           </div>
         )}
       </Card>
 
-      <Card title="Workbook">
+      <Card
+        title={t('settings.workbookTitle')}
+        actions={
+          <RefreshButton
+            onRefresh={() => Promise.all([health.refresh(), reloadSettings()])}
+            busy={health.isValidating}
+            label={t('settings.refreshWorkbook')}
+          />
+        }
+      >
         {health.data ? (
           <div className="form-grid">
-            <Field label="File">
+            <Field label={t('settings.file')}>
               <Input value={health.data.dbPath} readOnly />
             </Field>
-            <Field label="Last saved">
+            <Field label={t('settings.lastSaved')}>
               <Input
                 value={health.data.lastFlushAt ? formatDate(health.data.lastFlushAt, settings.locale) : 'not yet'}
                 readOnly
@@ -356,13 +298,13 @@ export function SettingsPage() {
             </Field>
             <div className="span-2">
               {health.data.fileLocked ? (
-                <Alert tone="warning" title="File is locked">
+                <Alert tone="warning" title={t('settings.fileLocked')}>
                   {health.data.hint}
                 </Alert>
               ) : health.data.dirty ? (
-                <Alert tone="info">Unsaved changes are queued — they write automatically.</Alert>
+                <Alert tone="info">{t('settings.queuedWrites')}</Alert>
               ) : (
-                <Alert tone="success">All changes are written to disk.</Alert>
+                <Alert tone="success">{t('settings.allWritten')}</Alert>
               )}
             </div>
             <div className="span-2 text-muted" style={{ fontSize: '0.85rem' }}>
@@ -377,18 +319,21 @@ export function SettingsPage() {
                   await health.refresh();
                 }}
               >
-                Save workbook now
+                {t('settings.saveWorkbook')}
               </Button>
             </div>
           </div>
         ) : (
-          <p className="text-muted">Checking the backend…</p>
+          <p className="text-muted">{t('settings.checkingBackend')}</p>
         )}
       </Card>
 
-      <Card title="Account" subtitle={`Signed in as ${user?.displayName} (@${user?.username})`}>
+      <Card
+        title={t('settings.account')}
+        subtitle={t('settings.signedInAs', { name: user?.displayName ?? '', username: user?.username ?? '' })}
+      >
         <form className="form-grid" onSubmit={changePassword}>
-          <Field label="Current password">
+          <Field label={t('settings.currentPassword')}>
             <Input
               type="password"
               value={currentPassword}
@@ -397,7 +342,7 @@ export function SettingsPage() {
               required
             />
           </Field>
-          <Field label="New password" hint="At least 4 characters.">
+          <Field label={t('settings.newPassword')} hint={t('settings.passwordHint')}>
             <Input
               type="password"
               value={newPassword}
@@ -412,7 +357,7 @@ export function SettingsPage() {
             </div>
           )}
           <div className="span-2 form-actions">
-            <Button type="submit">Change password</Button>
+            <Button type="submit">{t('settings.changePassword')}</Button>
           </div>
         </form>
       </Card>

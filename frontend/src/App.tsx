@@ -1,34 +1,23 @@
-import { AppShell } from './components/AppShell';
-import { Logo } from './components/Logo';
-import { LoginPage } from './pages/LoginPage';
-import { AuthProvider, useAuth } from './state/AuthContext';
+import { Gate } from './components/Gate';
+import { Toaster } from './components/Toaster';
+import { AuthProvider } from './state/AuthContext';
 import { SettingsProvider } from './state/SettingsContext';
-
-function Gate() {
-  const { user, booting } = useAuth();
-
-  if (booting) {
-    return (
-      <div className="auth">
-        <div className="auth-card">
-          <div className="auth-brand">
-            <Logo size={72} className="auth-logo" /> Quick Wallet
-          </div>
-          <p className="auth-sub">Opening your workbook…</p>
-        </div>
-      </div>
-    );
-  }
-
-  return user ? <AppShell /> : <LoginPage />;
-}
+import { ThemeProvider } from './state/ThemeContext';
 
 export default function App() {
   return (
     <AuthProvider>
       {/* Settings live inside auth: they're scoped per user. */}
       <SettingsProvider>
-        <Gate />
+        {/* Above the routed area so an unsaved theme draft keeps previewing
+            while you walk the app looking at it — see state/ThemeContext.tsx. */}
+        <ThemeProvider>
+          {/* Booting / signed out / signed in — see components/Gate.tsx. */}
+          <Gate />
+          {/* Mounted once, outside the routed area, so a toast raised by an
+              optimistic rollback survives the page it was triggered from. */}
+          <Toaster />
+        </ThemeProvider>
       </SettingsProvider>
     </AuthProvider>
   );

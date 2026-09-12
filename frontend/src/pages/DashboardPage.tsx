@@ -1,38 +1,94 @@
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
-import { useExcelQuery } from '../hooks/useExcelDB';
+import { ArrowRight, Calculator, ChartNoAxesCombined, Receipt, Target, Wallet } from 'lucide-react';
+import { Suspense, lazy, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { Icon } from '../components/Icon';
+import { RecordedAt } from '../components/RecordedAt';
+import { DashboardSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
+import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
+import { periodRange } from '../lib/cashflow';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
+import { positionKeyOf } from '../lib/positions';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Investment, WalletBalance } from '../types';
+import { DashboardSummary, Investment, Transaction, WalletBalance } from '../types';
+
+
+const IncomeSpendingChart = lazy(() =>
+  import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
+);
+
+
+/* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
+   belongs in the Dashboard's chunk when most visits never open it — and this
+   is the default route, so its chunk is the one everybody pays for. */
+const TaxCalculatorModal = lazy(() =>
+  import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
+);
+
+/** How far back the cash-flow chart looks. One year of scrollable history. */
+const HISTORY_MONTHS = 12;
 
 export function DashboardPage({ period, onNavigate }: { period: string; onNavigate: (route: Route) => void }) {
   const { settings } = useSettings();
   const { locale } = settings;
   const format = useMoneyFormatter();
 
-  const { data, initialLoading, error, refresh } = useExcelQuery<DashboardSummary>('/api/dashboard', {
-    period,
+  const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
+    '/api/dashboard',
+    { period },
+  );
+  // The dashboard summary only carries aggregates and a handful of recent rows;
+  // the Sankey needs every transaction in the month. Same cache key the Activity
+  // tab uses when its filters are clear, so the two share one request.
+
+  // A year of rows for the cash-flow chart, which groups them by month itself
+  // rather than taking the server's fixed six-month rollup. Its own cache key,
+  // so it neither disturbs the shared `{ period }` request above nor refetches
+  // when the user pages between months inside the window.
+  const historyWindow = useMemo(() => periodRange(period, HISTORY_MONTHS), [period]);
+  const history = useExcelDB<Transaction>('transactions', {
+    from: historyWindow.from,
+    to: historyWindow.to,
+    // The server caps at 5000 and returns newest first, so an account busier
+    // than this loses its oldest months — the ones already off the left edge.
+    limit: 5000,
   });
+
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
 
+  /* The tax estimate is expensive and entirely on demand, so all that lives up
+     here is a boolean. The modal fetches nothing until its own button is
+     pressed — see the note at the top of TaxCalculatorModal. */
+  const [taxOpen, setTaxOpen] = useState(false);
+
+  /* `positions` is one row per *purchase*, so a dollar-cost-averaged ticker
+     appears several times. The headline counts holdings instead — three buys of
+     Apple is one position, and saying "3 positions" would overstate how spread
+     out the portfolio is. Totals below are unaffected: they sum money, not rows. */
+  const holdingCount = useMemo(
+    () => new Set(positions.map((row) => positionKeyOf(row))).size,
+    [positions],
+  );
+
   const money = (value: number, compact = false) => format(value, { compact });
+  const { t } = useTranslation();
 
-  if (initialLoading) {
-    return (
-      <Card title="Loading your overview">
-        <Skeleton rows={6} />
-      </Card>
-    );
-  }
+  // Only shown when there is genuinely nothing cached. Revisiting this page
+  // paints the previous data immediately and refreshes behind the scenes.
+  if (initialLoading) return <DashboardSkeleton />;
 
-  if (error || !data) {
+  // Only a hard failure with nothing cached blocks the page. A failed refresh
+  // over good data leaves the data on screen.
+  if (!data) {
     return (
-      <Card title="Couldn't load the dashboard">
-        <Alert tone="error">{error ?? 'No data returned'}</Alert>
+      <Card title={t('dashboard.loadFailed')}>
+        <Alert tone="error">{error ?? t('dashboard.noData')}</Alert>
         <div style={{ marginTop: 'var(--space-4)' }}>
-          <Button onClick={() => void refresh()}>Try again</Button>
+          <Button onClick={() => void refresh()}>{t('common.tryAgain')}</Button>
         </div>
       </Card>
     );
@@ -44,7 +100,21 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     ? data.netWorth - portfolio.totalCost + portfolio.totalValue
     : data.netWorth;
 
-  const maxTrend = Math.max(1, ...data.trend.map((t) => Math.max(t.income, t.expense)));
+  /* ---- Cash and card debt ----
+     `netWorth` already nets the two: a credit wallet's balance is negative, so
+     summing spending wallets subtracts the debt. What was missing was saying so
+     — a user seeing only the total had no way to tell a small net worth from a
+     healthy one with a card outstanding against it.
+
+     The fallbacks cover the window between deploying this frontend and pushing
+     the matching Code.gs: an older payload has no `cashBalance`, and reading
+     `undefined` into a currency formatter renders NaN rather than failing
+     loudly. With no credit wallets the two are equal anyway. */
+  const cashBalance = data.cashBalance ?? data.liquidBalance;
+  const creditDebt = data.creditDebt ?? 0;
+  const safeToSpend = data.safeToSpend ?? data.liquidBalance;
+  const hasDebt = creditDebt > 0;
+
   const isEmpty = data.walletCount === 0;
 
   // Presentational grouping only — the wallets themselves are unchanged.
@@ -55,12 +125,12 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     return (
       <Card>
         <EmptyState
-          icon="👛"
-          title="Create your first wallet"
-          description="Wallets are where transactions and positions live. Add one, then start recording activity."
+          icon={<Icon icon={Wallet} size="xl" />}
+          title={t('dashboard.firstWalletTitle')}
+          description={t('dashboard.firstWalletBody')}
           action={
             <Button variant="primary" onClick={() => onNavigate('wallets')}>
-              Go to wallets
+              {t('dashboard.goToWallets')}
             </Button>
           }
         />
@@ -77,8 +147,8 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         <div className="list-item-title truncate">{wallet.name}</div>
         <div className="list-item-sub">
           {wallet.mode === 'investment'
-            ? `${money(wallet.balance)} cash · ${money(wallet.investedCost)} invested`
-            : `${wallet.kind} · ${wallet.transactionCount} record${wallet.transactionCount === 1 ? '' : 's'}`}
+            ? t('dashboard.walletInvested', { cash: money(wallet.balance), invested: money(wallet.investedCost) })
+            : `${wallet.kind} · ${t('dashboard.recordCount', { count: wallet.transactionCount })}`}
         </div>
       </div>
       <span className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
@@ -92,52 +162,89 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
       <section className="hero">
         <div className="hero-primary">
-          <span className="section-label">Net worth · {formatPeriod(period, locale)}</span>
+          {/* The button replaces the old passive refresh-dot: it spins on a
+              background revalidation too, so it reports the same thing while
+              also being actionable. */}
+          <div className="hero-label-row">
+            <span className="section-label">
+              {t('dashboard.netWorth')} · {formatPeriod(period, locale)}
+            </span>
+            <RefreshButton
+              onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
+              busy={isValidating}
+              label={t('dashboard.refresh')}
+            />
+          </div>
           <span className="hero-value">{money(netWorthLive)}</span>
           <div className="hero-meta">
             <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
-              {data.monthNet >= 0 ? '↑' : '↓'} {format(Math.abs(data.monthNet), { compact: true })} this month
+              {data.monthNet >= 0
+                ? t('dashboard.monthNetUp', { amount: format(Math.abs(data.monthNet), { compact: true }) })
+                : t('dashboard.monthNetDown', { amount: format(Math.abs(data.monthNet), { compact: true }) })}
             </Badge>
             {hasPositions && (
               <span>
-                {money(portfolio.totalValue, true)} in {portfolio.positions.length} position
-                {portfolio.positions.length === 1 ? '' : 's'} · {portfolio.provider} prices
+                {t('dashboard.inPositions', {
+                  count: holdingCount,
+                  amount: money(portfolio.totalValue, true),
+                  provider: portfolio.provider,
+                })}
               </span>
             )}
             {!hasPositions && (
-              <span>
-                {data.walletCount} wallet{data.walletCount === 1 ? '' : 's'}
-              </span>
+              <span>{t('dashboard.walletCount', { count: data.walletCount })}</span>
             )}
           </div>
+
+          {/* Sits under the headline figure rather than in the card actions:
+              it opens a different kind of thing — a document you take away —
+              and it is the one control here that runs work rather than
+              refreshing a view. */}
+          <button type="button" className="tax-cta" onClick={() => setTaxOpen(true)}>
+            <Icon icon={Calculator} size="sm" />
+            {t('dashboard.taxCta')}
+          </button>
         </div>
 
         <div className="hero-metrics">
           <div className="metric">
-            <span className="section-label">Cash on hand</span>
-            <span className="metric-value">{money(data.liquidBalance, true)}</span>
-            <span className="metric-hint">Expense wallets</span>
+            <span className="section-label">{t('dashboard.cashOnHand')}</span>
+            <span className="metric-value">{money(cashBalance, true)}</span>
+            <span className="metric-hint">
+              {hasDebt ? t('dashboard.afterCards', { amount: money(safeToSpend, true) }) : t('dashboard.cashWallets')}
+            </span>
           </div>
+          {hasDebt && (
+            <div className="metric metric--negative">
+              <span className="section-label">{t('dashboard.cardDebt')}</span>
+              <span className="metric-value text-negative">{money(creditDebt, true)}</span>
+              <span className="metric-hint">
+                {data.creditLimit > 0
+                  ? t('dashboard.limitUsed', { percent: formatPercent(data.creditUtilization, 0) })
+                  : t('dashboard.alreadySubtracted')}
+              </span>
+            </div>
+          )}
           <div className="metric metric--positive">
-            <span className="section-label">Income</span>
+            <span className="section-label">{t('dashboard.income')}</span>
             <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>
-            <span className="metric-hint">This month</span>
+            <span className="metric-hint">{t('common.thisMonth')}</span>
           </div>
           <div className="metric metric--negative">
-            <span className="section-label">Spent</span>
+            <span className="section-label">{t('dashboard.spent')}</span>
             <span className="metric-value text-negative">{money(data.monthExpense, true)}</span>
             <span className="metric-hint">
-              {data.categoryBreakdown.length} categor{data.categoryBreakdown.length === 1 ? 'y' : 'ies'}
+              {t('dashboard.categoryCount', { count: data.categoryBreakdown.length })}
             </span>
           </div>
           <div className="metric metric--accent">
-            <span className="section-label">Saved</span>
+            <span className="section-label">{t('dashboard.savedLabel')}</span>
             <span className="metric-value">{money(data.monthNet, true)}</span>
-            <span className="metric-hint">Rate {formatPercent(data.savingsRate)}</span>
+            <span className="metric-hint">{t('dashboard.savingsRate', { percent: formatPercent(data.savingsRate) })}</span>
           </div>
           {hasPositions && (
             <div className={cx('metric', portfolio.totalPnl >= 0 ? 'metric--positive' : 'metric--negative')}>
-              <span className="section-label">Unrealised</span>
+              <span className="section-label">{t('dashboard.unrealised')}</span>
               <span
                 className={cx('metric-value', portfolio.totalPnl >= 0 ? 'text-positive' : 'text-negative')}
               >
@@ -153,23 +260,23 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       <div className="bento">
         <Card
           className="bento-item--wide"
-          title="Budget progress"
+          title={t('dashboard.budgetProgress')}
           subtitle={formatPeriod(period, locale)}
           actions={
             <Button size="sm" onClick={() => onNavigate('budgets')}>
-              Manage
+              {t('common.manage')}
             </Button>
           }
           padded={data.budgets.length === 0}
         >
           {data.budgets.length === 0 ? (
             <EmptyState
-              icon="🎯"
-              title="No budgets this month"
-              description="Set limits by exact amount or as a share of income — 40% invest, 10% save, 20% needs."
+              icon={<Icon icon={Target} size="xl" />}
+              title={t('dashboard.noBudgetsTitle')}
+              description={t('dashboard.noBudgetsBody')}
               action={
                 <Button variant="primary" size="sm" onClick={() => onNavigate('budgets')}>
-                  Create a budget
+                  {t('dashboard.createBudget')}
                 </Button>
               }
             />
@@ -179,7 +286,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                 <div key={budget.id} className="budget-item">
                   <div className="budget-head">
                     <span className="budget-name truncate">
-                      {budget.targetLabel || 'All spending'}
+                      {budget.targetLabel || t('dashboard.allSpending')}
                       {budget.mode === 'percent' && <Badge tone="accent">{budget.value}%</Badge>}
                     </span>
                     <span className="budget-numbers">
@@ -189,14 +296,14 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                   <ProgressBar
                     percent={budget.percentUsed}
                     tone={budget.status}
-                    label={`${budget.targetLabel}: ${formatPercent(budget.percentUsed)} used`}
+                    label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
                   />
                   <div className="budget-foot">
                     <span>{formatPercent(budget.percentUsed)} used</span>
                     <span className={budget.remaining < 0 ? 'text-negative' : ''}>
                       {budget.remaining < 0
-                        ? `${money(Math.abs(budget.remaining))} over`
-                        : `${money(budget.remaining)} left`}
+                        ? t('dashboard.budgetOver', { amount: money(Math.abs(budget.remaining)) })
+                        : t('dashboard.budgetLeft', { amount: money(budget.remaining) })}
                     </span>
                   </div>
                 </div>
@@ -208,10 +315,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         {/* Wallets split by mode — the two halves of the app, side by side. */}
         <Card
           className="bento-item--narrow"
-          title="Wallets"
+          title={t('dashboard.walletsTitle')}
           actions={
             <Button size="sm" onClick={() => onNavigate('wallets')}>
-              Manage
+              {t('common.manage')}
             </Button>
           }
           padded={false}
@@ -219,7 +326,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {spendWallets.length > 0 && (
             <>
               <div className="list-group-label">
-                <span className="section-label">Spending</span>
+                <span className="section-label">{t('dashboard.spending')}</span>
                 <span className="section-label">{money(data.liquidBalance, true)}</span>
               </div>
               <div className="list">{spendWallets.map(walletRow)}</div>
@@ -229,7 +336,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           {investWallets.length > 0 && (
             <>
               <div className="list-group-label">
-                <span className="section-label">Investing</span>
+                <span className="section-label">{t('dashboard.investing')}</span>
                 <span className="section-label">
                   {money(data.investmentCash + data.investedCost, true)}
                 </span>
@@ -239,45 +346,27 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
-        <Card className="bento-item--half card--chart" title="Income vs spending" subtitle="Last 6 months">
-          <div className="trend">
-            {data.trend.map((point, index) => (
-              <div key={point.period} className="trend-col">
-                <div className="trend-bars">
-                  <div
-                    className="trend-bar trend-bar--income"
-                    style={{
-                      height: `${(point.income / maxTrend) * 100}%`,
-                      animationDelay: `${index * 60}ms`,
-                    }}
-                    title={`Income ${money(point.income)}`}
-                  />
-                  <div
-                    className="trend-bar trend-bar--expense"
-                    style={{
-                      height: `${(point.expense / maxTrend) * 100}%`,
-                      animationDelay: `${index * 60 + 30}ms`,
-                    }}
-                    title={`Spent ${money(point.expense)}`}
-                  />
-                </div>
-                <span className="trend-label">{point.period.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="legend" style={{ marginTop: 'var(--space-4)' }}>
-            <span>
-              <i className="legend-dot" style={{ background: 'var(--positive)' }} /> Income
-            </span>
-            <span>
-              <i className="legend-dot" style={{ background: 'var(--negative)' }} /> Spending
-            </span>
-          </div>
-        </Card>
+        {/* Twelve months of paired bars. At half width each month gets ~40px,
+            which is why the component scrolls horizontally; given the full row
+            it mostly does not have to. */}
+        <Suspense
+          fallback={<div className="card bento-item--full ischart-placeholder" aria-hidden="true" />}
+        >
+          <IncomeSpendingChart
+            className="bento-item--full"
+            transactions={history.items}
+            trend={data.trend}
+            period={period}
+            months={HISTORY_MONTHS}
+            loading={history.initialLoading}
+            stale={history.isValidating}
+          />
+        </Suspense>
 
-        <Card className="bento-item--half" title="Where it went" subtitle={formatPeriod(period, locale)}>
+
+        <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
-            <EmptyState icon="🧾" title="Nothing spent yet" description="Expenses this month show up here." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
           ) : (
             <div className="stack stack--tight">
               {data.categoryBreakdown.slice(0, 7).map((row, index) => (
@@ -296,17 +385,21 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
+
+        {/* Half width so it pairs with "Where it went" — dense packing lifts it
+            into that row's empty half rather than leaving one there. */}
         <Card
-          title="Recent activity"
+          className="bento-item--half"
+          title={t('dashboard.recentTitle')}
           actions={
             <Button size="sm" onClick={() => onNavigate('transactions')}>
-              See all
+              {t('common.seeAll')}
             </Button>
           }
           padded={false}
         >
           {data.recentTransactions.length === 0 ? (
-            <EmptyState icon="🧾" title="No transactions yet" description="Add one from the Activity tab." />
+            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.noTransactionsTitle')} description={t('dashboard.noTransactionsBody')} />
           ) : (
             <div className="list">
               {data.recentTransactions.map((tx) => {
@@ -334,6 +427,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                       </div>
                       <div className="list-item-sub">
                         {formatDate(tx.date, locale)}
+                        {/* Inline here rather than on its own line: this list is
+                            four rows in a half-width card, and a third line per
+                            row would cost more than the time is worth. */}
+                        <RecordedAt createdAt={tx.createdAt} locale={locale} variant="inline" />
                         {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
                       </div>
                     </div>
@@ -353,7 +450,39 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </div>
           )}
         </Card>
+
+        {/* ---- Gateway to /analytics ----
+            Full width and last, so it reads as "there is more, through here"
+            rather than competing with the figures above it.
+
+            It carries real weight on a phone: the gesture arc is capped at five
+            items and Analytics did not make the cut, so this card is the only
+            way onto that screen below 1000px. A whole card rather than a button
+            for the same reason — it has to be findable, not just present. */}
+        <button
+          type="button"
+          className="card bento-item--full analytics-cta"
+          onClick={() => onNavigate('analytics')}
+        >
+          <span className="analytics-cta-mark" aria-hidden="true">
+            <Icon icon={ChartNoAxesCombined} />
+          </span>
+          <span className="analytics-cta-body">
+            <span className="analytics-cta-title">{t('analytics.title')}</span>
+            <span className="analytics-cta-sub">{t('analytics.subtitle')}</span>
+          </span>
+          <Icon icon={ArrowRight} size="sm" className="analytics-cta-arrow" />
+        </button>
       </div>
+
+      {/* The chunk is only fetched once the button is pressed, and the
+          component itself holds no subscription and issues no request until
+          its own Run calculation button is pressed. */}
+      {taxOpen && (
+        <Suspense fallback={null}>
+          <TaxCalculatorModal open onClose={() => setTaxOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 }

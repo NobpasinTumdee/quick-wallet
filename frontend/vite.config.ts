@@ -5,13 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // Everything under /api is forwarded to the Express backend, so the browser
-    // only ever talks to one origin and CORS never gets in the way.
-    proxy: {
-      '/api': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-    },
+    // No dev proxy any more: the frontend talks straight to the Google Apps
+    // Script Web App (VITE_GAS_WEB_APP_URL). Requests are shaped as "simple"
+    // CORS requests so no preflight is needed — see src/api/client.ts.
   },
 });

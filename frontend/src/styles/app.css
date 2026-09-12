@@ -245,7 +245,10 @@ body::after {
   min-height: 100%;
 }
 
-.sidebar {
+.sidebar,
+/* The rail toggle only means anything where the sidebar exists. Below 1000px
+   the tab bar takes over and there is nothing to collapse. */
+.sidebar-rail-toggle {
   display: none;
 }
 
@@ -302,6 +305,16 @@ body::after {
   font-size: var(--text-xs);
   color: var(--text-muted);
   letter-spacing: 0.01em;
+  /* Same treatment the h1 above already has, and for the same reason: this line
+     is "THB → USD · September 2026", and the month is formatted in the user's
+     own locale. A Thai month pushes it well past the width a phone has left
+     once the stepper is in the bar, and without this it wraps to a second line
+     and makes the whole topbar taller. Unconditional rather than inside the
+     mobile query — it only engages when the text would not have fitted anyway,
+     and the desktop half of the pair is already written this way. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-tools {
@@ -322,6 +335,70 @@ body::after {
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* ---- The month stepper on a phone ----
+   At the desktop sizing this pill is ~153px wide, and `.topbar-tools` is
+   `flex: none`, so the whole tool cluster comes to ~290px and simply cannot
+   give. Against a 320px viewport (16px of topbar padding each side, a 30px
+   brand mark and two 12px gaps) that overflows the page by ~56px, and by ~16px
+   at 360px — the title is squeezed to nothing first, then the document scrolls
+   sideways.
+
+   Two things are done about it here. The pill is made genuinely narrower, and
+   `.topbar-tools` is allowed to shrink as a last resort so that a 320px screen
+   cannot be forced into a horizontal scroll no matter what else lands in the
+   bar.
+
+   Note the touch targets move the *other* way. The buttons are 35px tall at
+   the desktop sizing, already under the 44px minimum, so trimming their
+   padding further would have made a small control genuinely hard to hit. The
+   saving is taken horizontally — where the actual problem is — and the height
+   goes up to a 40px minimum. 44px total with the pill's border and padding,
+   which is exactly the topbar's content box, so it costs no extra height. */
+@media (max-width: 767px) {
+  /* Overrides `flex: none`. The tools only ever shrink once the pill below has
+     already given up everything it can, so on any normal phone nothing moves. */
+  .topbar-tools {
+    min-width: 0;
+  }
+
+  .period-nav {
+    gap: 1px;
+    padding: 1px;
+    max-width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    /* The safety valve, not the normal case. There is no long text inside this
+       pill — it is two chevrons and the fixed word "Today" — so this never
+       engages on a phone wide enough to hold it. Below that it scrolls the
+       three buttons instead of pushing the page sideways. */
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .period-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .period-nav .btn {
+    /* Scroll rather than squash: without this the buttons would compress and
+       `.btn`'s own `overflow: hidden` would clip "Today" to "Toda". */
+    flex: none;
+    /* The touch target. Vertical padding is dropped because this governs. */
+    min-height: 40px;
+    padding: 0 8px;
+    font-size: var(--text-2xs);
+  }
+
+  /* One step down from the 15px `Icon size="sm"`, so the chevrons sit with the
+     smaller label rather than towering over it. */
+  .period-nav .btn svg {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 .page {
@@ -354,8 +431,11 @@ body::after {
   right: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* Two links, the centre button's slot, two links. The button itself is not
+     in this grid — see .gnav — so slot 3 is deliberately empty. */
+  grid-template-columns: repeat(5, 1fr);
   gap: 2px;
+  min-height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
   padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
   background: var(--glass-bg-strong);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -522,6 +602,13 @@ body::after {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
+}
+
+/* Always the whole row, at every breakpoint. For widgets whose content needs
+   the width — a twelve-month chart, a ten-year projection — rather than ones
+   that merely look nicer wide. */
+.bento-item--full {
+  grid-column: 1 / -1;
 }
 
 .bento > * {
@@ -1125,6 +1212,101 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
 }
 
+/* An input with a unit selector welded to its right edge. */
+.field-with-unit {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.field-with-unit .control {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-with-unit .segmented {
+  flex: none;
+  padding: 3px;
+}
+
+.field-with-unit .segmented-item {
+  padding: 5px 11px;
+  font-size: var(--text-xs);
+}
+
+.control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Live read-out of what the form will actually submit. Reads as a receipt
+   rather than another input, so the numbers feel settled. */
+.calc-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    var(--glass-bg)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.calc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.calc-row--total {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+/* The DCA read-out. Dashed rather than solid: it is a projection of where the
+   average lands, not a figure being committed like the total above it. */
+.calc-row--average {
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--divider);
+}
+
+.calc-was {
+  color: var(--text-faint);
+  font-weight: var(--weight-normal);
+}
+
+.calc-arrow {
+  margin: 0 var(--space-2);
+  color: var(--text-faint);
+}
+
+.calc-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  text-align: right;
+}
+
+.calc-value--strong {
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.calc-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Segmented control ---- */
 .segmented {
   display: inline-flex;
@@ -1330,6 +1512,73 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   line-height: 1.6;
 }
 
+/* ---- Skeletons ----
+   A single shimmering surface reused at every size. Blocks are sized to match
+   the real component so nothing shifts when the data arrives. */
+.sk {
+  display: block;
+  flex: none;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text) 6%, transparent) 0%,
+    color-mix(in srgb, var(--text) 11%, transparent) 40%,
+    color-mix(in srgb, var(--text) 6%, transparent) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s var(--ease-in-out) infinite;
+}
+
+/* Headline figures read as more solid than their supporting text. */
+.sk-strong {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text) 10%, transparent) 0%,
+    color-mix(in srgb, var(--text) 17%, transparent) 40%,
+    color-mix(in srgb, var(--text) 10%, transparent) 80%
+  );
+  background-size: 200% 100%;
+}
+
+.sk-avatar {
+  border-radius: var(--radius-md);
+}
+
+/* Cards keep their frame while loading so the grid never reflows. */
+.sk-card {
+  pointer-events: none;
+}
+
+.sk-hero {
+  pointer-events: none;
+}
+
+.sk-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  height: 190px;
+  padding-top: var(--space-3);
+}
+
+.sk-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 2px 2px;
+}
+
+/* Stagger the shimmer so the screen breathes instead of pulsing as one block. */
+.sk-card:nth-child(2) .sk { animation-delay: 120ms; }
+.sk-card:nth-child(3) .sk { animation-delay: 240ms; }
+.sk-card:nth-child(4) .sk { animation-delay: 360ms; }
+
+/* A row that exists locally but hasn't been confirmed by the server yet. */
+.is-pending {
+  opacity: 0.62;
+  animation: pending-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+/* Quiet marker that cached data is being refreshed behind the scenes. */
 .skeleton {
   display: flex;
   flex-direction: column;
@@ -1608,6 +1857,17 @@ tr:hover .row-actions,
   gap: 5px;
 }
 
+/* A figure shown in the market's own currency rather than the user's books.
+   Kept visually distinct so the two are never confused at a glance. */
+.price-native {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.price-native::after {
+  content: '';
+}
+
 /* ==========================================================================
    11  Data visuals
    ========================================================================== */
@@ -1666,88 +1926,284 @@ tr:hover .row-actions,
   color: var(--text-muted);
 }
 
-/* ---- Trend chart ---- */
-.trend {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-3);
-  min-height: 190px;
-  padding-top: var(--space-3);
-}
+/* ---- Income vs spending ----
+   The Recharts cash-flow card. Every mark it draws is coloured from here
+   rather than from a prop: `fill="var(--positive)"` is not something an SVG
+   presentation attribute can resolve, but a stylesheet rule beats one, so a
+   class on the series is how the thirteen themes reach the chart. */
 
 /* Lets a chart stretch to match the height of its row neighbour instead of
-   leaving dead space above the bars. */
+   leaving dead space above the plot. */
 .card--chart .card-body {
   display: flex;
   flex-direction: column;
 }
 
-.card--chart .trend {
-  flex: 1;
+/* Reserves the card's footprint while the Recharts chunk loads, so the bento
+   grid does not jump when it arrives. */
+.ischart-placeholder {
+  min-height: 520px;
 }
 
-.trend-col {
+.ischart {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+/* Refetch holds the previous render instead of flashing a skeleton. */
+.ischart.is-stale {
+  opacity: 0.55;
+}
+
+/* Zero-size carrier for the gradient defs. Kept out of the flow entirely —
+   `display: none` would stop the gradients resolving in some engines. */
+.ischart-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---- Statistical summary ----
+   Max, mean and min for each series, above the plot. Glass rather than solid
+   so the badges read as annotation on the card, not as a second card. */
+
+.ischart-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: var(--space-3);
+}
+
+.ischart-stat-group {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--space-2);
-  height: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-subtle);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* An inset hairline in the series colour: the group is identifiable before
+   the eye reaches its label, without a filled plate competing with the plot. */
+.ischart-stat-group--income {
+  box-shadow: inset 2px 0 0 var(--positive);
+}
+
+.ischart-stat-group--expense {
+  box-shadow: inset 2px 0 0 var(--negative);
+}
+
+.ischart-stat-series {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ischart-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.ischart-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.trend-bars {
-  flex: 1;
+.ischart-stat-label {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 4px;
-  width: 100%;
-  justify-content: center;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
 }
 
-.trend-bar {
-  position: relative;
-  width: 42%;
-  min-height: 4px;
-  border-radius: var(--radius-xs) var(--radius-xs) 2px 2px;
-  transform-origin: bottom;
-  animation: grow-up var(--dur-slow) var(--ease-out) both;
-  transition: filter var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+/* The shared Icon scale starts at 15px, which is heavy against an 11px label. */
+.ischart-stat-label svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
 }
 
-.trend-col:hover .trend-bar {
-  filter: brightness(1.12);
-  transform: scaleY(1.02);
+.ischart-stat-value {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.trend-bar--income {
-  background: linear-gradient(180deg, var(--positive), color-mix(in srgb, var(--positive) 55%, transparent));
-}
-
-.trend-bar--expense {
-  background: linear-gradient(180deg, var(--negative), color-mix(in srgb, var(--negative) 55%, transparent));
-}
-
-.trend-label {
+.ischart-stat-meta {
   font-size: var(--text-2xs);
   color: var(--text-faint);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.legend {
+/* ---- Scrollable plot ----
+   A year does not fit in a half-width card at a legible density, so the plot
+   keeps a fixed width per month and this box scrolls. The card's own width is
+   unchanged, so the bento grid never reflows and the page never scrolls
+   sideways. It bleeds to the card's padding edge so the oldest month runs to
+   the border rather than stopping short of it. */
+
+.ischart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-inline: calc(var(--space-5) * -1);
+  padding-inline: var(--space-5);
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 20%, transparent) transparent;
+}
+
+.ischart-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ischart-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ischart-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: var(--radius-pill);
+}
+
+.ischart-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+/* Remounted on every chart-type switch, so the new mark fades in rather than
+   snapping — the three views read as one chart changing shape. */
+.ischart-plot {
+  animation: chart-swap var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes chart-swap {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Marks ---- */
+
+.ischart-stop--income {
+  stop-color: var(--positive);
+}
+
+.ischart-stop--expense {
+  stop-color: var(--negative);
+}
+
+.ischart-grid line {
+  stroke: var(--divider);
+}
+
+/* Recharts names its axis text itself and takes no CSS-variable prop, so its
+   own class is the only hook for theming the ticks. */
+.ischart .recharts-cartesian-axis-tick-value {
+  fill: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+}
+
+/* Compact amounts printed on the marks. The halo keeps them readable where a
+   label sits over its own bar or a neighbouring curve. */
+.ischart-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Bars and area bodies are filled by the gradients above; only the curves and
+   their dots need the flat series colour. The area body is excluded by name —
+   a stroke on it would outline the whole filled shape, baseline included. */
+.ischart-series--income .recharts-line-curve,
+.ischart-series--income .recharts-area-curve {
+  stroke: var(--positive);
+}
+
+.ischart-series--expense .recharts-line-curve,
+.ischart-series--expense .recharts-area-curve {
+  stroke: var(--negative);
+}
+
+.ischart-series .recharts-area-area {
+  stroke: none;
+}
+
+.ischart-series--income .recharts-dot {
+  fill: var(--surface);
+  stroke: var(--positive);
+}
+
+.ischart-series--expense .recharts-dot {
+  fill: var(--surface);
+  stroke: var(--negative);
+}
+
+/* ---- Legend ---- */
+
+.ischart-foot {
   display: flex;
-  gap: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
-.legend-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  margin-right: 6px;
+.ischart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ischart-foot-note {
+  margin-left: auto;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* Exact amount in the tooltip, opposite its series name. */
+.ischart-tip-amount {
+  margin-left: auto;
+  padding-left: var(--space-3);
+  color: var(--text);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Category share ---- */
@@ -1842,13 +2298,6 @@ tr:hover .row-actions,
   opacity: 0.75;
 }
 
-.user-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: var(--space-4);
-}
-
 .user-chip {
   padding: 6px 13px;
   border: 1px solid var(--border);
@@ -1918,47 +2367,1451 @@ tr:hover .row-actions,
   transform: scale(1.08);
 }
 
-.theme-preview {
+/* ---- Theme picker ----
+   Thirteen options is too many for a flat row, so they are grouped by scheme
+   and the whole thing scrolls inside a fixed height rather than pushing the
+   rest of Settings down the page. */
+.theme-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-height: 520px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-2);
+  /* Room for the lift on hover and the focus ring, which would otherwise be
+     clipped by the scroll container. */
+  padding-block: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.theme-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.theme-grid::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.theme-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.theme-group legend {
+  padding: 0 0 var(--space-2);
+}
+
+.theme-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: var(--space-3);
 }
 
-.theme-option {
-  padding: var(--space-4);
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-2) 60%, transparent);
   color: var(--text);
   font: inherit;
-  font-size: var(--text-sm);
   cursor: pointer;
   text-align: left;
+  min-width: 0;
   transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out),
     box-shadow var(--dur-base) var(--ease-out);
 }
 
-.theme-option:hover {
+.theme-card:hover {
   transform: translateY(-2px);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
 }
 
-.theme-option.is-active {
-  border-color: var(--accent);
+.theme-card:focus-visible {
+  outline: none;
   box-shadow: var(--ring);
 }
 
-.theme-swatch-row {
-  display: flex;
-  gap: 5px;
-  margin-top: var(--space-2);
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-accent);
 }
 
-.theme-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+/* A miniature of the theme: page colour behind, a text bar, a surface bar and
+   an accent dot. Enough to tell Nord from Dracula at a glance. */
+.theme-card-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 46px;
+  padding: 8px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* The surface colour as an actual card sitting on the page colour, rather than
+   a bar — on themes where surface is close to bg a bar just disappears. */
+.theme-card-surface {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 6px;
+}
+
+.theme-card-bar {
+  height: 4px;
+  width: 52%;
+  border-radius: var(--radius-pill);
+}
+
+.theme-card-bar--short {
+  width: 22%;
+  opacity: 0.5;
+}
+
+.theme-card-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+
+.theme-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.theme-card.is-active .theme-card-name {
+  color: var(--accent);
+}
+
+.theme-card-blurb {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.theme-card-check {
+  position: absolute;
+  top: calc(var(--space-3) + 6px);
+  right: calc(var(--space-3) + 6px);
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- Icons ----
+   Lucide renders inline SVG inheriting currentColor. These rules only handle
+   alignment and the couple of places where an icon needs its own colour.
+   Wallet icons are emoji text and are untouched by any of this. */
+.sidebar-item svg,
+.tabbar-item svg,
+.btn svg,
+.stat-label svg,
+.theme-card-name svg {
+  flex: none;
+}
+
+.empty-icon {
+  color: var(--accent);
+}
+
+/* Spins the glyph inside a RefreshButton while its fetch is in flight, so the
+   button is its own progress indicator. Collapsed by the reduced-motion block
+   in theme.css, where the disabled state still signals "working". */
+/* Settings sits in the topbar rather than the nav lists, so it needs its own
+   active treatment — the sidebar rail and tabbar underline do not reach here. */
+.topbar-settings.is-active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--accent);
+}
+
+/* Sign out, mobile only. The sidebar owns this above 1000px — see the hide rule
+   in the sidebar breakpoint — and below it the sidebar does not exist, so
+   without this there is no way to sign out on a phone at all.
+
+   Tinted toward the negative colour rather than left as a neutral ghost. It
+   sits immediately beside the settings gear at icon-only size, where two
+   identical grey glyphs a few pixels apart is how someone ends a session they
+   meant to configure. The colour is the separation; it is deliberately a tint
+   and not a full danger button, because signing out loses no data and should
+   not shout. */
+.topbar-signout {
+  color: color-mix(in srgb, var(--negative) 72%, var(--text-muted));
+  /* A hair of air after the gear, so the two do not read as one control. */
+  margin-left: 2px;
+}
+
+.topbar-signout:hover {
+  background: color-mix(in srgb, var(--negative) 12%, transparent);
+  border-color: color-mix(in srgb, var(--negative) 30%, transparent);
+  color: var(--negative);
+}
+
+.icon-spin {
+  animation: spin 800ms linear infinite;
+}
+
+/* The dashboard opens on the hero rather than a page header, so its Refresh
+   sits on the net-worth label line. Negative margins keep the button from
+   adding height to a row sized for 11px type. */
+.hero-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.hero-label-row .btn {
+  margin: -8px 0;
+  padding: 6px 8px;
+}
+
+.stat-label svg {
+  opacity: 0.75;
+}
+
+
+/* ==========================================================================
+   Cash-flow Sankey
+   --------------------------------------------------------------------------
+   Every colour here is a theme token, so the chart re-themes with the rest of
+   the app and never needs a JS palette. Stage encoding:
+
+     income   --positive     money arriving
+     wallet   --accent       money held
+     expense  --negative     money leaving
+
+   Ribbons are stroked paths with a gradient between the two stage colours, so
+   direction reads without an arrowhead.
+   ========================================================================== */
+
+/* Reserves the card's footprint while the chart chunk loads, so the bento
+   grid does not jump when it arrives. */
+.sankey-placeholder {
+  min-height: 420px;
+}
+
+.sankey-wrap {
+  position: relative;
+  min-width: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+/* Refetch holds the previous render instead of flashing a skeleton. */
+.sankey-wrap.is-stale {
+  opacity: 0.55;
+}
+
+/* Zero-size carrier for the gradient defs. Kept out of the flow entirely —
+   `display: none` would stop the gradients resolving in some engines. */
+.sankey-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sankey-stop--income {
+  stop-color: var(--positive);
+}
+
+.sankey-stop--wallet {
+  stop-color: var(--accent);
+}
+
+.sankey-stop--expense {
+  stop-color: var(--negative);
+}
+
+/* Synthetic endpoints ("Existing balance", "Left over") are real numbers but
+   not real transactions, so their ribbons fade to neutral rather than implying
+   income or spending. */
+.sankey-stop--neutral {
+  stop-color: var(--text-faint);
+}
+
+/* ---- Nodes ---- */
+
+.sankey-node rect {
+  fill: var(--accent);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.sankey-node--income rect {
+  fill: var(--positive);
+}
+
+.sankey-node--expense rect {
+  fill: var(--negative);
+}
+
+/* Synthetic bookkeeping nodes ("Existing balance", "Left over") are real
+   numbers but not real transactions, so they recede. */
+.sankey-node.is-synthetic rect {
+  fill: var(--text-faint);
+}
+
+.sankey-node-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  /* Middle-column labels sit over ribbons; the halo keeps them readable
+     without a filled plate competing with the data. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.sankey-node-value {
+  fill: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.sankey-node.is-synthetic .sankey-node-label {
+  fill: var(--text-muted);
+  font-style: italic;
+}
+
+/* ---- Ribbons ---- */
+
+.sankey-link {
+  opacity: 0.3;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.sankey-link.is-synthetic {
+  opacity: 0.15;
+}
+
+/* Recharts wraps each ribbon in its own <Layer>, so hovering one dims nothing
+   else — instead the hovered ribbon lifts clear of the rest. */
+.sankey-wrap:hover .sankey-link {
+  opacity: 0.2;
+}
+
+.sankey-wrap .sankey-link:hover,
+.sankey-wrap:hover .sankey-link:hover {
+  opacity: 0.62;
+}
+
+.sankey-wrap:hover .sankey-link.is-synthetic {
+  opacity: 0.11;
+}
+
+/* ---- Legend ---- */
+
+.sankey-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sankey-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sankey-legend-note {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.sankey-footnote {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.sankey-footnote strong {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Glass tooltip ----
+   Shared by any future chart, hence the neutral `chart-tip` name. */
+
+.chart-tip {
+  min-width: 172px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  pointer-events: none;
+}
+
+/* The reader already knows which ribbon they are on — they came for the
+   number, so the value leads and the names follow. */
+.chart-tip-value {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.15;
+}
+
+.chart-tip-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.chart-tip-flow svg {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.chart-tip-name {
+  font-weight: var(--weight-medium);
+}
+
+/* A short stroke, not a filled box: at tooltip density a block of series
+   colour is data-weight ink doing a label's job. */
+.chart-tip-key {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.chart-tip-key--income {
+  background: var(--positive);
+}
+
+.chart-tip-key--expense {
+  background: var(--negative);
+}
+
+.chart-tip-muted {
+  margin-top: 4px;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.chart-tip-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  max-width: 220px;
+}
+
+/* ---- Table view ----
+   The WCAG-clean twin: every number the chart draws, reachable without a
+   pointer. Scrolls inside its own box so the page never scrolls sideways. */
+
+.table-scroll {
+  overflow-x: auto;
+  margin-inline: calc(var(--space-1) * -1);
+  padding-inline: var(--space-1);
+}
+
+.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.flow-table th,
+.flow-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.flow-table th {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.flow-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.flow-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.flow-table .is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visually hidden, still read aloud. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Candlestick chart
+   --------------------------------------------------------------------------
+   The canvas itself is painted by lightweight-charts, which cannot read CSS
+   variables — StockCandlestickChart resolves those in JS and re-applies them
+   on a theme swap. Everything *around* the canvas is styled here, so the frame,
+   skeleton and overlays follow the theme the ordinary way.
+   ========================================================================== */
+
+/* A heavier glass treatment than the default card — this panel is the focus
+   of the screen, so it sits slightly forward of the ones around it. */
+.card--glass {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow-lg);
+}
+
+.candle-frame {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.candle-canvas {
+  width: 100%;
+  transition: opacity var(--dur-base) var(--ease-out), filter var(--dur-base) var(--ease-out);
+}
+
+/* Refetching, or an error is being explained on top: hold the previous render
+   at reduced strength rather than tearing it down. */
+.candle-canvas.is-dimmed {
+  opacity: 0.35;
+}
+
+/* ---- Skeleton ----
+   Shaped like a price series rather than a grey bar, so the reader already
+   knows what is arriving. */
+.candle-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2%;
+  padding: var(--space-5) var(--space-4);
+  pointer-events: none;
+}
+
+.candle-skeleton-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    color-mix(in srgb, var(--text) 8%, var(--surface-2)) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
+}
+
+/* Stagger so the bars breathe as a group instead of pulsing in lockstep. */
+.candle-skeleton-bar:nth-child(3n) { animation-delay: 120ms; }
+.candle-skeleton-bar:nth-child(3n + 1) { animation-delay: 240ms; }
+
+/* ---- Overlays ----
+   Frosted, so the chart stays faintly visible underneath: the message is
+   about the fetch, not about the data being gone. */
+.candle-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  animation: fade var(--dur-base) var(--ease-out) both;
+}
+
+.candle-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 380px;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.candle-overlay-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+/* Hitting a free-tier ceiling is a "wait", not a failure — warm, not alarming. */
+.candle-overlay.is-limit .candle-overlay-icon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.candle-overlay-title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  /* The countdown re-renders every second; tabular figures stop the text
+     jittering as the digit width changes. */
+  font-variant-numeric: tabular-nums;
+}
+
+.candle-overlay-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ---- Chart card ---- */
+
+.candle-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.candle-symbol {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.candle-symbol-meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+/* O/H/L/C readout — follows the crosshair, falls back to the latest bar, so
+   the values are legible without hovering. */
+.candle-ohlc {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.candle-ohlc b {
+  margin-left: 4px;
+  font-weight: var(--weight-semi);
+  color: var(--text-secondary);
+}
+
+.candle-ohlc .is-up {
+  color: var(--positive);
+}
+
+.candle-ohlc .is-down {
+  color: var(--negative);
+}
+
+/* ---- Selectable position rows ---- */
+
+.data tbody tr.is-selectable {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.data tbody tr.is-selectable:hover {
+  background: var(--surface-hover);
+}
+
+.data tbody tr.is-charted {
+  background: var(--accent-softer);
+}
+
+.data tbody tr.is-charted:hover {
+  background: var(--accent-soft);
+}
+
+/* An accent rail on the first cell marks the charted row without relying on
+   the background tint alone, which is very faint in some themes. */
+.data tbody tr.is-charted > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.data tbody tr.is-selectable:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ---- Holdings & purchase history ----
+   A holding row is one *position*; the row underneath it is every *purchase*
+   that built it. The two must not look like siblings, or the table reads as
+   though the same stock were listed twice. So the history row loses the hover
+   highlight, sits on a recessed surface, and carries the same accent rail as
+   the charted row it belongs to. */
+
+.holding-symbol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.holding-caret {
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+.holding-caret.is-open {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.data tbody tr.lot-row:hover {
+  background: transparent;
+}
+
+.data tbody tr.lot-row > td {
+  padding: 0;
+  background: var(--surface-2);
+  /* Ties the panel to the row above it, which carries the same rail. */
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.lot-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.lot-history-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+
+/* The summary sentence wraps; the tables around it do not. */
+.lot-history-head .text-faint {
+  font-size: var(--text-xs);
+  white-space: normal;
+}
+
+/* Quieter than its parent in every dimension — smaller type, flat header, no
+   glass — so two tables on screen at once never compete for the same glance. */
+table.data.data--nested {
+  font-size: var(--text-xs);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+table.data.data--nested th {
+  position: static;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+table.data.data--nested th,
+table.data.data--nested td {
+  padding: var(--space-2) var(--space-4);
+}
+
+/* ==========================================================================
+   Subscriptions timeline
+   --------------------------------------------------------------------------
+   Urgency is carried by the group, not by each card: a vertical rail runs down
+   each section tinted by how soon its bills fall due, so the eye lands on the
+   red section first and the cards themselves stay calm.
+   ========================================================================== */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.timeline-group {
+  position: relative;
+  /* The tone each group inherits. Overridden per bucket below so a single
+     token drives the dot, the rail and the card edge together. */
+  --timeline-tone: var(--text-faint);
+}
+
+.timeline-group--due {
+  --timeline-tone: var(--negative);
+}
+
+.timeline-group--soon {
+  --timeline-tone: var(--warning);
+}
+
+.timeline-group--later {
+  --timeline-tone: var(--positive);
+}
+
+.timeline-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.timeline-dot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--timeline-tone) 15%, transparent);
+  color: var(--timeline-tone);
+  border: 1px solid color-mix(in srgb, var(--timeline-tone) 35%, transparent);
+}
+
+.timeline-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.timeline-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--timeline-tone) 16%, transparent);
+  color: var(--timeline-tone);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-blurb {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* The connecting line. Sits under the dot's centre and stops short of the last
+   card, so the timeline reads as a thread rather than a border. */
+.timeline-items {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: 46px;
+}
+
+.timeline-items::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  bottom: 18px;
+  left: 17px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--timeline-tone) 45%, transparent) 0%,
+    color-mix(in srgb, var(--timeline-tone) 8%, transparent) 100%
+  );
+}
+
+/* ---- Cards ---- */
+
+.sub-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.sub-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--timeline-tone) 35%, var(--border));
+  box-shadow: var(--shadow-md);
+}
+
+/* Optimistic rows: the payment is on the wire, so the card recedes rather than
+   disappearing — the number stays readable while it settles. */
+.sub-card.is-pending {
+  opacity: 0.6;
+}
+
+.sub-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--timeline-tone);
+}
+
+/* Due bills get a soft wash so the section reads as urgent at a glance. */
+.timeline-group--due .sub-card {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--negative) 9%, transparent) 0%,
+    var(--glass-bg) 42%
+  );
+  box-shadow: var(--shadow-md);
+}
+
+.sub-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sub-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sub-name {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.sub-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sub-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sub-meta svg {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.sub-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.sub-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.sub-amount {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sub-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* A slightly shorter hero for screens whose headline is a summary rather than
+   the point of the page. */
+.hero--compact {
+  padding: var(--space-5);
+}
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  .timeline-items {
+    padding-left: 30px;
+  }
+
+  .timeline-items::before {
+    left: 11px;
+  }
+
+  .sub-card {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .sub-side {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .sub-actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* ==========================================================================
+   Boot screen
+   --------------------------------------------------------------------------
+   Deliberately austere, and much smaller than what it replaced.
+
+   The previous version stacked drifting aurora blobs, a scan sweep and two
+   expanding rings. It ran at 60fps, but it read as a product demo — and a demo
+   is the wrong first impression for an app holding someone's money. Bank-grade
+   is not "more effects done well", it is restraint: the mark, one thin
+   indeterminate line, one sentence.
+
+   PERFORMANCE
+   Two animations, both compositor-only (`transform` / `opacity`). This screen
+   paints while the main thread is still parsing the app bundle and waiting on a
+   cold Apps Script call, so it must cost effectively nothing.
+
+   THEMING
+   Unlike the old screen, this one follows the base tokens and therefore the OS
+   light/dark preference. SettingsProvider has not resolved the user's palette
+   yet, but flashing a dark canvas before a light app is precisely the jolt a
+   boot screen exists to prevent.
+   ========================================================================== */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  /* One static wash off the top edge so the panel has somewhere to sit.
+     Nothing here moves — a gradient in motion repaints every frame. */
+  background: radial-gradient(130% 90% at 50% -15%, var(--surface) 0%, var(--bg) 58%);
+  color: var(--text);
+}
+
+.boot-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: min(300px, 100%);
+  text-align: center;
+  /* A single short fade. Long enough not to be a hard cut, short enough that
+     the screen never feels like it is putting on a show. */
+  animation: boot-in 240ms var(--ease-out) both;
+}
+
+@keyframes boot-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `.logo` carries a drop-shadow tuned for dense UI next to text. At 52px on an
+   empty canvas it just looks smudged. */
+.boot-logo {
+  filter: none;
+}
+
+.boot-wordmark {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+/* ---- The only moving part ----
+   Indeterminate on purpose: boot has no measurable progress, and a fake
+   percentage is a lie told at the exact moment trust is being formed. */
+.boot-progress {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.boot-progress > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: inherit;
+  /* Faded at both ends so the head and tail never land as hard edges. */
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent) 30%,
+    var(--accent) 70%,
+    transparent 100%
+  );
+  animation: boot-sweep 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes boot-sweep {
+  0% {
+    transform: translate3d(-110%, 0, 0);
+  }
+  100% {
+    transform: translate3d(360%, 0, 0);
+  }
+}
+
+.boot-status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+/* Anchored under the panel rather than inside it: it is a standing fact about
+   the app, not part of the loading state. */
+.boot-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: min(360px, 100%);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-faint);
+  text-align: center;
+  animation: boot-in 240ms var(--ease-out) 90ms both;
+}
+
+/* ---- Reduced motion ----
+   theme.css already disables every animation globally, which would leave the
+   sweep frozen at 40% width — indistinguishable from a stalled 40% progress
+   bar. Fill the track instead, dimmed, so the still reads as "working". */
+@media (prefers-reduced-motion: reduce) {
+  .boot-progress > span {
+    width: 100%;
+    background: var(--accent);
+    opacity: 0.45;
+  }
+}
+
+/* ==========================================================================
+   Activity filters
+   --------------------------------------------------------------------------
+   Two layers. The bar is always visible and carries the *state* — which
+   filters are on, and how many rows survived them. The body is where filters
+   get changed, and it collapses.
+
+   The split matters: a hidden filter is a filter the user forgets they set,
+   and then a correctly-filtered list looks like a broken one.
+   ========================================================================== */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.filters-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.filters-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.filters-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.filters.is-open .filters-toggle {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.filters-caret {
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.filters-caret.is-open {
+  transform: rotate(180deg);
+}
+
+/* ---- Active-filter chips ----
+   Each one removes exactly its own filter. Deliberately not a single "clear
+   all" only: undoing one facet at a time is how people actually narrow down. */
+
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2) 3px var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.filter-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.filter-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* `.spacer` is scoped to `.toolbar` elsewhere; the filter bar needs its own. */
+.filters-bar .spacer {
+  flex: 1;
+}
+
+.filters-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.filters-count strong {
+  color: var(--text);
+}
+
+/* ---- The drawer ---- */
+
+.filters-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  /* Height is unknown (the custom-range fields appear and disappear), so the
+     reveal animates opacity and a small lift instead of a height it would have
+     to measure. Both are compositor-only. */
+  animation: filters-open var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes filters-open {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.filter-group--wide {
+  grid-column: 1 / -1;
+}
+
+.filter-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.filter-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Two fields that belong together — from/to, min/max. Collapses to one column
+   rather than squeezing two date inputs into 110px each. */
+.filter-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .filters-body {
+    padding: var(--space-3);
+    gap: var(--space-4);
+  }
+
+  /* The count is the least useful thing on a narrow bar and the first to go. */
+  .filters-count {
+    order: 3;
+  }
 }
 
 /* ---- Brand mark ---- */
@@ -1981,6 +3834,2604 @@ tr:hover .row-actions,
 
 .topbar-logo {
   display: block;
+}
+
+/* ==========================================================================
+   13b  Toasts
+   ========================================================================== */
+
+.toaster {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Above the mobile tab bar; moves to a corner on desktop below. */
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  pointer-events: auto;
+  animation: toast-in var(--dur-base) var(--ease-spring) both;
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: var(--weight-bold);
+}
+
+.toast-icon--error {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+.toast-icon--success {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+.toast-icon--warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.toast-icon--info {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.toast-body strong {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.toast--error {
+  border-left: 2px solid var(--negative);
+}
+.toast--success {
+  border-left: 2px solid var(--positive);
+}
+.toast--warning {
+  border-left: 2px solid var(--warning);
+}
+.toast--info {
+  border-left: 2px solid var(--accent);
+}
+
+.toast-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.toast-close:hover {
+  color: var(--text);
+  transform: rotate(90deg);
+}
+
+@media (min-width: 640px) {
+  .toaster {
+    left: auto;
+    right: var(--space-5);
+    bottom: var(--space-5);
+    width: min(400px, calc(100vw - var(--space-6)));
+  }
+}
+
+/* ==========================================================================
+   Quick add — hold & drag
+   --------------------------------------------------------------------------
+   A floating button that opens a cascading menu under the finger. Everything
+   here is subordinate to one requirement: the gesture must never be
+   interrupted by the browser's own behaviours.
+
+   That is what the `touch-action: none` and `user-select: none` below are for.
+   Without them a long press on mobile starts a text selection or a context
+   menu, the page scrolls out from under the menu, and the drag is dead.
+
+   Layout: anchored bottom-right, above the mobile tab bar. Columns grow
+   leftward from the button (`row-reverse`) so the first choice is the shortest
+   travel from the thumb and each subsequent one moves in one predictable
+   direction.
+   ========================================================================== */
+
+.qa {
+  position: fixed;
+  z-index: 80;
+  right: var(--space-4);
+  /* Clears the mobile tab bar, matching the toaster's offset. */
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  /* The wrapper must not eat taps meant for the page behind it. */
+  pointer-events: none;
+}
+
+.qa > * {
+  pointer-events: auto;
+}
+
+.qa-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: qa-fade var(--dur-fast) var(--ease-out) both;
+}
+
+/* While the finger is still down the backdrop must be invisible to hit-testing:
+   `elementFromPoint` returns the topmost element, and a backdrop over the menu
+   would make every option unreachable. */
+.qa-backdrop.is-passthrough {
+  pointer-events: none;
+}
+
+@keyframes qa-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- The button ---- */
+
+.qa-fab {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  /* The three that make a long-press drag possible at all. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.qa-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-lg), var(--ring);
+}
+
+/* Held, but not yet armed. The shrink is the only feedback available during
+   the 280ms before the menu appears, so it has to read instantly. */
+.qa-fab.is-pressing {
+  transform: scale(0.9);
+}
+
+.qa-fab.is-armed {
+  transform: rotate(45deg);
+  background: var(--negative);
+}
+
+/* ---- The cascading menu ---- */
+
+.qa-menu {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: calc(100vw - var(--space-6));
+  animation: qa-rise var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes qa-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.qa-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* Narrow enough that three columns fit a 360px phone, wide enough for a
+     category name. */
+  flex: 0 1 132px;
+  max-height: min(46vh, 320px);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  /* Scrollable by touch once the finger is up — a long category list would
+     otherwise be stuck in sticky mode. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  animation: qa-rise var(--dur-fast) var(--ease-out) both;
+}
+
+/* ...but not during the drag. There, `autoScroll` moves the column from the
+   pointer handler, and letting the browser pan at the same time would fight it
+   and cancel the gesture. */
+.qa-menu.is-dragging .qa-column {
+  touch-action: none;
+}
+
+.qa-column-title {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.qa-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.qa-option:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* The finger is over this one. Scaled slightly so it is legible past the
+   fingertip covering it — the single most common failure of touch menus. */
+.qa-option.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  transform: scale(1.02);
+}
+
+.qa-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-emoji {
+  flex: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* ---- The amount pad ---- */
+
+.qa-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(280px, calc(100vw - var(--space-6)));
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  animation: qa-rise var(--dur-base) var(--ease-spring) both;
+}
+
+.qa-pad-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* What the gesture picked. Kept visible so the only remaining question — the
+   amount — is answered in context. */
+.qa-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qa-path strong {
+  color: var(--text);
+}
+
+.qa-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.qa-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.qa-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.qa-currency {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-wide);
+}
+
+.qa-amount-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: var(--weight-semi);
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qa-amount-value.is-empty {
+  color: var(--text-faint);
+}
+
+.qa-amount-converted {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.qa-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.qa-key {
+  display: grid;
+  place-items: center;
+  /* Comfortably past the 44px minimum touch target, because this grid is
+     operated one-handed at speed. */
+  height: 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.qa-key:hover {
+  background: var(--surface-hover);
+}
+
+.qa-key:active {
+  transform: scale(0.94);
+  background: var(--accent-soft);
+}
+
+.qa-key--back {
+  color: var(--text-muted);
+}
+
+.qa-save {
+  height: 46px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.qa-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.qa-save:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+/* ---- Desktop ----
+   No tab bar to clear, and the sidebar means there is room to sit lower. */
+@media (min-width: 640px) {
+  .qa {
+    right: var(--space-5);
+    bottom: var(--space-5);
+  }
+}
+
+/* The toaster shares this corner. Lift it clear of the button on both
+   breakpoints, so a rollback message never lands under the control that caused
+   it — 68px is the 56px button plus its gap. */
+.toaster {
+  bottom: calc(84px + 68px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 640px) {
+  .toaster {
+    bottom: calc(var(--space-5) + 68px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qa-fab.is-armed {
+    transform: none;
+  }
+
+  .qa-option.is-active {
+    transform: none;
+  }
+}
+
+
+
+
+
+
+/* ---- Recorded-at time ----
+   The clock a row was written, under the date it is filed against. Two
+   different facts, so it is deliberately the quieter of the two: one step
+   smaller, one step fainter, and never bold. If it competes with the date the
+   reader has to work out which one they are looking at every time.
+
+   `tabular-nums` because these stack vertically in a table column, and
+   proportional digits make a column of times look bent. */
+
+.recorded-at {
+  display: block;
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Inside an existing sub-line — the dashboard's four-row recent list, where a
+   third line per row would cost more than the time is worth. */
+.recorded-at--inline {
+  display: inline;
+  font-size: inherit;
+}
+
+.recorded-at--inline::before {
+  content: ' · ';
+}
+
+
+/* ==========================================================================
+   Receipt scanner
+   --------------------------------------------------------------------------
+   Sits at the top of the transaction form, because it fills the fields below
+   it. Three states: a drop zone, a preview being swept, and a result.
+   ========================================================================== */
+
+.scan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---- Drop zone ---- */
+
+.scan-drop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out);
+}
+
+.scan-drop > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+/* A drag target has to say so before the drop, or the user is guessing. */
+.scan-drop.is-dragging {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-softer);
+}
+
+.scan-drop.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.scan-drop-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-drop-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.scan-drop-copy span {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- Preview + result ---- */
+
+.scan-result {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.scan-frame {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 108px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.scan-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Dimmed while it works, so the sweep is the brightest thing in the frame. */
+.scan-frame.is-scanning img {
+  filter: brightness(0.72) saturate(0.85);
+}
+
+/**
+ * The sweep.
+ *
+ * This is the only signal that anything is happening during a second and a half
+ * of silence, and it runs over the actual uploaded image so it reads as
+ * "working on *this*". Pure `transform`, so it stays on the compositor while
+ * the main thread is busy — the one moment it must not stutter.
+ */
+.scan-laser {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 55%,
+    var(--accent) 92%,
+    var(--accent) 100%
+  );
+  /* A 2px bright edge at the leading side, which is what sells it as a scan
+     line rather than a moving gradient. */
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 65%, transparent);
+  animation: scan-sweep 1.25s var(--ease-in-out) infinite;
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translate3d(0, -100%, 0);
+  }
+  100% {
+    transform: translate3d(0, 333%, 0);
+  }
+}
+
+/* Reduced motion still needs a "working" signal — a still bar, pulsing gently
+   in opacity, rather than a line racing down the page. */
+@media (prefers-reduced-motion: reduce) {
+  .scan-laser {
+    top: 40%;
+    height: 20%;
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
+.scan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.scan-status--ok {
+  color: var(--positive);
+}
+
+.scan-status--bad {
+  color: var(--negative);
+}
+
+.scan-sub {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- What it found ----
+   Shown rather than silently applied. OCR is confidently wrong often enough
+   that overwriting three inputs unannounced is hostile: a misread 1,290 as 129
+   is invisible once it sits in a field the user believes they typed. */
+
+.scan-found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.scan-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-chip em {
+  font-style: normal;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- Progress ----
+   The laser says something is happening; this says how much is left. Both are
+   needed because the first run downloads several megabytes of language model,
+   which is long enough that an indeterminate animation alone reads as a hang. */
+
+.scan-progress {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.scan-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  /* Eased, so the jump between phases reads as movement rather than a snap.
+     The value itself is already monotonic — see mapProgress. */
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+/* ---- Salvage ----
+   Shown when OCR read text but nothing structured came out of it. */
+
+.scan-salvage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.scan-salvage code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.scan-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
+/* ---- The honesty line ----
+   The parser is a stub. A user who trusts an invented figure once will not
+   check the next one. */
+.scan-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.scan-disclaimer svg {
+  flex: none;
+}
+
+@media (max-width: 480px) {
+  .scan-drop {
+    flex-wrap: wrap;
+  }
+
+  .scan-frame {
+    width: 64px;
+    height: 84px;
+  }
+}
+
+/* ==========================================================================
+   Goals — sinking funds
+   --------------------------------------------------------------------------
+   The header is the feature. Three figures and one bar say: you hold this
+   much, you have promised this much, so this much is actually free. Every
+   other screen answers the first; only this one answers the third.
+   ========================================================================== */
+
+.alloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+}
+
+.alloc-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-4);
+}
+
+.alloc-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.alloc-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.alloc-hint {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* Available is the answer to "can I afford this", so it is the one that gets
+   colour — and it turns negative rather than being floored at zero, because a
+   plan that has outrun the balance is exactly what the user needs told. */
+.alloc-figure--available strong {
+  color: var(--positive);
+}
+
+.alloc-figure--available.is-over strong {
+  color: var(--negative);
+}
+
+.alloc-bar {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  /* The free remainder. The locked part is drawn on top of it. */
+  background: color-mix(in srgb, var(--positive) 28%, var(--surface-3));
+}
+
+.alloc-bar-locked {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--locked, 0%);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* ---- Goal cards ---- */
+
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.goal-card:hover {
+  border-color: var(--border-strong);
+}
+
+/* A funded goal recedes rather than celebrates: it is done, and the ones that
+   still need money are what the screen is for. */
+.goal-card.is-complete {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--positive) 32%, transparent);
+}
+
+.goal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.goal-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.goal-identity h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-amounts {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Progress ring ---- */
+
+.goal-ring {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  /* Starts the arc at twelve o'clock instead of three. */
+  transform: rotate(-90deg);
+}
+
+.goal-ring-track {
+  fill: none;
+  stroke: var(--surface-3);
+  stroke-width: 6;
+}
+
+.goal-ring-fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-out);
+}
+
+/* Un-rotates just the label, so the percentage stays upright inside the arc. */
+.goal-ring-text {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: var(--weight-semi);
+  text-anchor: middle;
+  dominant-baseline: central;
+  transform: rotate(90deg);
+  transform-origin: 32px 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.goal-chip {
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.goal-chip--quiet {
+  background: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.goal-chip--done {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.goal-chip--late {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.goal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+.goal-actions .spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .goal-grid {
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
+  }
+
+  .alloc {
+    padding: var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   Analytics
+   --------------------------------------------------------------------------
+   Four widgets, one rule: no colour is ever written as a literal. Everything
+   below derives from --accent, --positive or --text, so all thirteen themes and
+   a custom accent reach the charts. Where a value has to vary per datum it
+   arrives as a custom property on the element, not as an inline colour.
+   ========================================================================== */
+
+/* ---- Savings rate ---- */
+
+.arate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.arate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.arate-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arate-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.arate-meta,
+.arate-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.arate-note {
+  color: var(--text-faint);
+}
+
+.arate-area {
+  stroke: var(--accent);
+}
+
+/* Same alpha pair as the projection: composited on either card surface this
+   lands inside the lightness band a mark should occupy. */
+.arate-stop--top {
+  stop-color: var(--accent);
+  stop-opacity: 0.55;
+}
+
+.arate-stop--bottom {
+  stop-color: var(--accent);
+  stop-opacity: 0.06;
+}
+
+/* Zero matters more than the gridlines it sits among, so it is solid where they
+   are dashed — but still recessive against the data. */
+.arate-zero line,
+line.arate-zero {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+/* ---- Heatmap ---- */
+
+.heat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.heat-weekdays,
+.heat-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.heat-weekdays {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/**
+ * One day.
+ *
+ * `--cell` is the day's intensity, 0…1, set per element. Turning it into an
+ * alpha on the accent means the ramp is monotone by construction — there is no
+ * hand-picked list of five steps to get wrong, and it is correct in every
+ * theme because the hue is never named here.
+ */
+.heat-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--accent) calc(var(--cell, 0) * 82%), var(--surface-2));
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.heat-cell:hover {
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+
+.heat-cell--blank {
+  background: transparent;
+  border-color: transparent;
+}
+
+.heat-day {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* Flips to the accent's contrast colour once the tile is dark enough to swallow
+   body text. The threshold is decided in JS and arrives as a class: an attribute
+   selector on the inline style would have to guess how the browser serialises
+   `--cell: 0.6333`, and would silently stop matching. */
+.heat-cell.is-dark .heat-day {
+  color: var(--accent-contrast);
+}
+
+.heat-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.heat-cell--key {
+  width: 14px;
+  aspect-ratio: 1;
+  border-radius: 3px;
+}
+
+/* ---- Category treemap ---- */
+
+.atree {
+  min-height: 240px;
+}
+
+.atree--loading {
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* `--weight` is the tile's rank, 1 for the largest. Area already encodes
+   magnitude; the alpha reinforces the same thing rather than introducing a
+   second, categorical, unverifiable palette. */
+.atree-tile {
+  fill: color-mix(in srgb, var(--accent) calc(18% + var(--weight, 0) * 62%), var(--surface-2));
+  stroke: var(--surface);
+  /* A 2px surface gap between adjacent fills, so neighbouring tiles read as
+     separate areas rather than one blob. */
+  stroke-width: 2;
+}
+
+.atree-label {
+  fill: var(--accent-contrast);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+}
+
+.atree-share {
+  fill: var(--accent-contrast);
+  font-size: var(--text-2xs);
+  opacity: 0.85;
+}
+
+/* ---- Payees ---- */
+
+.payees td:first-child {
+  position: relative;
+  min-width: 160px;
+}
+
+/* Sits behind the name rather than in its own column: at eight rows the
+   proportion is context, and a separate column would push the three figures
+   people actually read off the right edge on a phone. */
+.payee-bar {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: var(--share, 0%);
+  border-radius: var(--radius-xs);
+  background: var(--accent-softer);
+  pointer-events: none;
+}
+
+.payee-name {
+  position: relative;
+  font-weight: var(--weight-medium);
+}
+
+.payees .list-item-sub {
+  position: relative;
+}
+
+/* ---- The dashboard's gateway card ---- */
+
+.analytics-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--glass-border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.analytics-cta:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-1px);
+}
+
+.analytics-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.analytics-cta-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.analytics-cta-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.analytics-cta-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.analytics-cta-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.analytics-cta-arrow {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.analytics-cta:hover .analytics-cta-arrow {
+  transform: translateX(3px);
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   404
+   --------------------------------------------------------------------------
+   One card, centred in whatever space the shell leaves. It inherits the glass
+   treatment from `.card` rather than restating it, so the thirteen themes and
+   the custom accent reach it like everywhere else.
+   ========================================================================== */
+
+.notfound {
+  display: grid;
+  place-items: center;
+  /* Fills the page area without fighting the topbar for height. */
+  min-height: min(62vh, 520px);
+  padding: var(--space-5) 0;
+}
+
+.notfound-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: min(420px, 100%);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* The compass sits in a soft medallion rather than floating loose — the same
+   shape EmptyState uses, so a dead end looks like part of the app. */
+.notfound-mark {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.notfound-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+.notfound-message {
+  margin: 0;
+  max-width: 34ch;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* The path the user actually asked for. Monospace because it is a literal, and
+   it may be long enough to need breaking. */
+.notfound-path {
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   Net worth projection
+   --------------------------------------------------------------------------
+   Two stacked bands: contributions as recessive context, growth as the one
+   coloured mark. The gap between them is the whole point of the widget, so
+   everything else here recedes — grid, axes and the base band included.
+
+   Every colour is a token. Thirteen themes and a user-settable accent mean a
+   hard-coded hex is a bug waiting for someone to switch palette.
+   ========================================================================== */
+
+.proj {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.proj--loading {
+  min-height: 300px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+
+/* ---- Headline ----
+   The figures are here as text on purpose. The band fills sit below 3:1
+   against the card, which is legible as a shape but not as a value, so the
+   values are never colour-only. */
+
+.proj-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.proj-total {
+  margin-top: var(--space-1);
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.proj-figures {
+  display: flex;
+  gap: var(--space-5);
+  margin: 0;
+}
+
+.proj-figures > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.proj-figures dt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.proj-figures dd {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.proj-share {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+}
+
+/* ---- Marks ----
+   The base band is a neutral: it is money you already had or put in, and it is
+   not the subject. The growth band carries the only hue. */
+
+.proj-area--contributed {
+  fill: color-mix(in srgb, var(--text) 12%, transparent);
+  stroke: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* Stroked in the token itself so the boundary between the bands stays crisp at
+   any fill opacity — this doubles as the 2px separator between stacked fills. */
+.proj-area--growth {
+  stroke: var(--positive);
+}
+
+/* 0.65 at the top, fading down. Composited on both the light and dark card
+   surfaces this lands inside the OKLCH band a mark should occupy; the raw dark
+   `--positive` on its own is too light for it. */
+.proj-stop--growth-top {
+  stop-color: var(--positive);
+  stop-opacity: 0.65;
+}
+
+.proj-stop--growth-bottom {
+  stop-color: var(--positive);
+  stop-opacity: 0.14;
+}
+
+/* Legend and tooltip swatches. */
+.proj-key--growth {
+  background: var(--positive);
+}
+
+.proj-key--contributed {
+  background: color-mix(in srgb, var(--text) 32%, transparent);
+}
+
+.proj-axis {
+  font-size: var(--text-2xs);
+  fill: var(--text-faint);
+}
+
+.proj-cursor {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.proj-plot {
+  margin-inline: calc(-1 * var(--space-2));
+}
+
+/* ---- Controls ---- */
+
+.proj-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.proj-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.proj-control-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.proj-control-head strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A range input is one of the few controls browsers still style themselves, so
+   it gets reset explicitly rather than inheriting three different looks. */
+.proj-control input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  cursor: pointer;
+}
+
+.proj-control input[type='range']:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.proj-control input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.proj-control input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.proj-horizon {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---- Provenance ----
+   Where the contribution figure came from, and what the projection is not.
+   A ten-year number without its caveats is a promise. */
+
+.proj-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.proj-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.proj-reset {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .proj-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .proj-figures {
+    gap: var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   Watchlist
+   --------------------------------------------------------------------------
+   Two lists under one chart. Holdings answers "what do I own"; the watchlist
+   answers "what am I waiting for". They share the candle chart above, so the
+   tab bar has to read as switching the *list*, not the whole screen — hence a
+   quiet inline control rather than a full-width banner.
+   ========================================================================== */
+
+.invest-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.invest-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.invest-tab:hover {
+  color: var(--text);
+}
+
+.invest-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The active tab is a raised surface rather than a coloured fill: it reads as
+   the sheet in front, which is what a tab is. */
+.invest-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.invest-tab-count {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.invest-tab.is-active .invest-tab-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Marks the chart as showing something watched rather than owned. */
+.watch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+
+/* ---- Full-screen card ----
+   A watchlist is a scanning surface: the longer it gets, the more it wants the
+   whole viewport. The class does all the real work, which is why it is plain
+   CSS rather than the Fullscreen API — this behaves identically everywhere,
+   including iOS Safari, where `requestFullscreen()` on a non-video element is
+   simply refused. The hook layers the browser-chrome removal on top.
+
+   z-index 50 is chosen, not arbitrary: above the sidebar (20) and tab bar (30)
+   so it genuinely covers the app, but below the modal backdrop (60) and the
+   toaster (90) so "Add to watchlist" and any error still land on top of it. */
+
+.card--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  /* Opaque rather than glass: there is nothing behind it worth showing
+     through, and a blurred backdrop over a full screen of scrolling rows is
+     expensive for no benefit. */
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: card-fullscreen-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes card-fullscreen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The header stays put; only the list moves. */
+.card--fullscreen > .card-head {
+  flex: none;
+  padding-top: max(var(--space-5), env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: var(--space-4);
+}
+
+.card--fullscreen > .card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The chart card builds its own header inside the body rather than using the
+   Card's `title`/`actions` slots, so there is no `.card-head` to carry the
+   safe-area inset — the body is the first child and takes it instead. */
+.card--fullscreen > .card-body:first-child {
+  padding-top: max(var(--space-5), env(safe-area-inset-top, 0px));
+}
+
+/* `.card-head + .card-body--flush` adds a top margin that reads as a gap under
+   a border it now sits directly beneath. */
+.card--fullscreen > .card-head + .card-body--flush {
+  margin-top: 0;
+}
+
+/* On a wide monitor a row stretched to 2500px puts the symbol and its price at
+   opposite ends of the desk. Cap the column and centre it, the way a document
+   would. */
+.card--fullscreen .watch-groups {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+/* The right-hand cluster of the chart header: the O/H/L/C readout and the
+   expand toggle. Grouped so the readout does not get pushed onto its own line
+   the moment a button joins the row. */
+.candle-head-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.watch-card-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Only shown expanded, where the card head is the sole remaining context. */
+.watch-card-count {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+  letter-spacing: normal;
+}
+
+/* Shared by the watchlist card and the chart card. The toggle is a utility,
+   not an action — it sits quietly beside the controls that actually change
+   something. */
+.card-expand {
+  padding-inline: var(--space-3);
+}
+
+/* ---- Category sections ---- */
+
+.watch-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.watch-group + .watch-group {
+  border-top: 1px solid var(--divider);
+}
+
+.watch-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface-2);
+}
+
+.watch-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-group-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
+
+.watch-caret {
+  flex: none;
+  color: var(--text-faint);
+  /* Points right when closed, down when open — the rotation is the affordance. */
+  transform: rotate(-90deg);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.watch-caret.is-open {
+  transform: none;
+}
+
+/* ---- Rows ---- */
+
+.watch-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-row {
+  display: grid;
+  /* symbol+note | target | price | actions. The first column takes the slack so
+     a long note wraps instead of squeezing the numbers. */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.watch-rows > li:last-child .watch-row {
+  border-bottom: 0;
+}
+
+.watch-row:hover {
+  background: var(--surface-hover);
+}
+
+.watch-row:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The charted row, marked the same way the holdings table marks its own — the
+   two lists feed one chart, so they should agree on what "selected" looks like. */
+.watch-row.is-charted {
+  background: var(--accent-softer);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.watch-row.is-charted:hover {
+  background: var(--accent-soft);
+}
+
+.watch-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.watch-symbol {
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.watch-note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Target ---- */
+
+.watch-target {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-target-price {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.watch-target-price svg {
+  color: var(--text-faint);
+}
+
+/**
+ * How far the market is from the target.
+ *
+ * Only "near" is coloured, and it is coloured with the accent rather than
+ * green or red. A target above the market is someone waiting for a breakout; a
+ * target below it is someone waiting for a dip. Only the user knows which they
+ * meant, so the UI reports the distance and refuses to grade it.
+ */
+.watch-proximity {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-faint);
+}
+
+.watch-proximity.is-near {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- Live price ---- */
+
+.watch-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 92px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.watch-change {
+  font-size: var(--text-xs);
+}
+
+/* ---- Narrow screens ----
+   The four-column grid collapses to two: identity over on the left, numbers
+   stacked on the right. Actions drop under them rather than being squeezed. */
+@media (max-width: 640px) {
+  .watch-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .watch-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .watch-price {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .watch-target {
+    grid-column: 1;
+    grid-row: 2;
+    align-items: flex-start;
+  }
+
+  .watch-row .row-actions {
+    grid-column: 2;
+    grid-row: 2;
+    justify-content: flex-end;
+  }
+
+  .watch-group-head,
+  .watch-row {
+    padding-inline: var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   Tax estimate
+   --------------------------------------------------------------------------
+   A receipt, not a dashboard. The layout follows the arithmetic top to bottom
+   — income, two deductions, a rule, the net — because that is the order the
+   Revenue Department's own form works in, and a reader checking the number
+   needs to be able to follow it line by line.
+
+   The restraint is the same one the boot screen makes: this is a figure
+   someone may act on, so nothing here decorates. One accent, one rule, and a
+   single moment of emphasis on the total.
+   ========================================================================== */
+
+.tax-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Range picker ---- */
+
+.tax-range {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tax-range-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-bottom: 2px;
+}
+
+/* ---- Before the first run ----
+   Deliberately says nothing has happened yet. The calculation is on demand, and
+   an empty receipt skeleton would imply it was already trying. */
+
+.tax-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.tax-idle svg {
+  color: var(--text-faint);
+}
+
+.tax-idle p {
+  max-width: 42ch;
+  margin: 0;
+}
+
+/* ---- The receipt ---- */
+
+.tax-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.tax-receipt-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    var(--glass-bg)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.tax-total {
+  margin-top: var(--space-1);
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-receipt-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.tax-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tax-block-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+/* Sits beside the heading, in sentence case — it is a note, not a label. */
+.tax-block-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: var(--weight-normal);
+  font-size: var(--text-xs);
+}
+
+/* ---- One line of the calculation ---- */
+
+.tax-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.tax-line-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* The Thai term and the plain-English gloss under each label. Both matter: the
+   Thai is what the form says, the English is what it means. */
+.tax-line-label em {
+  font-style: normal;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.tax-line-value {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.tax-line-value--minus {
+  color: var(--text-muted);
+}
+
+/* The subtotal the bands are applied to. Heavier rule above, no rule below —
+   it closes the block rather than continuing it. */
+.tax-line--net {
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 0;
+}
+
+.tax-line--net .tax-line-label {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.tax-line--net .tax-line-value {
+  font-size: var(--text-md);
+}
+
+/* ---- The ladder ---- */
+
+.tax-bands td,
+.tax-bands th {
+  white-space: nowrap;
+}
+
+/* Bands the income never reached. Kept on screen rather than hidden: seeing the
+   whole ladder is what makes a marginal system legible — it is the difference
+   between "I am taxed 25%" and "25% applies to my last 40,000". */
+.tax-bands tbody tr.is-dim td {
+  color: var(--text-faint);
+}
+
+.tax-bands tbody tr.is-marginal {
+  background: var(--accent-softer);
+}
+
+.tax-bands tbody tr.is-marginal > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tax-marginal {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- The answer ---- */
+
+.tax-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.tax-summary-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tax-summary-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.tax-summary-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tax-summary-stats strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Assumptions ----
+   Quiet, but present and unabridged. A tax figure without its caveats invites
+   someone to file on it. */
+
+.tax-assumptions ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.tax-assumptions li {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+
+/* ---- Additional deductions ----
+   Collapsed by default. The four statutory steps *are* the calculation; these
+   are refinements, and putting them in front of everyone would imply the
+   estimate is incomplete without them.
+
+   The header always states how many are filled in, so a closed panel can never
+   hide a figure that is quietly changing the answer. */
+
+.tax-deductions {
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.tax-deductions.is-open {
+  border-color: var(--border-strong);
+}
+
+.tax-deductions-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.tax-deductions-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.tax-deductions-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tax-deductions-toggle > span:first-child {
+  flex: 1;
+}
+
+.tax-deductions-state {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+}
+
+.tax-deductions.is-open .tax-deductions-state {
+  color: var(--accent);
+}
+
+.tax-deductions-caret {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.tax-deductions-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.tax-deductions-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--divider);
+  /* Height is unknown, so the reveal animates opacity and a small lift rather
+     than a height it would have to measure. Both are compositor-only. */
+  animation: filters-open var(--dur-base) var(--ease-out) both;
+}
+
+/* ---- Settlement ----
+   Tax due, less what was already withheld, equals what is actually owed. It
+   sits inside the summary panel rather than beside it, because the three lines
+   only mean anything read together. */
+
+.tax-settle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.tax-settle-row,
+.tax-settle-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.tax-settle-row > span:first-child,
+.tax-settle-total > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+/* The Thai term under each label, matching the receipt lines above. */
+.tax-settle-row em,
+.tax-settle-total em {
+  font-style: normal;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.tax-settle-total {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong);
+}
+
+.tax-settle-total > span:first-child {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.tax-settle-total strong {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Money coming back is the one genuinely good outcome this screen can report,
+   and it is worth colouring. Money owed stays neutral — it is not a failure. */
+.tax-settle-total.is-refund > span:first-child,
+.tax-settle-total.is-refund strong {
+  color: var(--positive);
+}
+
+/* ---- The Dashboard trigger ---- */
+
+.tax-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.tax-cta:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tax-cta:active {
+  transform: scale(0.98);
+}
+
+.tax-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+@media (max-width: 640px) {
+  .tax-receipt-meta {
+    text-align: left;
+  }
+
+  .tax-total {
+    font-size: 1.5rem;
+  }
 }
 
 /* ==========================================================================
@@ -2030,17 +6481,6 @@ tr:hover .row-actions,
   }
 }
 
-@keyframes grow-up {
-  from {
-    transform: scaleY(0);
-    opacity: 0;
-  }
-  to {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-}
-
 @keyframes grow-right {
   from {
     transform: scaleX(0);
@@ -2056,6 +6496,23 @@ tr:hover .row-actions,
   }
   to {
     transform: translateY(3px);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pending-pulse {
+  50% {
+    opacity: 0.45;
   }
 }
 
@@ -2117,6 +6574,22 @@ tr:hover .row-actions,
 
   .bento {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* Matches the vertical rhythm of `.page`, which uses --space-5. The grid
+       previously sat at --space-4, so the gap between cards was tighter than
+       the gap above them. */
+    gap: var(--space-5);
+
+    /* Cards are their own height instead of being stretched to the tallest in
+       the row. A short list stretched to match a tall chart is dead space
+       *inside* a card, which reads as a hole just as much as a missing track. */
+    align-items: start;
+
+    /* Insurance, not the fix. The spans below already tile exactly; `dense`
+       means that if a future card is sized wrong, a later smaller one backfills
+       the gap instead of leaving a ragged row. It can place a card earlier than
+       its DOM position — acceptable here because these panels are independent
+       and each carries its own heading. */
+    grid-auto-flow: row dense;
   }
 
   .bento > * {
@@ -2129,8 +6602,12 @@ tr:hover .row-actions,
 }
 
 @media (min-width: 1000px) {
+  /* `auto` rather than a fixed track: the column is sized by the sidebar's own
+     width, so animating that one property drives the whole layout. Transitioning
+     `grid-template-columns` directly would work in current browsers but not in
+     Safari before 16, and the result here is identical. */
   .shell {
-    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-columns: auto 1fr;
   }
 
   .sidebar {
@@ -2140,6 +6617,9 @@ tr:hover .row-actions,
     position: sticky;
     top: 0;
     height: 100vh;
+    width: var(--sidebar-width);
+    overflow: hidden;
+    transition: width 0.3s ease;
     padding: var(--space-5) var(--space-3) var(--space-4);
     background: var(--glass-bg-subtle);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -2224,8 +6704,96 @@ tr:hover .row-actions,
     color: var(--text-muted);
   }
 
+  /* ---- Rail toggle ----
+     Quiet by default. It is a layout control, not a destination, so it must not
+     compete with the six nav items directly beneath it. */
+  .sidebar-rail-toggle {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: var(--space-2);
+    padding: 8px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+    transition: color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out);
+  }
+
+  .sidebar-rail-toggle:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .sidebar-rail-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  /* ---- Rail mode ----
+     Labels are hidden but never removed: the accessible name of a nav item must
+     not depend on how wide the window is. This is `.sr-only`'s clip technique,
+     applied conditionally. */
+  .shell.is-railed .sidebar {
+    width: var(--sidebar-width-rail);
+    padding-inline: var(--space-2);
+  }
+
+  .shell.is-railed .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Everything centres on the icon once the text is gone. */
+  .shell.is-railed .sidebar-brand,
+  .shell.is-railed .sidebar-item,
+  .shell.is-railed .sidebar-rail-toggle,
+  .shell.is-railed .sidebar-foot .btn {
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .shell.is-railed .sidebar-brand {
+    padding-bottom: var(--space-5);
+  }
+
+  .shell.is-railed .sidebar-foot {
+    padding-inline: 0;
+    align-items: center;
+  }
+
+  /* The active rail would sit under a centred icon rather than beside it. */
+  .shell.is-railed .sidebar-item::before {
+    display: none;
+  }
+
+  .shell.is-railed .sidebar-item.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* The hover nudge reads as a wobble when there is no label to slide. */
+  .shell.is-railed .sidebar-item:hover {
+    transform: none;
+  }
+
+  /* All three exist only while the sidebar does not: the tab bar is replaced by
+     it, the brand mark is already in it, and it carries its own Sign out. */
   .tabbar,
-  .topbar-logo {
+  .topbar-logo,
+  .topbar-signout {
     display: none;
   }
 
@@ -2237,7 +6805,18 @@ tr:hover .row-actions,
     padding: var(--space-3) var(--space-6);
   }
 
+  /* ---- The page fills the space the sidebar leaves ----
+     `.page` caps at --page-max and centres itself, which is right on a phone
+     where the cap never binds. Beside a 252px sidebar on a desktop monitor it
+     is not: the content sits centred in what is left, so the eye reads
+     sidebar -> a wide empty gutter -> content, and the gutter looks like a
+     layout bug rather than a margin.
+
+     Released here because the sidebar already provides the left edge and the
+     grid below provides the rhythm. A card is a container, not a paragraph, so
+     it has no reading width to protect. */
   .page {
+    max-width: none;
     padding: var(--space-6) var(--space-6) var(--space-8);
     gap: var(--space-5);
   }
@@ -2263,8 +6842,1883 @@ tr:hover .row-actions,
   }
 }
 
+/* Beyond about 2200px the grid stops being generous and starts being sparse -
+   a two-column row of cards 1000px wide each, with list rows whose label and
+   amount sit a foot apart. This is the only cap left, and it is far outside
+   any normal desktop. */
+@media (min-width: 2200px) {
+  .page {
+    max-width: 2040px;
+  }
+}
+
 @media (min-width: 1280px) {
   .hero-value {
     font-size: var(--text-display);
+  }
+}
+
+/* ==========================================================================
+   14  Theme library & creator
+   --------------------------------------------------------------------------
+   The Appearance screen. Two ideas run through all of it:
+
+   1. A draft palette is *previewed*, never saved, until the user says so. The
+      preview bar is the only thing telling them that, so it is loud, sticky and
+      always carries both ways out.
+   2. Nothing here may cost anything on the drag path. There are no transitions
+      on the colour swatches' own background, because those repaint on every
+      pointer move; the animation budget goes to the cards instead, which don't.
+   ========================================================================== */
+
+/* ---- The "you are previewing" bar ----
+   Sticks under the topbar so walking through the app with an unsaved theme
+   never loses the way back. */
+.preview-bar {
+  position: sticky;
+  top: var(--space-3);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg-strong));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-accent);
+}
+
+.preview-bar-pulse {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: preview-pulse 2s var(--ease-out) infinite;
+}
+
+@keyframes preview-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.preview-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.preview-bar-text strong {
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-tight);
+}
+
+.preview-bar-text span {
+  font-size: var(--text-2xs);
+}
+
+.preview-bar-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+}
+
+/* The badge in the creator card's header, mirroring the bar's colour. */
+.preview-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+}
+
+.count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 7px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+}
+
+/* ---- Saved-theme cards ----
+   A preset card is one button. A saved theme is a card *containing* a button
+   (pick this theme) plus its own tools (edit, duplicate, delete), because a
+   button cannot nest. The outer div reuses .theme-card for the frame and the
+   inner .theme-card-hit carries the layout and the click target. */
+.theme-card-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.theme-card-hit:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+.theme-card-hit:disabled {
+  cursor: progress;
+}
+
+/* Marks the theme the creator below is currently editing — distinct from
+   .is-active, which marks the one being worn. Both can be true at once. */
+.theme-card.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-style: dashed;
+}
+
+.theme-card-tools {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  /* Revealed on hover and whenever anything inside has focus, so the row stays
+     reachable from the keyboard without being permanent visual noise. */
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.theme-card:hover .theme-card-tools,
+.theme-card:focus-within .theme-card-tools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* No hover to reveal them with, so they simply stay. */
+  .theme-card-tools {
+    opacity: 1;
+  }
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.icon-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.icon-btn--danger:hover {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+/* Armed by the first click of the two-step delete. */
+.icon-btn--danger.is-armed {
+  border-color: var(--negative);
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+/* ---- The empty-library tile ---- */
+.theme-card--new {
+  align-items: flex-start;
+  gap: var(--space-2);
+  border-style: dashed;
+  max-width: 340px;
+}
+
+.theme-card--new:hover {
+  border-color: var(--accent);
+}
+
+.theme-card-new-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---- The creator ---- */
+.creator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.creator-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.creator-name {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/* A live miniature of the draft, so the name and the thing being named sit
+   side by side. */
+.creator-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-subtle);
+  font-size: var(--text-2xs);
+}
+
+.creator-chip .theme-card-preview {
+  width: 84px;
+  flex: none;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-3);
+}
+
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  cursor: pointer;
+  min-width: 0;
+  /* Only the frame animates. The swatch itself is repainted on every pointer
+     move while the picker is open, and a transition there would smear it. */
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.color-field:hover {
+  border-color: var(--border-strong);
+}
+
+.color-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* The native swatch, stripped of its chrome so it reads as a colour chip.
+   -moz-color-swatch / -webkit-color-swatch are the only way to reach the
+   filled area inside the control. */
+.color-field-input {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.color-field-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.color-field-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+}
+
+.color-field-input::-moz-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+}
+
+.color-field-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.color-field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.color-field-hint {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.color-field-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.creator-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.creator-actions .spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .preview-bar {
+    flex-wrap: wrap;
+  }
+
+  .preview-bar-actions {
+    width: 100%;
+  }
+
+  .preview-bar-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .creator-actions .spacer {
+    display: none;
+  }
+}
+
+/* ---- Typography selector ----
+   Every card is set in the face it offers, which is the only honest way to
+   show a typeface. `useTheme` preloads the catalogue when the creator opens so
+   they render correctly on first paint instead of reflowing one by one. */
+.creator-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.creator-section-hint {
+  margin: -4px 0 0;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-3);
+}
+
+.font-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.font-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.font-card:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.font-card.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-accent);
+}
+
+/* The specimen. Sized well above body copy because the differences between
+   these faces are invisible at 13px, which is the size the rest of the card
+   uses. */
+.font-card-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  /* font-family comes from an inline style in FontCard, one per option — this
+     block must not set it, or every specimen would show the same face. */
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.font-card-latin {
+  font-size: 1.05rem;
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+}
+
+.font-card-thai {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Reserves the Thai line's height on Latin-only cards so the grid rows stay
+   level instead of stepping up and down across the row. */
+.font-card-sample:not(:has(.font-card-thai))::after {
+  content: '';
+  display: block;
+  height: calc(0.95rem * 1.35);
+}
+
+.font-card-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.font-card.is-active .font-card-name {
+  color: var(--accent);
+}
+
+.font-card-blurb {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.creator-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Credit cards
+   --------------------------------------------------------------------------
+   The virtual card is the one place in the app that leans on a colour the user
+   chose rather than a theme token. Everything else here is the same glass the
+   wallet cards use; the difference is that a card face is *lit* — a tint wash,
+   a diagonal sheen and a brighter chip plate — which is what separates "a
+   plastic card" from "a rounded rectangle".
+
+   Two custom properties carry it: --card-tint (the wallet colour) and
+   --card-fill (utilisation as a percentage). Everything else derives from them
+   through color-mix, so a recoloured wallet recolours its card with no class
+   changes, and the whole thing still respects the active theme's surfaces.
+   ========================================================================== */
+
+.debt-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* The wash follows the utilisation band, so the panel itself carries the
+   warning before any number has been read. */
+.debt-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(70% 120% at 0% 0%, var(--debt-wash, var(--accent-softer)), transparent 60%);
+}
+
+.debt-hero--ok {
+  --debt-wash: color-mix(in srgb, var(--positive) 9%, transparent);
+}
+.debt-hero--warning {
+  --debt-wash: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+.debt-hero--over {
+  --debt-wash: color-mix(in srgb, var(--negative) 14%, transparent);
+}
+
+.debt-hero-primary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ---- The card face ---- */
+
+.vcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* 1.586 is the real ISO/IEC 7810 ID-1 ratio. Using it rather than a round
+     number is most of why the shape reads as a card at a glance. */
+  aspect-ratio: 1.586;
+  padding: var(--space-5);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--card-tint) 30%, var(--glass-border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--card-tint) 26%, transparent), transparent 62%),
+    var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  text-align: left;
+  color: inherit;
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* A single diagonal highlight sweeping the face. Its own element rather than a
+   third background layer so hover can move it without repainting the gradients
+   underneath. */
+.vcard-sheen {
+  position: absolute;
+  inset: -40% -10%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in srgb, #ffffff 22%, transparent) 46%,
+    transparent 58%
+  );
+  opacity: 0.7;
+  transform: translateX(-12%);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.vcard--interactive {
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+
+.vcard--interactive:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.vcard--interactive:hover .vcard-sheen {
+  transform: translateX(12%);
+}
+
+.vcard-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vcard-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  font-size: 1rem;
+  /* Standing in for the chip: a warm metallic block where a card's contact
+     plate sits. */
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--card-tint) 55%, #d9b45a),
+    color-mix(in srgb, var(--card-tint) 20%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 30%, transparent);
+}
+
+.vcard-number {
+  position: relative;
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+
+.vcard-owed {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+}
+
+.vcard-owed-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.vcard-owed-value {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.vcard-meter {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vcard-meter-track {
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+
+.vcard-meter-fill {
+  width: var(--card-fill, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--card-tint) 70%, transparent), var(--card-tint));
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* The bar takes the band's colour rather than staying the wallet's: at 90% of a
+   limit the point is the number, not the branding. */
+.vcard--warning .vcard-meter-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning) 60%, transparent), var(--warning));
+}
+.vcard--over .vcard-meter-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--negative) 60%, transparent), var(--negative));
+}
+
+.vcard-meter-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.vcard-foot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.vcard-name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.vcard-cycle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  white-space: nowrap;
+}
+
+.vcard-cycle-label {
+  font-size: 0.5625rem; /* 9 — the "VALID THRU" line on real plastic is tiny */
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.vcard-cycle-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* ---- A card and the billing detail beside it ---- */
+
+.credit-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+}
+
+.credit-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+}
+
+.credit-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.credit-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.credit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+/* ---- Pay bill / installment sheets ---- */
+
+.paybill-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.form-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+.installment-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.installment-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-4);
+}
+
+.installment-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installment-schedule li {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-sm);
+}
+
+.installment-index {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.installment-date {
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.installment-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+}
+
+.installment-more .installment-date,
+.installment-more .installment-amount {
+  color: var(--text-faint);
+  font-weight: var(--weight-normal);
+}
+
+/* Two columns once there is room for the card face beside its figures. Below
+   this the face sits on top, which is the right order on a phone: you identify
+   the card first, then read what it owes. */
+@media (min-width: 760px) {
+  .debt-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .credit-panel {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    gap: var(--space-5);
+    padding: var(--space-5);
+  }
+}
+
+/* Wide enough for two whole panels side by side. */
+@media (min-width: 1440px) {
+  .credit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vcard,
+  .vcard-sheen,
+  .vcard-meter-fill,
+  .vcard--interactive {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Mobile centre nav button + its arc of shortcuts
+   --------------------------------------------------------------------------
+   Lives only where the tab bar lives — below 1000px. That is this app's
+   sidebar breakpoint, not 767px: between 768 and 999 the tab bar is still the
+   navigation, so scoping to a phone-only query would leave every tablet with
+   the five-slot markup and no five-slot styling. The desktop sidebar cannot be
+   touched by any of this, because it does not exist until 1000px.
+
+   PERFORMANCE
+   Everything that animates here is `transform` or `opacity`, both of which the
+   compositor handles without a layout or a paint. The arc items carry their
+   position in --gnav-x / --gnav-y and are moved by a single transform that
+   also does the scale, so opening the menu is one composited property per item
+   and stays at 60fps on a mid-range phone.
+   ========================================================================== */
+
+/* The empty middle cell. Present only to hold the column open — the button is
+   a sibling of the bar, not a child of it. */
+.tabbar-slot {
+  display: block;
+}
+
+.gnav {
+  /* Sibling of .tabbar rather than a child: .tabbar carries z-index 30 and so
+     creates a stacking context, inside which nothing could rise above the
+     backdrop this menu raises. */
+  position: fixed;
+  inset: 0;
+  /* 40 is chosen, not arbitrary. Above the tab bar (30), so the button paints
+     over the bar's top edge and the backdrop can cover a tab link. Below the
+     fullscreen watchlist (50), which is documented as genuinely covering the
+     app and would look broken with a nav button floating on it — the two are
+     both `position: fixed; inset: 0`, so at equal z-index DOM order would
+     decide and this element, being later, would win. Below the modal backdrop
+     (60), the quick-add widget (80) and the toaster (90). */
+  z-index: 40;
+  /* The layer spans the viewport so the backdrop can, but must not intercept
+     anything itself — only the button and the open arc take input. */
+  pointer-events: none;
+}
+
+.gnav-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: auto;
+  animation: gnav-fade var(--dur-fast) var(--ease-out) both;
+}
+
+/* While the finger is still down the backdrop must be invisible to hit-testing:
+   `elementFromPoint` returns the topmost element, and a backdrop over the arc
+   would make every shortcut unreachable. Same rule the quick-add widget follows
+   for the same reason. */
+.gnav-backdrop.is-passthrough {
+  pointer-events: none;
+}
+
+@keyframes gnav-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The origin the arc is measured from: the centre of the button. */
+.gnav-anchor {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--gnav-drop) + env(safe-area-inset-bottom, 0px));
+  width: var(--gnav-size);
+  height: var(--gnav-size);
+  margin-left: calc(var(--gnav-size) / -2);
+  pointer-events: auto;
+}
+
+/* ---- The button ---- */
+
+.gnav-trigger {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  /* A ring in the bar's own surface colour, so the button reads as sitting on
+     top of the bar rather than punched through it. */
+  box-shadow:
+    0 0 0 4px var(--glass-bg-strong),
+    var(--shadow-lg);
+  cursor: pointer;
+  /* The three that make a long-press drag possible at all. touch-action is
+     also set inline, because this one is load-bearing: without it the browser
+     claims the drag for scroll or pull-to-refresh and the pointer stream stops
+     mid-gesture. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.gnav-trigger:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px var(--glass-bg-strong),
+    var(--shadow-lg),
+    var(--ring);
+}
+
+/* Held, but not yet armed. The shrink is the only feedback available during the
+   120ms before the arc appears, so it has to read instantly. */
+.gnav-trigger.is-pressing {
+  transform: scale(0.9);
+}
+
+.gnav-trigger.is-open {
+  transform: scale(1.04);
+}
+
+.gnav-trigger-icon {
+  display: grid;
+  place-items: center;
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+/* Quarter turn on open — enough to say "this changed state" without the icon
+   becoming an X, which would promise a close button the drag does not have. */
+.gnav-trigger.is-open .gnav-trigger-icon {
+  transform: rotate(45deg);
+}
+
+/* One of the hidden routes is the current page. The bar has no other way to
+   say so, and four of eight screens showing no active state anywhere on a
+   phone is how people get lost. */
+.gnav-trigger.is-current::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--accent-contrast);
+}
+
+/* ---- The arc ---- */
+
+.gnav-arc {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.gnav-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 60px;
+  height: 60px;
+  /* Half its own size, so `left/top: 50%` puts its centre on the button's
+     centre and --gnav-x/y are measured centre-to-centre. */
+  margin: -30px 0 0 -30px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+  /* Promoted before the gesture starts, not during: adding will-change at the
+     moment of animation forces the layer promotion to happen inside the frame
+     that was supposed to be cheap. */
+  will-change: transform, opacity;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Closed: collapsed into the button and inert. Kept in the DOM rather than
+   unmounted so the open transition has something to animate *from*. */
+.gnav:not(.is-open) .gnav-item {
+  transform: translate3d(0, 0, 0) scale(0.3);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gnav.is-open .gnav-item {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  opacity: 1;
+  /* Staggered outward, so the arc unfurls rather than appearing. Only on the
+     way out — collapsing should be immediate, because by then the user has
+     already decided. */
+  transition-delay: var(--gnav-delay), var(--gnav-delay), 0ms, 0ms, 0ms;
+}
+
+.gnav-item-icon {
+  display: grid;
+  place-items: center;
+}
+
+.gnav-item-label {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+/* Already on this page. Quiet — it marks position, it is not the thing the
+   thumb is being invited to hit. */
+.gnav-item.is-current {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+}
+
+/* The thumb is over this one. Scaled up past the fingertip covering it — the
+   single most common failure of touch menus is that the selected item is the
+   one you cannot see. */
+.gnav.is-open .gnav-item.is-hovered {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1.18);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-lg), 0 0 0 6px var(--accent-ring);
+  /* The highlight must never wait behind the opening stagger. */
+  transition-delay: 0ms;
+}
+
+/* Pointer devices get the same highlight from hover, so a mouse-drag and a
+   thumb-drag look identical. */
+@media (hover: hover) {
+  .gnav.is-open .gnav-item:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+}
+
+/* The bar and everything attached to it stop at the sidebar breakpoint. This
+   is what keeps the desktop layout untouched — see the note at the top. */
+@media (min-width: 1000px) {
+  .gnav {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gnav-item,
+  .gnav-trigger,
+  .gnav-trigger-icon {
+    transition-duration: 1ms;
+    transition-delay: 0ms !important;
+  }
+
+  /* Fade rather than fly, but still collapse to nothing so the closed state
+     stays non-interactive. */
+  .gnav:not(.is-open) .gnav-item {
+    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  }
+
+  .gnav.is-open .gnav-item.is-hovered {
+    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+  }
+
+  .gnav-trigger.is-open .gnav-trigger-icon,
+  .gnav-trigger.is-open,
+  .gnav-trigger.is-pressing {
+    transform: none;
+  }
+}
+
+/* ---- Language switcher ----
+   Rides on `.segmented`, so it inherits the glass, the active pill and the
+   focus ring already defined there. All that is added is the two-line stack
+   inside each option: the code as the anchor, the endonym under it.
+
+   The code is what the eye finds first — "EN" and "TH" are two characters at a
+   fixed width, so the row keeps its rhythm whatever the language names are.
+   The endonym below is what makes the control usable to someone who has landed
+   in a script they cannot read. */
+.lang-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.lang-option-short {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+}
+
+.lang-option-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  /* Recessive against the code above it, and it inherits the active colour, so
+     the selected option's endonym brightens with the rest of the pill. */
+  opacity: 0.72;
+}
+
+/* ==========================================================================
+   Shared expenses — the tracking page
+   ========================================================================== */
+
+.split-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* Warm while money is out, calm once everyone has settled — the panel carries
+   the state before any figure is read. */
+.split-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    70% 120% at 0% 0%,
+    color-mix(in srgb, var(--warning) 12%, transparent),
+    transparent 60%
+  );
+}
+
+.split-hero.is-clear::before {
+  background: radial-gradient(
+    70% 120% at 0% 0%,
+    color-mix(in srgb, var(--positive) 11%, transparent),
+    transparent 60%
+  );
+}
+
+.split-hero-primary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.split-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* Settled bills are history. Present, findable, and visibly finished. */
+.split-card.is-settled {
+  opacity: 0.72;
+}
+
+.split-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.split-card-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+}
+
+.split-card-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.split-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.split-progress-legend {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- One person on a bill ---- */
+
+.split-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-person {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.split-person-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+
+.split-person.is-paid .split-person-mark {
+  background: color-mix(in srgb, var(--positive) 18%, transparent);
+  color: var(--positive);
+}
+
+.split-person-name {
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+
+.split-person-amount {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.split-person.is-paid .split-person-name,
+.split-person.is-paid .split-person-amount {
+  color: var(--positive);
+}
+
+.split-card-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.split-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+/* Two bills abreast once there is room for both without squeezing the person
+   rows, which are the part that stops being tappable first. */
+@media (min-width: 900px) {
+  .split-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* On a phone the amount column would squeeze the name to nothing, so the row
+   wraps its action onto its own line instead. */
+@media (max-width: 480px) {
+  .split-row {
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+  }
+
+  .split-person {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    row-gap: var(--space-2);
+  }
+
+  .split-person > :last-child {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-row,
+  .split-card {
+    animation: none;
+  }
+
+  .toggle-knob {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Bill splitter — the creation sheet
+   --------------------------------------------------------------------------
+   Replaces the form-grid version. The whole layout is a single column with
+   generous rhythm rather than a two-column grid of labelled fields, because
+   the sheet is read top to bottom in one pass: the number, who was there, how
+   to divide it. Labels only reappear inside "Add details", where the fields
+   genuinely need naming.
+   ========================================================================== */
+
+.split-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---- Hero: the amount owns the top of the sheet ---- */
+
+.split-hero-input {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-5);
+  border-bottom: 1px solid var(--divider);
+}
+
+/* Chromeless on purpose. A box around a 44px numeral makes it look like a
+   field to be filled in; without one it reads as the figure itself, which is
+   what the user is actually thinking about. */
+.split-amount-xl {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text);
+}
+
+.split-amount-xl::placeholder {
+  color: var(--text-faint);
+  opacity: 0.55;
+}
+
+.split-amount-xl:focus,
+.split-amount-xl:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* The caret is the only focus affordance the big number needs — a ring around
+   it would put back the box the design just removed. So the underline lives on
+   the title beneath, where a normal-sized field does want one. */
+.split-title-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.split-title-input::placeholder {
+  color: var(--text-faint);
+}
+
+.split-title-input:focus,
+.split-title-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-bottom-color: var(--accent);
+}
+
+/* A pill, not a field. The wallet is a small decision and should look like one
+   next to the amount above it. */
+.split-wallet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.split-wallet-pill:focus-within {
+  border-color: var(--accent);
+}
+
+/* The native select is kept for its picker but stripped of its own chrome, so
+   the pill is the control the user sees. */
+.split-wallet-pill .control {
+  width: auto;
+  max-width: 190px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.split-wallet-pill .control:focus,
+.split-wallet-pill .control:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---- Sections ---- */
+
+.split-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.split-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+/* ---- Chips ---- */
+
+.split-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.split-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  /* Only transform and colour animate, so a chip appearing costs one
+     composited frame rather than a layout pass over the whole row. */
+  animation: split-chip-in var(--dur-base) var(--ease-spring) both;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+@keyframes split-chip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.split-chip.is-on {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text);
+}
+
+/* "Me" is a button, so it gets the press feedback the others do not need. */
+.split-chip.is-self {
+  cursor: pointer;
+}
+
+.split-chip.is-self:not(.is-on) {
+  /* Out of the split: present, clearly off, still obviously tappable. */
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.split-chip.is-self:active {
+  transform: scale(0.96);
+}
+
+.split-chip.is-self:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.split-chip.is-duplicate {
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.split-chip-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+}
+
+.split-chip:not(.is-on) .split-chip-mark {
+  background: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.split-chip-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.split-chip-x:hover {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  color: var(--negative);
+}
+
+.split-chip-x:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ---- The tally ---- */
+
+.split-per-person {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.split-tally {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-tally-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-sm);
+  animation: split-chip-in var(--dur-fast) var(--ease-out) both;
+}
+
+.split-tally-row.is-self {
+  color: var(--text-muted);
+}
+
+.split-tally-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semi);
+  white-space: nowrap;
+}
+
+.split-tally-input {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Details disclosure ---- */
+
+.split-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.split-details-toggle:hover {
+  color: var(--text);
+}
+
+.split-details-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
+
+.split-details-toggle svg {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.split-details-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.split-details {
+  animation: split-details-in var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes split-details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.split-explainer {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* ---- The remaining counter, in the footer beside submit ---- */
+
+.split-remaining {
+  margin-right: auto;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+/* Your own share. Not a problem — the most common outcome. */
+.split-remaining.is-own {
+  color: var(--text-muted);
+}
+
+/* Nobody is covering the difference. */
+.split-remaining.is-unassigned {
+  color: var(--warning);
+}
+
+/* Collecting more than was spent. The only state that blocks submit. */
+.split-remaining.is-over {
+  color: var(--negative);
+}
+
+@media (max-width: 480px) {
+  .split-amount-xl {
+    font-size: var(--text-xl);
+  }
+
+  /* The counter needs its own line once the two buttons fill the footer. */
+  .split-remaining {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: var(--space-2);
+    text-align: center;
+  }
+
+  .split-tally-input {
+    width: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-chip,
+  .split-tally-row,
+  .split-details {
+    animation: none;
+  }
+
+  .split-details-toggle svg {
+    transition: none;
   }
 }

@@ -79,12 +79,14 @@ export function BudgetForm({
   const [form, setForm] = useState<FormState>(() => initialState(period, budget));
   const [localError, setLocalError] = useState<string | null>(null);
 
+  /* Only on open / a different record — see the note in InvestmentForm. */
   useEffect(() => {
     if (open) {
       setForm(initialState(period, budget));
       setLocalError(null);
     }
-  }, [open, period, budget]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, period, budget?.id]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));

@@ -1,14 +1,18 @@
+import { FileText, RefreshCw, X } from 'lucide-react';
 import {
   ButtonHTMLAttributes,
+  forwardRef,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
   useEffect,
   useId,
+  useState,
 } from 'react';
 
 import { cx } from '../lib/format';
+import { Icon } from './Icon';
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -125,9 +129,16 @@ export function Field({
   );
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx('control', props.className)} />;
-}
+/**
+ * `forwardRef` so a caller can keep focus where it wants it — the bill splitter
+ * refocuses the name box after each chip is added, so four names are four
+ * keystrokes rather than four round trips to the mouse.
+ */
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input(props, ref) {
+    return <input {...props} ref={ref} className={cx('control', props.className)} />;
+  },
+);
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cx('control', props.className)} />;
@@ -283,15 +294,64 @@ export function Alert({
       </div>
       {onDismiss && (
         <button type="button" className="alert-close" onClick={onDismiss} aria-label="Dismiss">
-          ×
+          <Icon icon={X} size="sm" />
         </button>
       )}
     </div>
   );
 }
 
+/**
+ * Manual refresh, used in every page header and in the topbar.
+ *
+ * Icon-only on purpose: it sits beside labelled actions ("New wallet", "Show
+ * archived") and a second word there would compete with them. The glyph spins
+ * while a fetch is in flight, so the button doubles as the progress indicator
+ * instead of needing a separate one.
+ *
+ * `onRefresh` is awaited, so the spin lasts exactly as long as the request.
+ */
+export function RefreshButton({
+  onRefresh,
+  busy = false,
+  label = 'Refresh',
+  size = 'sm',
+}: {
+  onRefresh: () => void | Promise<unknown>;
+  /** Also spin for refreshes this button did not start (polling, focus). */
+  busy?: boolean;
+  label?: string;
+  size?: 'sm' | 'md';
+}) {
+  const [running, setRunning] = useState(false);
+  const spinning = running || busy;
+
+  async function run() {
+    if (running) return;
+    setRunning(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <Button
+      size={size}
+      variant="ghost"
+      onClick={() => void run()}
+      disabled={running}
+      aria-label={label}
+      title={label}
+    >
+      <Icon icon={RefreshCw} size="sm" className={spinning ? 'icon-spin' : undefined} />
+    </Button>
+  );
+}
+
 export function EmptyState({
-  icon = '📄',
+  icon = <Icon icon={FileText} size="xl" />,
   title,
   description,
   action,

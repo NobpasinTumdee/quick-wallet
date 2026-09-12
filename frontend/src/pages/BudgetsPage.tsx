@@ -1,21 +1,31 @@
+import { Target } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { invalidate, mutateMatching } from '../api/cache';
+import { Icon } from '../components/Icon';
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
-import { Alert, Badge, Button, Card, EmptyState, ProgressBar, Skeleton } from '../components/ui';
-import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
+import { ListSkeleton } from '../components/Skeletons';
+import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
+import { isOptimistic, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
+import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
 
 export function BudgetsPage({ period }: { period: string }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const wallets = useExcelDB<WalletBalance>('wallets');
-  const { data, initialLoading, error, refresh } = useExcelQuery<BudgetResponse>('/api/budgets', { period });
+  const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<BudgetResponse>('/api/budgets', {
+    period,
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetProgress | undefined>();
-  const [busy, setBusy] = useState(false);
+  // No `busy` flag any more: the form closes on submit rather than waiting for
+  // the network, so there is no in-flight state for it to render.
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -23,27 +33,126 @@ export function BudgetsPage({ period }: { period: string }) {
   const budgets = data?.budgets ?? [];
   const totals = data?.totals;
 
-  async function save(payload: BudgetPayload) {
-    setBusy(true);
+  /**
+   * `/api/budgets` returns a shaped object rather than a plain array, so these
+   * patch the cached response directly instead of going through useExcelDB.
+   * Same contract: apply locally, send, reconcile or roll back + toast.
+   */
+  function runOptimistic(apply: (current: BudgetResponse) => BudgetResponse, send: () => Promise<unknown>) {
+    const rollback = mutateMatching<BudgetResponse>('/api/budgets', (current) => apply(current));
+
+    return send()
+      .then(() => {
+        // Limits and spend are server-derived; pull the authoritative copy.
+        invalidate(['/api/budgets', '/api/dashboard']);
+      })
+      .catch((err: unknown) => {
+        rollback();
+        toast.error(err instanceof Error ? err.message : t('budgets.saveFailed'));
+        throw err;
+      });
+  }
+
+  function recalc(budget: BudgetProgress): BudgetProgress {
+    const limit = budget.mode === 'percent' ? (budget.base * budget.value) / 100 : budget.value;
+    const percentUsed = limit > 0 ? (budget.spent / limit) * 100 : 0;
+    return {
+      ...budget,
+      limit,
+      remaining: limit - budget.spent,
+      percentUsed,
+      status: percentUsed >= 100 ? 'over' : percentUsed >= 80 ? 'warning' : 'ok',
+    };
+  }
+
+  function save(payload: BudgetPayload) {
+    const editingId = editing?.id;
     setFormError(null);
-    try {
-      if (editing) await api.patch(`/api/budgets/${editing.id}`, payload);
-      else await api.post('/api/budgets', payload);
-      await refresh();
-      setFormOpen(false);
-      setEditing(undefined);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not save the budget');
-      throw err;
-    } finally {
-      setBusy(false);
-    }
+    setFormOpen(false);
+    setEditing(undefined);
+
+    const label =
+      payload.scope === 'wallet'
+        ? (wallets.items.find((w) => w.id === payload.targetId)?.name ?? payload.targetId)
+        : payload.scope === 'global'
+          ? t('dashboard.allSpending')
+          : payload.targetId;
+
+    const pending = runOptimistic(
+      (current) => {
+        if (!current) return current;
+
+        if (editingId) {
+          return {
+            ...current,
+            budgets: current.budgets.map((b) =>
+              b.id === editingId
+                ? // `spent` is unaffected by editing a limit, so the recomputed
+                  // progress here is exactly what the server will return.
+                  recalc({ ...b, ...payload, targetLabel: label })
+                : b,
+            ),
+          };
+        }
+
+        const base = payload.baseIncome || settings.monthlyIncome || baseIncome;
+        const limit = payload.mode === 'percent' ? (base * payload.value) / 100 : payload.value;
+
+        return {
+          ...current,
+          budgets: [
+            ...current.budgets,
+            {
+              ...payload,
+              id: `optimistic:${Date.now()}`,
+              userId: '',
+              targetLabel: label,
+              createdAt: new Date().toISOString(),
+              base,
+              limit,
+              // Unknown until the server tallies the period — the row renders a
+              // placeholder for these rather than a wrong number.
+              spent: 0,
+              remaining: limit,
+              percentUsed: 0,
+              status: 'ok',
+            } as BudgetProgress,
+          ],
+          totals: {
+            ...current.totals,
+            limit: current.totals.limit + limit,
+            percentAllocated:
+              current.totals.percentAllocated + (payload.mode === 'percent' ? payload.value : 0),
+          },
+        };
+      },
+      () =>
+        editingId ? api.patch(`/api/budgets/${editingId}`, payload) : api.post('/api/budgets', payload),
+    );
+
+    pending.catch(() => undefined);
+    return Promise.resolve();
   }
 
   async function remove(budget: BudgetProgress) {
-    if (!window.confirm(`Delete the "${budget.targetLabel}" budget?`)) return;
-    await api.delete(`/api/budgets/${budget.id}`);
-    await refresh();
+    if (!window.confirm(t('budgets.deleteConfirm', { label: budget.targetLabel }))) return;
+    await runOptimistic(
+      (current) =>
+        current
+          ? {
+              ...current,
+              budgets: current.budgets.filter((b) => b.id !== budget.id),
+              totals: {
+                ...current.totals,
+                limit: current.totals.limit - budget.limit,
+                spent: current.totals.spent - budget.spent,
+                percentAllocated:
+                  current.totals.percentAllocated - (budget.mode === 'percent' ? budget.value : 0),
+              },
+            }
+          : current,
+      () => api.delete(`/api/budgets/${budget.id}`),
+    ).catch(() => undefined);
   }
 
   async function copyLastMonth() {
@@ -54,9 +163,14 @@ export function BudgetsPage({ period }: { period: string }) {
         to: period,
       });
       await refresh();
-      setNotice(`Copied ${result.copied} budget(s)${result.skipped ? `, skipped ${result.skipped} already set` : ''}.`);
+      setNotice(
+        t('budgets.copied', {
+          count: result.copied,
+          skipped: result.skipped ? t('budgets.copiedSkipped', { count: result.skipped }) : '',
+        }),
+      );
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Copy failed');
+      setNotice(err instanceof Error ? err.message : t('budgets.copyFailed'));
     }
   }
 
@@ -75,17 +189,24 @@ export function BudgetsPage({ period }: { period: string }) {
       <div className="page-head">
         <div className="stack" style={{ gap: 4 }}>
           <span className="section-label">{formatPeriod(period, settings.locale)}</span>
-          <h1 className="page-title">Budgets</h1>
+          <h1 className="page-title">{t('budgets.title')}</h1>
           <p className="page-lede">
-            Percentage budgets track a share of your income; fixed budgets track a flat amount.
+            {t('budgets.lede')}
           </p>
         </div>
         <div className="cluster">
+          {/* Limits come from Budgets but the wallet-scope targets come from
+              Wallets, so a manual refresh pulls both. */}
+          <RefreshButton
+            onRefresh={() => Promise.all([refresh(), wallets.refresh()])}
+            busy={isValidating || wallets.isValidating}
+            label={t('budgets.refresh')}
+          />
           <Button size="sm" onClick={() => void copyLastMonth()}>
-            Copy last month
+            {t('budgets.copyPrevious')}
           </Button>
           <Button size="sm" variant="primary" onClick={openNew}>
-            New budget
+            {t('budgets.newBudget')}
           </Button>
         </div>
       </div>
@@ -93,14 +214,16 @@ export function BudgetsPage({ period }: { period: string }) {
       {/* ---- Plan summary ---- */}
       <section className="hero">
         <div className="hero-primary">
-          <span className="section-label">Budgeted this month</span>
+          <span className="section-label">{t('budgets.budgetedThisMonth')}</span>
           <span className="hero-value">{money(totals?.limit ?? 0)}</span>
           <div className="hero-meta">
             <Badge tone={spentShare > 100 ? 'negative' : spentShare > 80 ? 'warning' : 'positive'}>
-              {money(totals?.spent ?? 0)} spent
+              {t('budgets.spentBadge', { amount: money(totals?.spent ?? 0) })}
             </Badge>
             <span>
-              {totals && totals.limit > 0 ? `${formatPercent(spentShare)} of plan used` : 'Nothing planned yet'}
+              {totals && totals.limit > 0
+                ? t('budgets.planUsed', { percent: formatPercent(spentShare) })
+                : t('budgets.nothingPlanned')}
             </span>
           </div>
 
@@ -111,10 +234,10 @@ export function BudgetsPage({ period }: { period: string }) {
             </div>
             <div className="allocation-legend">
               <span>
-                <strong>{formatPercent(allocated, 0)}</strong> of income allocated
+                <strong>{formatPercent(allocated, 0)}</strong> {t('budgets.ofIncomeAllocated')}
               </span>
               <span className="text-faint">
-                {formatPercent(Math.max(0, 100 - allocated), 0)} unallocated
+                {t('budgets.unallocatedShare', { percent: formatPercent(Math.max(0, 100 - allocated), 0) })}
               </span>
             </div>
           </div>
@@ -122,25 +245,25 @@ export function BudgetsPage({ period }: { period: string }) {
 
         <div className="hero-metrics">
           <div className="metric metric--accent">
-            <span className="section-label">Base income</span>
+            <span className="section-label">{t('budgets.baseIncome')}</span>
             <span className="metric-value">{money(baseIncome, { compact: true })}</span>
             <span className="metric-hint">
-              {settings.monthlyIncome > 0 ? 'From Settings' : 'From recorded income'}
+              {t(settings.monthlyIncome > 0 ? 'budgets.fromSettings' : 'budgets.fromRecordedIncome')}
             </span>
           </div>
           <div className="metric">
-            <span className="section-label">Budget lines</span>
+            <span className="section-label">{t('budgets.budgetLines')}</span>
             <span className="metric-value">{budgets.length}</span>
             <span className="metric-hint">
-              {budgets.filter((b) => b.status === 'over').length} over limit
+              {t('budgets.overLimitCount', { count: budgets.filter((b) => b.status === 'over').length })}
             </span>
           </div>
           <div className="metric metric--negative">
-            <span className="section-label">Remaining</span>
+            <span className="section-label">{t('budgets.remaining')}</span>
             <span className="metric-value">
               {money(Math.max(0, (totals?.limit ?? 0) - (totals?.spent ?? 0)), { compact: true })}
             </span>
-            <span className="metric-hint">Across all budgets</span>
+            <span className="metric-hint">{t('budgets.acrossAll')}</span>
           </div>
         </div>
       </section>
@@ -153,56 +276,63 @@ export function BudgetsPage({ period }: { period: string }) {
 
       <Card padded={initialLoading || Boolean(error) || budgets.length === 0}>
         {initialLoading ? (
-          <Skeleton rows={4} />
-        ) : error ? (
+          <ListSkeleton rows={4} />
+        ) : error && !budgets.length ? (
           <Alert tone="error">{error}</Alert>
         ) : budgets.length === 0 ? (
           <EmptyState
-            icon="🎯"
-            title="No budgets for this month"
-            description="Try a 40 / 10 / 20 split — Invest 40%, Save 10%, Needs 20% — or set flat amounts per category."
+            icon={<Icon icon={Target} size="xl" />}
+            title={t('budgets.emptyThisMonth')}
+            description={t('budgets.emptyBodyFull')}
             action={
               <Button variant="primary" onClick={openNew}>
-                Create a budget
+                {t('budgets.createBudget')}
               </Button>
             }
           />
         ) : (
           <div className="list">
-            {budgets.map((budget) => (
-              <div key={budget.id} className="budget-item">
+            {budgets.map((budget) => {
+              // Spend for a brand-new budget isn't known until the server tallies
+              // the period, so show a placeholder rather than a misleading 0.
+              const unconfirmed = isOptimistic(budget);
+              return (
+              <div key={budget.id} className={unconfirmed ? 'budget-item is-pending' : 'budget-item'}>
                 <div className="budget-head">
                   <span className="budget-name truncate">
-                    {budget.targetLabel || 'All spending'}
+                    {budget.targetLabel || t('dashboard.allSpending')}
                     {budget.mode === 'percent' ? (
-                      <Badge tone="accent">{budget.value}% of income</Badge>
+                      <Badge tone="accent">{t('budgets.percentOfIncome', { percent: budget.value })}</Badge>
                     ) : (
-                      <Badge>fixed</Badge>
+                      <Badge>{t('budgets.fixedBadge')}</Badge>
                     )}
-                    {budget.status === 'over' && <Badge tone="negative">over</Badge>}
+                    {budget.status === 'over' && <Badge tone="negative">{t('budgets.overBadge')}</Badge>}
                   </span>
                   <span className="budget-numbers">
-                    {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
+                    {unconfirmed ? <span className="text-faint">—</span> : money(budget.spent)}{' '}
+                    <span className="text-faint">/ {money(budget.limit)}</span>
                   </span>
                 </div>
 
                 <ProgressBar
-                  percent={budget.percentUsed}
+                  percent={unconfirmed ? 0 : budget.percentUsed}
                   tone={budget.status}
-                  label={`${budget.targetLabel}: ${formatPercent(budget.percentUsed)} used`}
+                  label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
                 />
 
                 <div className="budget-foot">
                   <span className="truncate">
-                    {formatPercent(budget.percentUsed)} used
-                    {budget.mode === 'percent' && ` · base ${money(budget.base)}`}
-                    {budget.note ? ` · ${budget.note}` : ''}
+                    {unconfirmed
+                      ? t('budgets.savingEllipsis')
+                      : t('budgets.percentUsed', { percent: formatPercent(budget.percentUsed) })}
+                    {budget.mode === 'percent' && t('budgets.baseSuffix', { amount: money(budget.base) })}
+                    {budget.note ? t('budgets.noteSuffix', { note: budget.note }) : ''}
                   </span>
                   <span className="cluster" style={{ flexWrap: 'nowrap' }}>
                     <span className={budget.remaining < 0 ? 'text-negative' : 'text-muted'}>
                       {budget.remaining < 0
-                        ? `${money(Math.abs(budget.remaining))} over`
-                        : `${money(budget.remaining)} left`}
+                        ? t('budgets.amountOver', { amount: money(Math.abs(budget.remaining)) })
+                        : t('budgets.amountLeft', { amount: money(budget.remaining) })}
                     </span>
                     <span className="row-actions">
                       <Button
@@ -214,7 +344,7 @@ export function BudgetsPage({ period }: { period: string }) {
                           setFormOpen(true);
                         }}
                       >
-                        Edit
+                        {t('common.edit')}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => void remove(budget)}>
                         ✕
@@ -223,7 +353,8 @@ export function BudgetsPage({ period }: { period: string }) {
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
@@ -235,7 +366,6 @@ export function BudgetsPage({ period }: { period: string }) {
         wallets={wallets.items}
         percentAllocated={totals?.percentAllocated ?? 0}
         derivedBase={budgets.find((b) => b.base > 0)?.base ?? 0}
-        busy={busy}
         error={formError}
         onClose={() => {
           setFormOpen(false);
