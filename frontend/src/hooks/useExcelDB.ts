@@ -93,6 +93,16 @@ const RESOURCES: Record<string, ResourceConfig> = {
     // Newest first, matching the server's own ordering.
     sort: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
   },
+  goals: {
+    /* A goal owns no Transactions and changes no balance, so nothing downstream
+       of it needs refreshing — the wallets and the dashboard are untouched by
+       funding one. That is the whole design, restated as a cache rule. */
+    invalidates: ['/api/goals'],
+    sort: (a, b) =>
+      Number(Boolean(a.complete)) - Number(Boolean(b.complete)) ||
+      String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')) ||
+      String(a.title ?? '').localeCompare(String(b.title ?? '')),
+  },
   watchlist: {
     // Nothing is derived from a watched symbol — it has no cost, no balance and
     // no effect on any total — so this is the one resource whose writes do not

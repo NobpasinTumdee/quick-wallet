@@ -39,6 +39,8 @@ export const en = {
     investments: 'Invest',
     budgets: 'Budgets',
     subscriptions: 'Recurring',
+    analytics: 'Analytics',
+    goals: 'Goals',
     settings: 'Settings',
     /** The gesture button's accessible name — never rendered as text. */
     more: 'More pages',
@@ -308,6 +310,9 @@ export const en = {
   },
 
   activity: {
+    /** The clock time a row was recorded, shown beneath its date. */
+    recordedAt: 'Recorded at {{time}}',
+
     clear: 'Clear',
     dateRange: 'Date range',
     timeOfDay: 'Time of day',
@@ -864,6 +869,145 @@ export const en = {
     newPassword: 'New password',
     passwordHint: 'At least 4 characters.',
     changePassword: 'Change password',
+  },
+
+  analytics: {
+    title: 'Analytics',
+    subtitle: 'The patterns behind the numbers',
+    /* The two widgets that moved off the Overview screen. */
+    flowTitle: 'Where the money moved',
+    projectionTitle: 'Where this is heading',
+    projectionSubtitle: "Projected net worth if today's savings rate holds",
+
+    savingsRateTitle: 'Savings rate',
+    savingsRateSubtitle: 'Share of income kept, month by month',
+    savingsRateAverage: '{{value}} average over {{count}} months',
+    savingsRateNegative: 'Months below zero are months you spent more than you earned.',
+
+    heatmapTitle: 'Spending by day',
+    heatmapSubtitle: 'Which days of the month cost the most',
+    heatmapLegendLess: 'Less',
+    heatmapLegendMore: 'More',
+    heatmapNoSpend: 'No spending',
+    heatmapDayTotal: '{{date}} · {{amount}}',
+
+    categoriesTitle: 'Category breakdown',
+    categoriesSubtitle: 'Where it goes, by size',
+    categoriesOther: 'Other',
+
+    merchantsTitle: 'Top payees',
+    merchantsSubtitle: 'Where the money goes most often',
+    merchantsColumnPayee: 'Payee',
+    merchantsColumnCount: 'Times',
+    merchantsColumnTotal: 'Total',
+    merchantsColumnAverage: 'Average',
+    merchantsUnlabelled: 'No note',
+
+    empty: 'Nothing to analyse yet',
+    emptyHint: 'Record a few transactions and the patterns show up here.',
+    /* Shown on the cards that are still being built. */
+    comingSoon: 'Coming next',
+  },
+
+  goals: {
+    title: 'Goals',
+    subtitle: 'Set money aside without moving it',
+
+    /* The three figures at the top of the page. The distinction between them is
+       the entire concept, so each carries its own explanation. */
+    totalCash: 'Total cash',
+    totalCashHint: 'Everything in your spendable wallets',
+    lockedInGoals: 'Locked in goals',
+    lockedInGoalsHint: 'Earmarked, but still sitting in your wallets',
+    availableToSpend: 'Available to spend',
+    availableToSpendHint: 'Cash you have not promised to anything yet',
+    overCommitted: 'You have earmarked more than you hold',
+    overCommittedHint:
+      'Your goals add up to more than your spendable cash. Nothing is wrong with your balances — the envelopes are just ahead of them.',
+
+    /* A goal card. */
+    saved: '{{saved}} of {{target}}',
+    remaining: '{{amount}} to go',
+    complete: 'Funded',
+    completeHint: 'This goal has reached its target.',
+    deadline: 'By {{date}}',
+    noDeadline: 'No deadline',
+    overdue: 'Past its date',
+    perMonth: '{{amount}} a month to make it',
+    perMonthPast: 'The date has passed',
+
+    /* Funding. */
+    fund: 'Add money',
+    fundTitle: 'Add to {{title}}',
+    fundAmount: 'Amount to add',
+    fundHint: 'This moves nothing. It only marks money you already have as spoken for.',
+    fundConfirm: 'Add to goal',
+    withdraw: 'Take out',
+    withdrawTitle: 'Take money out of {{title}}',
+    withdrawAmount: 'Amount to take out',
+    withdrawHint: 'Releases the earmark. Your wallet balances do not change.',
+    withdrawConfirm: 'Take out',
+    withdrawAll: 'Take out everything',
+    fundedToast: '{{amount}} set aside for {{title}}',
+    withdrewToast: '{{amount}} released from {{title}}',
+
+    /* The form. */
+    newGoal: 'New goal',
+    editGoal: 'Edit {{title}}',
+    fieldTitle: 'What are you saving for?',
+    fieldTitlePlaceholder: 'Japan trip',
+    fieldTarget: 'Target amount',
+    fieldDeadline: 'Target date',
+    fieldDeadlineHint: 'Optional. Used to work out what you need to put aside each month.',
+    fieldColor: 'Colour',
+    fieldNote: 'Note',
+    fieldNotePlaceholder: 'Flights, hotel and spending money',
+    addGoal: 'Add goal',
+    deleteConfirm: 'Delete the goal “{{title}}”? The money it holds was never moved, so nothing else changes.',
+
+    empty: 'No goals yet',
+    emptyHint:
+      'A goal earmarks money you already have — a new laptop, a trip, a rainy day. Nothing leaves your wallets.',
+  },
+
+  receipt: {
+    /* Slip / receipt scanning inside the transaction form. */
+    scan: 'Scan a receipt',
+    scanHint: 'Drop an image here, or choose a file',
+    scanning: 'Reading the receipt…',
+    scanningHint: 'This takes a moment',
+    dropHere: 'Drop to scan',
+    chooseFile: 'Choose a file',
+    remove: 'Remove',
+    retry: 'Try another image',
+    filled: 'Filled in from the receipt — check it before saving',
+    /* Named individually so the user can see exactly what the scan claimed. */
+    foundAmount: 'Amount',
+    foundDate: 'Date',
+    foundNote: 'Merchant',
+    nothingFound: 'Could not read that one',
+    nothingFoundHint: 'Nothing was filled in. Type the details, or try a clearer photo.',
+    failed: 'The scan failed',
+    tooLarge: 'That image is larger than {{limit}}',
+    wrongType: 'That is not an image file',
+    /* Stated plainly while the feature is a stub. */
+    /* Progress, per phase. The bar is remapped to be monotonic; these name
+       what it is actually doing. */
+    stagePreparing: 'Starting the reader…',
+    stageLoading: 'Loading Thai and English models…',
+    stageReading: 'Reading the receipt…',
+    firstRunHint: 'The language models download once, then stay cached.',
+    onDevice: 'Read on your device — the image is never uploaded',
+    rawText: 'What it read',
+    useAnyway: 'Use this text as the note',
+  },
+
+  notFound: {
+    title: 'Lost in the ledger',
+    message: 'That page is not in the books. It may have been renamed, or the link may be wrong.',
+    /* The raw hash the user tried, so a mistyped link is self-explanatory. */
+    attempted: 'You asked for {{path}}',
+    goHome: 'Back to Overview',
   },
 
   tax: {

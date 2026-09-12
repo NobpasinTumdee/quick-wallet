@@ -3,8 +3,10 @@ import {
   ChevronRight,
   CreditCard,
   HandCoins,
+  PiggyBank,
   LayoutDashboard,
   LogOut,
+  ChartNoAxesCombined,
   PanelLeftClose,
   PanelLeftOpen,
   Receipt,
@@ -29,7 +31,10 @@ import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
 import { CreditCardsPage } from '../pages/CreditCardsPage';
 import { SharedExpensesPage } from '../pages/SharedExpensesPage';
+import { AnalyticsPage } from '../pages/AnalyticsPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { GoalsPage } from '../pages/GoalsPage';
+import { NotFoundPage } from '../pages/NotFoundPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { SubscriptionsPage } from '../pages/SubscriptionsPage';
@@ -76,6 +81,8 @@ const NAV: NavItem[] = [
   { route: 'cards', labelKey: 'nav.cards', icon: CreditCard },
   { route: 'transactions', labelKey: 'nav.transactions', icon: Receipt },
   { route: 'investments', labelKey: 'nav.investments', icon: TrendingUp },
+  { route: 'analytics', labelKey: 'nav.analytics', icon: ChartNoAxesCombined },
+  { route: 'goals', labelKey: 'nav.goals', icon: PiggyBank },
   { route: 'budgets', labelKey: 'nav.budgets', icon: Target },
   { route: 'splits', labelKey: 'nav.splits', icon: HandCoins },
   { route: 'subscriptions', labelKey: 'nav.subscriptions', icon: Repeat2 },
@@ -111,7 +118,7 @@ const SETTINGS_ITEM: NavItem = {
 const MOBILE_PRIMARY: Route[] = ['dashboard', 'transactions','investments', 'wallets'];
 /* Five is the most the gesture arc can hold on a 320px phone — see arcRadius
    in GestureNavWidget. Anything added beyond this needs a different menu. */
-const MOBILE_SHORTCUTS: Route[] = ['subscriptions','budgets', 'cards', 'splits', 'settings'];
+const MOBILE_SHORTCUTS: Route[] = ['subscriptions', 'budgets', 'cards', 'splits', 'goals'];
 
 /** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
 function navItemFor(route: Route): NavItem {
@@ -151,6 +158,16 @@ function warmRoute(route: Route, period: string): void {
       prefetch('/api/wallets');
       prefetch('/api/watchlist');
       break;
+    case 'analytics':
+      /* Everything the widgets read is the dashboard payload plus a year of
+         rows — no endpoint of its own. */
+      prefetch('/api/dashboard', { period });
+      prefetch('/api/transactions', { limit: 2000 });
+      break;
+    case 'goals':
+      prefetch('/api/goals');
+      prefetch('/api/wallets');
+      break;
     case 'budgets':
       prefetch('/api/budgets', { period });
       prefetch('/api/wallets');
@@ -182,10 +199,14 @@ const ROUTE_DATA: Record<Route, string[]> = {
   cards: ['/api/wallets', '/api/transactions'],
   transactions: ['/api/transactions', '/api/wallets'],
   investments: ['/api/investments', '/api/wallets', '/api/watchlist'],
+  analytics: ['/api/dashboard', '/api/transactions'],
+  goals: ['/api/goals', '/api/wallets'],
   budgets: ['/api/budgets', '/api/wallets'],
   splits: ['/api/bill-splits', '/api/wallets'],
   subscriptions: ['/api/subscriptions', '/api/wallets'],
   settings: ['/api/health'],
+  /* Nothing to refresh on a screen that shows no data. */
+  notFound: [],
 };
 
 /** Warns when database.xlsx can't be written — almost always "open in Excel". */
@@ -434,7 +455,10 @@ export function AppShell() {
           {route === 'budgets' && <BudgetsPage period={period} />}
           {route === 'splits' && <SharedExpensesPage />}
           {route === 'subscriptions' && <SubscriptionsPage />}
+          {route === 'analytics' && <AnalyticsPage period={period} />}
+          {route === 'goals' && <GoalsPage />}
           {route === 'settings' && <SettingsPage />}
+          {route === 'notFound' && <NotFoundPage onNavigate={go} />}
         </main>
       </div>
 

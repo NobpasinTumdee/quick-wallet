@@ -4353,6 +4353,926 @@ table.data.data--nested td {
 }
 
 
+
+
+
+
+/* ---- Recorded-at time ----
+   The clock a row was written, under the date it is filed against. Two
+   different facts, so it is deliberately the quieter of the two: one step
+   smaller, one step fainter, and never bold. If it competes with the date the
+   reader has to work out which one they are looking at every time.
+
+   `tabular-nums` because these stack vertically in a table column, and
+   proportional digits make a column of times look bent. */
+
+.recorded-at {
+  display: block;
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Inside an existing sub-line — the dashboard's four-row recent list, where a
+   third line per row would cost more than the time is worth. */
+.recorded-at--inline {
+  display: inline;
+  font-size: inherit;
+}
+
+.recorded-at--inline::before {
+  content: ' · ';
+}
+
+
+/* ==========================================================================
+   Receipt scanner
+   --------------------------------------------------------------------------
+   Sits at the top of the transaction form, because it fills the fields below
+   it. Three states: a drop zone, a preview being swept, and a result.
+   ========================================================================== */
+
+.scan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---- Drop zone ---- */
+
+.scan-drop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out);
+}
+
+.scan-drop > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+/* A drag target has to say so before the drop, or the user is guessing. */
+.scan-drop.is-dragging {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-softer);
+}
+
+.scan-drop.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.scan-drop-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-drop-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.scan-drop-copy span {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- Preview + result ---- */
+
+.scan-result {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.scan-frame {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 108px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.scan-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Dimmed while it works, so the sweep is the brightest thing in the frame. */
+.scan-frame.is-scanning img {
+  filter: brightness(0.72) saturate(0.85);
+}
+
+/**
+ * The sweep.
+ *
+ * This is the only signal that anything is happening during a second and a half
+ * of silence, and it runs over the actual uploaded image so it reads as
+ * "working on *this*". Pure `transform`, so it stays on the compositor while
+ * the main thread is busy — the one moment it must not stutter.
+ */
+.scan-laser {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 55%,
+    var(--accent) 92%,
+    var(--accent) 100%
+  );
+  /* A 2px bright edge at the leading side, which is what sells it as a scan
+     line rather than a moving gradient. */
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 65%, transparent);
+  animation: scan-sweep 1.25s var(--ease-in-out) infinite;
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translate3d(0, -100%, 0);
+  }
+  100% {
+    transform: translate3d(0, 333%, 0);
+  }
+}
+
+/* Reduced motion still needs a "working" signal — a still bar, pulsing gently
+   in opacity, rather than a line racing down the page. */
+@media (prefers-reduced-motion: reduce) {
+  .scan-laser {
+    top: 40%;
+    height: 20%;
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
+.scan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.scan-status--ok {
+  color: var(--positive);
+}
+
+.scan-status--bad {
+  color: var(--negative);
+}
+
+.scan-sub {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- What it found ----
+   Shown rather than silently applied. OCR is confidently wrong often enough
+   that overwriting three inputs unannounced is hostile: a misread 1,290 as 129
+   is invisible once it sits in a field the user believes they typed. */
+
+.scan-found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.scan-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-chip em {
+  font-style: normal;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- Progress ----
+   The laser says something is happening; this says how much is left. Both are
+   needed because the first run downloads several megabytes of language model,
+   which is long enough that an indeterminate animation alone reads as a hang. */
+
+.scan-progress {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.scan-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  /* Eased, so the jump between phases reads as movement rather than a snap.
+     The value itself is already monotonic — see mapProgress. */
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+/* ---- Salvage ----
+   Shown when OCR read text but nothing structured came out of it. */
+
+.scan-salvage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.scan-salvage code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.scan-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
+/* ---- The honesty line ----
+   The parser is a stub. A user who trusts an invented figure once will not
+   check the next one. */
+.scan-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.scan-disclaimer svg {
+  flex: none;
+}
+
+@media (max-width: 480px) {
+  .scan-drop {
+    flex-wrap: wrap;
+  }
+
+  .scan-frame {
+    width: 64px;
+    height: 84px;
+  }
+}
+
+/* ==========================================================================
+   Goals — sinking funds
+   --------------------------------------------------------------------------
+   The header is the feature. Three figures and one bar say: you hold this
+   much, you have promised this much, so this much is actually free. Every
+   other screen answers the first; only this one answers the third.
+   ========================================================================== */
+
+.alloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+}
+
+.alloc-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-4);
+}
+
+.alloc-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.alloc-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.alloc-hint {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* Available is the answer to "can I afford this", so it is the one that gets
+   colour — and it turns negative rather than being floored at zero, because a
+   plan that has outrun the balance is exactly what the user needs told. */
+.alloc-figure--available strong {
+  color: var(--positive);
+}
+
+.alloc-figure--available.is-over strong {
+  color: var(--negative);
+}
+
+.alloc-bar {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  /* The free remainder. The locked part is drawn on top of it. */
+  background: color-mix(in srgb, var(--positive) 28%, var(--surface-3));
+}
+
+.alloc-bar-locked {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--locked, 0%);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* ---- Goal cards ---- */
+
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.goal-card:hover {
+  border-color: var(--border-strong);
+}
+
+/* A funded goal recedes rather than celebrates: it is done, and the ones that
+   still need money are what the screen is for. */
+.goal-card.is-complete {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--positive) 32%, transparent);
+}
+
+.goal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.goal-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.goal-identity h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-amounts {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Progress ring ---- */
+
+.goal-ring {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  /* Starts the arc at twelve o'clock instead of three. */
+  transform: rotate(-90deg);
+}
+
+.goal-ring-track {
+  fill: none;
+  stroke: var(--surface-3);
+  stroke-width: 6;
+}
+
+.goal-ring-fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-out);
+}
+
+/* Un-rotates just the label, so the percentage stays upright inside the arc. */
+.goal-ring-text {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: var(--weight-semi);
+  text-anchor: middle;
+  dominant-baseline: central;
+  transform: rotate(90deg);
+  transform-origin: 32px 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.goal-chip {
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent-softer);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.goal-chip--quiet {
+  background: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.goal-chip--done {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.goal-chip--late {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.goal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+
+.goal-actions .spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .goal-grid {
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
+  }
+
+  .alloc {
+    padding: var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   Analytics
+   --------------------------------------------------------------------------
+   Four widgets, one rule: no colour is ever written as a literal. Everything
+   below derives from --accent, --positive or --text, so all thirteen themes and
+   a custom accent reach the charts. Where a value has to vary per datum it
+   arrives as a custom property on the element, not as an inline colour.
+   ========================================================================== */
+
+/* ---- Savings rate ---- */
+
+.arate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.arate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.arate-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arate-figure strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.arate-meta,
+.arate-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.arate-note {
+  color: var(--text-faint);
+}
+
+.arate-area {
+  stroke: var(--accent);
+}
+
+/* Same alpha pair as the projection: composited on either card surface this
+   lands inside the lightness band a mark should occupy. */
+.arate-stop--top {
+  stop-color: var(--accent);
+  stop-opacity: 0.55;
+}
+
+.arate-stop--bottom {
+  stop-color: var(--accent);
+  stop-opacity: 0.06;
+}
+
+/* Zero matters more than the gridlines it sits among, so it is solid where they
+   are dashed — but still recessive against the data. */
+.arate-zero line,
+line.arate-zero {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+/* ---- Heatmap ---- */
+
+.heat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.heat-weekdays,
+.heat-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.heat-weekdays {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/**
+ * One day.
+ *
+ * `--cell` is the day's intensity, 0…1, set per element. Turning it into an
+ * alpha on the accent means the ramp is monotone by construction — there is no
+ * hand-picked list of five steps to get wrong, and it is correct in every
+ * theme because the hue is never named here.
+ */
+.heat-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--accent) calc(var(--cell, 0) * 82%), var(--surface-2));
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.heat-cell:hover {
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+
+.heat-cell--blank {
+  background: transparent;
+  border-color: transparent;
+}
+
+.heat-day {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* Flips to the accent's contrast colour once the tile is dark enough to swallow
+   body text. The threshold is decided in JS and arrives as a class: an attribute
+   selector on the inline style would have to guess how the browser serialises
+   `--cell: 0.6333`, and would silently stop matching. */
+.heat-cell.is-dark .heat-day {
+  color: var(--accent-contrast);
+}
+
+.heat-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.heat-cell--key {
+  width: 14px;
+  aspect-ratio: 1;
+  border-radius: 3px;
+}
+
+/* ---- Category treemap ---- */
+
+.atree {
+  min-height: 240px;
+}
+
+.atree--loading {
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* `--weight` is the tile's rank, 1 for the largest. Area already encodes
+   magnitude; the alpha reinforces the same thing rather than introducing a
+   second, categorical, unverifiable palette. */
+.atree-tile {
+  fill: color-mix(in srgb, var(--accent) calc(18% + var(--weight, 0) * 62%), var(--surface-2));
+  stroke: var(--surface);
+  /* A 2px surface gap between adjacent fills, so neighbouring tiles read as
+     separate areas rather than one blob. */
+  stroke-width: 2;
+}
+
+.atree-label {
+  fill: var(--accent-contrast);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+}
+
+.atree-share {
+  fill: var(--accent-contrast);
+  font-size: var(--text-2xs);
+  opacity: 0.85;
+}
+
+/* ---- Payees ---- */
+
+.payees td:first-child {
+  position: relative;
+  min-width: 160px;
+}
+
+/* Sits behind the name rather than in its own column: at eight rows the
+   proportion is context, and a separate column would push the three figures
+   people actually read off the right edge on a phone. */
+.payee-bar {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: var(--share, 0%);
+  border-radius: var(--radius-xs);
+  background: var(--accent-softer);
+  pointer-events: none;
+}
+
+.payee-name {
+  position: relative;
+  font-weight: var(--weight-medium);
+}
+
+.payees .list-item-sub {
+  position: relative;
+}
+
+/* ---- The dashboard's gateway card ---- */
+
+.analytics-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--glass-border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.analytics-cta:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-1px);
+}
+
+.analytics-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.analytics-cta-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.analytics-cta-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.analytics-cta-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.analytics-cta-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.analytics-cta-arrow {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.analytics-cta:hover .analytics-cta-arrow {
+  transform: translateX(3px);
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   404
+   --------------------------------------------------------------------------
+   One card, centred in whatever space the shell leaves. It inherits the glass
+   treatment from `.card` rather than restating it, so the thirteen themes and
+   the custom accent reach it like everywhere else.
+   ========================================================================== */
+
+.notfound {
+  display: grid;
+  place-items: center;
+  /* Fills the page area without fighting the topbar for height. */
+  min-height: min(62vh, 520px);
+  padding: var(--space-5) 0;
+}
+
+.notfound-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: min(420px, 100%);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  animation: reveal var(--dur-slow) var(--ease-out) both;
+}
+
+/* The compass sits in a soft medallion rather than floating loose — the same
+   shape EmptyState uses, so a dead end looks like part of the app. */
+.notfound-mark {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.notfound-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+.notfound-message {
+  margin: 0;
+  max-width: 34ch;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* The path the user actually asked for. Monospace because it is a literal, and
+   it may be long enough to need breaking. */
+.notfound-path {
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
 /* ==========================================================================
    Net worth projection
    --------------------------------------------------------------------------

@@ -1,8 +1,9 @@
-import { Calculator, Receipt, Target, Wallet } from 'lucide-react';
+import { ArrowRight, Calculator, ChartNoAxesCombined, Receipt, Target, Wallet } from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
+import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
@@ -14,25 +15,11 @@ import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Investment, Transaction, WalletBalance } from '../types';
 
-/**
- * Recharts is ~300kB of the bundle for one card on one screen. Splitting it out
- * lets the shell, the login screen and every other route paint without it; the
- * chunk then loads alongside the dashboard's own 1-3s data request, so it is
- * ready before the data it draws.
- */
-const CashFlowSankey = lazy(() =>
-  import('../components/CashFlowSankey').then((m) => ({ default: m.CashFlowSankey })),
-);
 
 const IncomeSpendingChart = lazy(() =>
   import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
 );
 
-/* Recharts again, plus the projection maths. Lazy for the same reason the two
-   above are: the widget is below the fold and most visits never scroll to it. */
-const NetWorthProjection = lazy(() =>
-  import('../components/NetWorthProjection').then((m) => ({ default: m.NetWorthProjection })),
-);
 
 /* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
    belongs in the Dashboard's chunk when most visits never open it — and this
@@ -56,7 +43,6 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   // The dashboard summary only carries aggregates and a handful of recent rows;
   // the Sankey needs every transaction in the month. Same cache key the Activity
   // tab uses when its filters are clear, so the two share one request.
-  const monthTransactions = useExcelDB<Transaction>('transactions', { period });
 
   // A year of rows for the cash-flow chart, which groups them by month itself
   // rather than taking the server's fixed six-month rollup. Its own cache key,
@@ -377,27 +363,6 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           />
         </Suspense>
 
-        {/* Sits beside the cash-flow chart: one card looks back at what was
-            saved, the next asks what that rate becomes. `netWorthLive` and the
-            dashboard's own trend are reused, so the widget costs no request. */}
-        <Card
-          /* Full row, not `--wide`. A span-4 card between two span-3 cards
-             cannot tile a 6-column grid — 4 + 3 = 7 — so it wrapped and left a
-             three-column hole behind it. It also wants the width: a ten-year
-             curve plus two sliders is cramped at four columns. */
-          className="bento-item--full"
-          title={t('dashboard.projectionTitle')}
-          subtitle={t('dashboard.projectionSubtitle')}
-        >
-          <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
-            <NetWorthProjection
-              startingNetWorth={netWorthLive}
-              trend={data.trend}
-              money={format}
-              locale={locale}
-            />
-          </Suspense>
-        </Card>
 
         <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
           {data.categoryBreakdown.length === 0 ? (
@@ -420,15 +385,6 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           )}
         </Card>
 
-        <Suspense fallback={<div className="card sankey-placeholder" aria-hidden="true" />}>
-          <CashFlowSankey
-            transactions={monthTransactions.items}
-            wallets={data.wallets}
-            period={period}
-            loading={monthTransactions.initialLoading}
-            stale={monthTransactions.isValidating}
-          />
-        </Suspense>
 
         {/* Half width so it pairs with "Where it went" — dense packing lifts it
             into that row's empty half rather than leaving one there. */}
@@ -471,6 +427,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
                       </div>
                       <div className="list-item-sub">
                         {formatDate(tx.date, locale)}
+                        {/* Inline here rather than on its own line: this list is
+                            four rows in a half-width card, and a third line per
+                            row would cost more than the time is worth. */}
+                        <RecordedAt createdAt={tx.createdAt} locale={locale} variant="inline" />
                         {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
                       </div>
                     </div>
@@ -490,6 +450,29 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </div>
           )}
         </Card>
+
+        {/* ---- Gateway to /analytics ----
+            Full width and last, so it reads as "there is more, through here"
+            rather than competing with the figures above it.
+
+            It carries real weight on a phone: the gesture arc is capped at five
+            items and Analytics did not make the cut, so this card is the only
+            way onto that screen below 1000px. A whole card rather than a button
+            for the same reason — it has to be findable, not just present. */}
+        <button
+          type="button"
+          className="card bento-item--full analytics-cta"
+          onClick={() => onNavigate('analytics')}
+        >
+          <span className="analytics-cta-mark" aria-hidden="true">
+            <Icon icon={ChartNoAxesCombined} />
+          </span>
+          <span className="analytics-cta-body">
+            <span className="analytics-cta-title">{t('analytics.title')}</span>
+            <span className="analytics-cta-sub">{t('analytics.subtitle')}</span>
+          </span>
+          <Icon icon={ArrowRight} size="sm" className="analytics-cta-arrow" />
+        </button>
       </div>
 
       {/* The chunk is only fetched once the button is pressed, and the

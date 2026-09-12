@@ -248,6 +248,31 @@ export interface WatchlistItem {
   createdAt: string;
 }
 
+/**
+ * A sinking fund — a label on money you already have.
+ *
+ * Funding one writes no Transaction and moves no balance; it only records how
+ * much of your cash is spoken for. Mirrors the `Goals` sheet in Code.gs.
+ */
+export interface Goal {
+  id: string;
+  userId: string;
+  title: string;
+  targetAmount: number;
+  /** Only ever moved through the `goals.fund` action — never patched directly. */
+  savedAmount: number;
+  /** `YYYY-MM-DD`, or empty for no deadline. */
+  deadline: string;
+  color: string;
+  note: string;
+  createdAt: string;
+  /* computed server-side */
+  remaining: number;
+  /** Uncapped: over-funding is real, and the bar caps it, not the number. */
+  percentComplete: number;
+  complete: boolean;
+}
+
 export interface Budget {
   id: string;
   userId: string;

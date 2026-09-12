@@ -255,6 +255,28 @@ var SHEETS = {
       { key: 'expenseTxId', header: 'Expense Tx ID', type: 'string' }
     ]
   },
+  Goals: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      /* Not in the original spec, and required. Every read in this script goes
+         through `userRows_`, which scopes by this column; without it a goal
+         would be visible to every profile in the workbook. */
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'title', header: 'Title', type: 'string' },
+      { key: 'targetAmount', header: 'Target Amount', type: 'number' },
+      /* The envelope's balance. Only ever moved by `goals.fund`, never written
+         directly by the client — see the note there. */
+      { key: 'savedAmount', header: 'Saved Amount', type: 'number' },
+      /* Optional. `datekey`, not `date`: Sheets would parse a bare
+         "2027-03-01" into a Date and hand it back as a UTC stamp, which is the
+         trap the Subscriptions and Budgets columns already document. */
+      { key: 'deadline', header: 'Deadline', type: 'datekey' },
+      { key: 'color', header: 'Color', type: 'string' },
+      { key: 'note', header: 'Note', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -431,6 +453,12 @@ function dispatch_(action, method, query, body, token) {
     'billSplits.delete': function () { return billSplitsDelete_(requireAuth_(token), query); },
     'billSplits.markPaid': function () { return billSplitsMarkPaid_(requireAuth_(token), query, body); },
     'billSplits.markUnpaid': function () { return billSplitsMarkUnpaid_(requireAuth_(token), query, body); },
+
+    'goals.list': function () { return goalsList_(requireAuth_(token)); },
+    'goals.create': function () { return goalsCreate_(requireAuth_(token), body); },
+    'goals.update': function () { return goalsUpdate_(requireAuth_(token), query, body); },
+    'goals.fund': function () { return goalsFund_(requireAuth_(token), query, body); },
+    'goals.delete': function () { return goalsDelete_(requireAuth_(token), query); },
 
     'watchlist.list': function () { return watchlistList_(requireAuth_(token), query); },
     'watchlist.create': function () { return watchlistCreate_(requireAuth_(token), body); },
@@ -2248,6 +2276,162 @@ function budgetsCopy_(user, body) {
   });
 
   return { ok: true, copied: copied, skipped: source.length - copied };
+}
+
+/* =========================================================================
+ * Goals — sinking funds
+ * -------------------------------------------------------------------------
+ * Virtual envelopes. A goal earmarks money that is still sitting in a real
+ * wallet: funding "Japan Trip" moves nothing, writes no Transaction, and leaves
+ * every balance in the app exactly as it was.
+ *
+ * That is the whole point, and it is also the thing most likely to be
+ * "corrected" later, so: a sinking fund is a *label on money you already have*.
+ * If funding a goal wrote an expense, the money would leave your net worth for
+ * a purchase you have not made, your savings rate would collapse the month you
+ * started saving, and every budget would count the transfer as spending. The
+ * only figure a goal changes is how much of your cash is already spoken for,
+ * which the client derives as `liquid - Σ savedAmount`.
+ * ========================================================================= */
+
+/** A goal with nothing typed into it still needs a swatch. */
+var GOAL_DEFAULT_COLOR = '#3b6fff';
+
+function parseGoal_(body) {
+  var target = num_(body.targetAmount, 'targetAmount', { min: 0 });
+  if (target <= 0) throw bad_('"targetAmount" must be greater than zero');
+
+  return {
+    title: str_(body.title, 'title', { max: 80 }),
+    targetAmount: target,
+    deadline: body.deadline ? isoDate_(body.deadline, 'deadline') : '',
+    color: str_(body.color, 'color', { required: false, max: 20 }) || GOAL_DEFAULT_COLOR,
+    note: str_(body.note, 'note', { required: false, max: 300 })
+  };
+}
+
+/** Adds the figures the client would otherwise have to recompute per row. */
+function decorateGoal_(goal) {
+  var target = Number(goal.targetAmount) || 0;
+  var saved = Number(goal.savedAmount) || 0;
+  var remaining = Math.max(0, target - saved);
+
+  return {
+    id: goal.id, userId: goal.userId, title: goal.title,
+    targetAmount: target, savedAmount: saved,
+    deadline: goal.deadline, color: goal.color, note: goal.note,
+    createdAt: goal.createdAt,
+    /* computed server-side */
+    remaining: money_(remaining),
+    /* Uncapped on purpose. Over-funding a goal is a real thing people do, and
+       clamping the percentage at 100 would hide it. The UI caps the *bar*. */
+    percentComplete: target > 0 ? money_((saved / target) * 100) : 0,
+    complete: saved >= target
+  };
+}
+
+function goalsList_(user) {
+  return userRows_('Goals', user.id)
+    .map(function (row) {
+      var copy = {};
+      for (var k in row) if (k !== '_row') copy[k] = row[k];
+      return decorateGoal_(copy);
+    })
+    .sort(function (a, b) {
+      /* Unfinished first, then by deadline — a goal with a date is more urgent
+         than one without, so a missing deadline sorts last rather than first
+         (an empty string would otherwise win every comparison). */
+      if (a.complete !== b.complete) return a.complete ? 1 : -1;
+      var da = a.deadline || '9999-12-31';
+      var db = b.deadline || '9999-12-31';
+      return da.localeCompare(db) || String(a.title).localeCompare(String(b.title));
+    });
+}
+
+function goalsCreate_(user, body) {
+  var parsed = parseGoal_(body);
+
+  var goal = {
+    id: uuid_(), userId: user.id,
+    title: parsed.title, targetAmount: parsed.targetAmount,
+    /* Always starts empty. An opening balance would have to come from
+       somewhere, and `goals.fund` is the only thing allowed to say where. */
+    savedAmount: 0,
+    deadline: parsed.deadline, color: parsed.color, note: parsed.note,
+    createdAt: new Date().toISOString()
+  };
+
+  insertRow_('Goals', goal);
+  return decorateGoal_(goal);
+}
+
+function goalsUpdate_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Goals', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Goal not found', 404, 'NOT_FOUND');
+  }
+
+  var merged = {};
+  for (var k in existing) if (k !== '_row') merged[k] = existing[k];
+  for (var j in body) merged[j] = body[j];
+
+  var parsed = parseGoal_(merged);
+  /* `savedAmount` is deliberately absent from the patch. Editing a goal must
+     not be a back door into its balance — that belongs to `goals.fund`, which
+     is the only path that reads the stored figure before changing it. */
+  var updated = updateRow_('Goals', id, parsed);
+  delete updated._row;
+  return decorateGoal_(updated);
+}
+
+/**
+ * Move money into or out of the envelope.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THIS IS AN ACTION AND NOT A PATCH
+ * -------------------------------------------------------------------------
+ * The obvious implementation is for the client to send
+ * `{ savedAmount: current + 500 }`. That is a lost update waiting to happen:
+ * two tabs, or a phone and a laptop, each read 1,000, each write 1,500, and one
+ * of the two deposits vanishes with no error anywhere.
+ *
+ * Sending the *delta* and resolving it against the stored row means the
+ * arithmetic happens once, on the row as it actually is. Writes are already
+ * serialised by the script lock, so the read and the write cannot interleave.
+ *
+ * A negative `amount` withdraws. The result is floored at zero rather than
+ * rejected: taking out more than is in the envelope means "empty it", which is
+ * what the user meant, and an error there would just make them do arithmetic.
+ */
+function goalsFund_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Goals', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Goal not found', 404, 'NOT_FOUND');
+  }
+
+  var amount = num_(body.amount, 'amount', { required: true });
+  if (!amount) throw bad_('"amount" must not be zero', 'ZERO_AMOUNT');
+
+  var current = Number(existing.savedAmount) || 0;
+  var next = money_(Math.max(0, current + amount));
+
+  var updated = updateRow_('Goals', id, { savedAmount: next });
+  delete updated._row;
+  return decorateGoal_(updated);
+}
+
+function goalsDelete_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Goals', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Goal not found', 404, 'NOT_FOUND');
+  }
+  /* No cascade to think about: a goal owns no Transactions by design, so
+     deleting one cannot orphan anything or change a balance. */
+  deleteRow_('Goals', id);
+  return { ok: true, id: id };
 }
 
 /* =========================================================================

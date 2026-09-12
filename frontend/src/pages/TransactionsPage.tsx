@@ -11,16 +11,9 @@ import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../compon
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { cx, formatDate, formatPeriod } from '../lib/format';
 import { EMPTY_FILTERS, TxFilters, fetchScope, filterTransactions } from '../lib/txFilters';
+import { RecordedAt } from '../components/RecordedAt';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, WalletBalance } from '../types';
-
-/** `createdAt` as a local wall clock, for the Date column. */
-function recordedClock(tx: Transaction, locale: string): string {
-  if (!tx.createdAt) return '—';
-  const at = new Date(tx.createdAt);
-  if (Number.isNaN(at.getTime())) return '—';
-  return at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-}
 
 /**
  * Shown beside the title, so the header describes what is actually on screen.
@@ -198,11 +191,11 @@ export function TransactionsPage({ period }: { period: string }) {
               <thead>
                 <tr>
                   <th>{t('common.type')}</th>
-                  <th className="num">{t('common.amount')}</th>
+                  <th>{t('common.amount')}</th>
+                  <th>{t('common.date')}</th>
                   <th>{t('activity.categoryOrRoute')}</th>
                   <th>{t('common.wallet')}</th>
                   <th>{t('common.note')}</th>
-                  <th>{t('common.date')}</th>
                   <th className="num" />
                 </tr>
               </thead>
@@ -219,7 +212,6 @@ export function TransactionsPage({ period }: { period: string }) {
                     </td>
                     <td
                       className={cx(
-                        'num',
                         tx.type === 'income' && 'text-positive',
                         tx.type === 'expense' && 'text-negative',
                       )}
@@ -228,21 +220,16 @@ export function TransactionsPage({ period }: { period: string }) {
                       {money(tx.amount)}
                     </td>
                     <td>
+                      {formatDate(tx.date, settings.locale)}
+                      <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
+                    </td>
+                    <td>
                       {tx.type === 'transfer'
                         ? t('activity.transferRoute', { from: walletName(tx.walletId), to: walletName(tx.toWalletId) })
                         : tx.category}
                     </td>
                     <td className="text-muted">{walletName(tx.walletId)}</td>
                     <td className="text-muted">{tx.note || '—'}</td>
-                    <td>
-                      {formatDate(tx.date, settings.locale)}
-                      {/* The clock the time filter actually matches on. Shown
-                          only while that filter is live, so the column stays
-                          quiet the rest of the time. */}
-                      {(filters.timeFrom || filters.timeTo) && (
-                        <div className="list-item-sub">{recordedClock(tx, settings.locale)}</div>
-                      )}
-                    </td>
                     <td className="num">
                       <div className="row-actions">
                         <Button
