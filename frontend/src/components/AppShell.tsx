@@ -24,6 +24,7 @@ import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useLanguageSync } from '../hooks/useLanguage';
 import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
+import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { TranslationKey } from '../locales';
@@ -236,6 +237,11 @@ export function AppShell() {
   const { settings, reload: reloadSettings } = useSettings();
   const money = useMoneyFormatter();
   const [period, setPeriod] = useState(currentPeriod());
+
+  /* A new screen starts at the top. Keyed on the route alone, so stepping the
+     month picker — which changes `period`, not the route — leaves the reader
+     where they were. */
+  useScrollToTop(route);
 
   /* Raises the "you have unpaid subscriptions" toast once per app open. Lives
      here rather than on the Recurring page precisely because the point is to
