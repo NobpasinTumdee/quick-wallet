@@ -197,12 +197,12 @@ export function TransactionsPage({ period }: { period: string }) {
             <table className="data">
               <thead>
                 <tr>
-                  <th>{t('common.date')}</th>
                   <th>{t('common.type')}</th>
+                  <th className="num">{t('common.amount')}</th>
                   <th>{t('activity.categoryOrRoute')}</th>
                   <th>{t('common.wallet')}</th>
                   <th>{t('common.note')}</th>
-                  <th className="num">{t('common.amount')}</th>
+                  <th>{t('common.date')}</th>
                   <th className="num" />
                 </tr>
               </thead>
@@ -211,28 +211,12 @@ export function TransactionsPage({ period }: { period: string }) {
                   // Dimmed until the server confirms it.
                   <tr key={tx.id} className={cx(isOptimistic(tx) && 'is-pending')}>
                     <td>
-                      {formatDate(tx.date, settings.locale)}
-                      {/* The clock the time filter actually matches on. Shown
-                          only while that filter is live, so the column stays
-                          quiet the rest of the time. */}
-                      {(filters.timeFrom || filters.timeTo) && (
-                        <div className="list-item-sub">{recordedClock(tx, settings.locale)}</div>
-                      )}
-                    </td>
-                    <td>
                       <Badge
                         tone={tx.type === 'income' ? 'positive' : tx.type === 'expense' ? 'negative' : 'accent'}
                       >
                         {tx.type}
                       </Badge>
                     </td>
-                    <td>
-                      {tx.type === 'transfer'
-                        ? t('activity.transferRoute', { from: walletName(tx.walletId), to: walletName(tx.toWalletId) })
-                        : tx.category}
-                    </td>
-                    <td className="text-muted">{walletName(tx.walletId)}</td>
-                    <td className="text-muted">{tx.note || '—'}</td>
                     <td
                       className={cx(
                         'num',
@@ -242,6 +226,22 @@ export function TransactionsPage({ period }: { period: string }) {
                     >
                       {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
                       {money(tx.amount)}
+                    </td>
+                    <td>
+                      {tx.type === 'transfer'
+                        ? t('activity.transferRoute', { from: walletName(tx.walletId), to: walletName(tx.toWalletId) })
+                        : tx.category}
+                    </td>
+                    <td className="text-muted">{walletName(tx.walletId)}</td>
+                    <td className="text-muted">{tx.note || '—'}</td>
+                    <td>
+                      {formatDate(tx.date, settings.locale)}
+                      {/* The clock the time filter actually matches on. Shown
+                          only while that filter is live, so the column stays
+                          quiet the rest of the time. */}
+                      {(filters.timeFrom || filters.timeTo) && (
+                        <div className="list-item-sub">{recordedClock(tx, settings.locale)}</div>
+                      )}
                     </td>
                     <td className="num">
                       <div className="row-actions">

@@ -108,10 +108,10 @@ const SETTINGS_ITEM: NavItem = {
  *
  * The desktop sidebar is unaffected: it renders NAV in full and always has.
  */
-const MOBILE_PRIMARY: Route[] = ['dashboard', 'wallets', 'investments', 'transactions'];
+const MOBILE_PRIMARY: Route[] = ['dashboard', 'transactions','investments', 'wallets'];
 /* Five is the most the gesture arc can hold on a 320px phone — see arcRadius
    in GestureNavWidget. Anything added beyond this needs a different menu. */
-const MOBILE_SHORTCUTS: Route[] = ['cards', 'budgets', 'splits', 'subscriptions', 'settings'];
+const MOBILE_SHORTCUTS: Route[] = ['subscriptions','budgets', 'cards', 'splits', 'settings'];
 
 /** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
 function navItemFor(route: Route): NavItem {
