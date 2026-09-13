@@ -5,6 +5,7 @@ import {
   HandCoins,
   PiggyBank,
   LayoutDashboard,
+  Landmark,
   LayoutGrid,
   LogOut,
   ChartNoAxesCombined,
@@ -35,6 +36,7 @@ import { CreditCardsPage } from '../pages/CreditCardsPage';
 import { SharedExpensesPage } from '../pages/SharedExpensesPage';
 import { AnalyticsPage } from '../pages/AnalyticsPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { DebtManagerPage } from '../pages/DebtManagerPage';
 import { GoalsPage } from '../pages/GoalsPage';
 import { MoreMenuPage } from '../pages/MoreMenuPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -89,6 +91,7 @@ const NAV: NavItem[] = [
   { route: 'budgets', labelKey: 'nav.budgets', icon: Target },
   { route: 'splits', labelKey: 'nav.splits', icon: HandCoins },
   { route: 'subscriptions', labelKey: 'nav.subscriptions', icon: Repeat2 },
+  { route: 'debt', labelKey: 'nav.debt', icon: Landmark },
 ];
 
 /**
@@ -196,6 +199,10 @@ function warmRoute(route: Route, period: string): void {
       prefetch('/api/goals');
       prefetch('/api/wallets');
       break;
+    case 'debt':
+      prefetch('/api/debts');
+      prefetch('/api/wallets');
+      break;
     case 'budgets':
       prefetch('/api/budgets', { period });
       prefetch('/api/wallets');
@@ -229,6 +236,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   investments: ['/api/investments', '/api/wallets', '/api/watchlist'],
   analytics: ['/api/dashboard', '/api/transactions'],
   goals: ['/api/goals', '/api/wallets'],
+  debt: ['/api/debts', '/api/wallets'],
   budgets: ['/api/budgets', '/api/wallets'],
   splits: ['/api/bill-splits', '/api/wallets'],
   subscriptions: ['/api/subscriptions', '/api/wallets'],
@@ -491,6 +499,7 @@ export function AppShell() {
           {route === 'subscriptions' && <SubscriptionsPage />}
           {route === 'analytics' && <AnalyticsPage period={period} />}
           {route === 'goals' && <GoalsPage />}
+          {route === 'debt' && <DebtManagerPage />}
           {route === 'settings' && <SettingsPage />}
           {route === 'more' && (
             <MoreMenuPage

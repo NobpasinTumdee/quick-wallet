@@ -39,6 +39,7 @@ export const en = {
     investments: 'Invest',
     budgets: 'Budgets',
     subscriptions: 'Recurring',
+    debt: 'Debt',
     analytics: 'Analytics',
     goals: 'Goals',
     settings: 'Settings',
@@ -1036,6 +1037,7 @@ export const en = {
     analytics: 'Savings rate, spending habits and where it all goes',
     splits: 'Costs shared with other people, and who still owes',
     subscriptions: 'Recurring bills and what falls due next',
+    debt: 'Loans and borrowed money, and what they cost you',
     goals: 'What you are saving towards, and how far along',
     budgets: 'Monthly limits per category, and how much is left',
     settings: 'Currency, language, theme and your workbook',
@@ -1047,6 +1049,108 @@ export const en = {
    * Its own section rather than living under `analytics`, because the widget
    * appears on two screens and belongs to neither.
    */
+  /**
+   * Debt management.
+   *
+   * Financial terms are used precisely and consistently: `principal` is what
+   * was borrowed, `outstanding balance` is what is still owed, `APR` is the
+   * annual rate. Loose synonyms ("total", "amount left") are avoided on
+   * purpose — someone reading a loan statement alongside this screen has to be
+   * able to line the two up word for word.
+   */
+  debt: {
+    title: 'Debt',
+    heading: 'Debt management',
+    lede: 'Loans and borrowed money. Paying one records a real expense and moves the money out of a wallet.',
+
+    /* ---- Terms ---- */
+    principal: 'Principal',
+    outstanding: 'Outstanding balance',
+    apr: 'APR',
+    aprValue: '{{rate}}% APR',
+    minimumPayment: 'Minimum payment',
+    dueDay: 'Payment due',
+    dueDayValue: 'Day {{day}} of the month',
+    dueDayNone: 'No due day set',
+    paidOff: 'Principal repaid',
+    monthlyInterest: 'Interest per month',
+    settled: 'Settled',
+
+    /* ---- Portfolio summary ---- */
+    totalOutstanding: 'Total outstanding',
+    totalCommitment: 'Minimum payments',
+    totalCommitmentHint_one: 'Due across {{count}} active debt every month',
+    totalCommitmentHint_other: 'Due across {{count}} active debts every month',
+    portfolioInterest: 'Interest cost per month',
+    portfolioProgress: '{{paid}} of {{principal}} repaid',
+    costliest: 'Costliest debt',
+
+    /* ---- Payoff projection ---- */
+    payoffIn_one: 'Clear in {{count}} month at the minimum',
+    payoffIn_other: 'Clear in {{count}} months at the minimum',
+    payoffInterest: 'Interest to come: {{amount}}',
+    payoffUnknown: 'Set a minimum payment to project a payoff date',
+    /* The one warning on this screen that is not decorative. */
+    neverAmortises: 'This never clears',
+    neverAmortisesHint:
+      'The minimum payment is less than the {{amount}} of interest charged each month, so the balance grows.',
+    neverAmortisesCount_one: '{{count}} debt is growing rather than shrinking',
+    neverAmortisesCount_other: '{{count}} debts are growing rather than shrinking',
+
+    /* ---- Actions ---- */
+    addDebt: 'Add a debt',
+    newDebt: 'New debt',
+    editDebt: 'Edit debt',
+    payDebt: 'Make a payment',
+    payTitle: 'Pay {{title}}',
+    refresh: 'Refresh debts',
+    deleteConfirm:
+      'Delete "{{title}}"? The payments already recorded stay in your ledger — only the debt is removed.',
+
+    /* ---- The payment modal ---- */
+    payAmount: 'Payment amount',
+    payFrom: 'Pay from',
+    payFromHint: 'The money leaves this wallet as an expense.',
+    payDate: 'Payment date',
+    payCategory: 'Category',
+    payNote: 'Note',
+    payConfirm: 'Confirm payment',
+    payMinimum: 'Minimum ({{amount}})',
+    payFull: 'Pay off in full ({{amount}})',
+    /* Shown live as the user types, so the trade-off is visible before they
+       commit rather than explained afterwards. */
+    paySplit: '{{interest}} covers this month’s interest · {{principal}} comes off the balance',
+    paySplitShortfall:
+      'This is less than the {{amount}} of interest due this month, so the balance will not fall.',
+    payOverdraw: '{{wallet}} holds {{balance}}. This payment takes it below zero.',
+    payOverpay: 'This is {{amount}} more than the outstanding balance. The extra is still recorded as spent.',
+    payAfter: 'Balance after this payment: {{amount}}',
+    payNoWallet: 'Add a spending wallet before recording a payment.',
+    paid: 'Payment recorded',
+
+    /* ---- The form ---- */
+    formTitle: 'Debt name',
+    formTitlePlaceholder: 'Car loan, mortgage, money from Dad',
+    formPrincipal: 'Original amount borrowed',
+    formPrincipalHint: 'What the loan started at. Progress is measured against this.',
+    formBalance: 'Outstanding balance',
+    formBalanceHint: 'Leave blank to start at the full principal.',
+    formApr: 'Interest rate (APR %)',
+    formAprHint: 'Annual rate as your lender quotes it. 0 if interest-free.',
+    formMinimum: 'Minimum monthly payment',
+    formDueDay: 'Payment due on day',
+    formNote: 'Note',
+    formBalanceOverPrincipal: 'The balance cannot be more than the principal.',
+
+    /* ---- Empty & disclaimer ---- */
+    emptyTitle: 'No debts recorded',
+    emptyHint:
+      'Add a loan, a mortgage, or money you owe someone. Payments come out of a wallet, so your balances stay honest.',
+    createWalletFirst: 'Create a spending wallet first — a payment has to come from somewhere.',
+    estimateNote:
+      'Interest figures are estimates from the APR you entered. Nothing here accrues interest automatically — your lender’s statement is the authority.',
+  },
+
   liability: {
     title: 'Upcoming bills',
     subtitle: 'What is already promised, and when it lands',

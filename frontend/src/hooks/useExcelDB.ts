@@ -103,6 +103,25 @@ const RESOURCES: Record<string, ResourceConfig> = {
       String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')) ||
       String(a.title ?? '').localeCompare(String(b.title ?? '')),
   },
+  debts: {
+    /* The opposite of `goals` above: paying a debt writes a real
+       expense against a real wallet, so the ledger, balances, budget progress
+       and the dashboard are all downstream of it. Same blast radius as a
+       subscription payment, for the same reason. */
+    invalidates: [
+      '/api/debts',
+      '/api/transactions',
+      '/api/wallets',
+      '/api/budgets',
+      '/api/dashboard',
+    ],
+    // Mirrors debtsList_: settled last, then the costliest money first.
+    sort: (a, b) =>
+      Number(Boolean(a.settled)) - Number(Boolean(b.settled)) ||
+      (Number(b.interestRateApr) || 0) - (Number(a.interestRateApr) || 0) ||
+      (Number(b.currentBalance) || 0) - (Number(a.currentBalance) || 0) ||
+      String(a.title ?? '').localeCompare(String(b.title ?? '')),
+  },
   watchlist: {
     // Nothing is derived from a watched symbol — it has no cost, no balance and
     // no effect on any total — so this is the one resource whose writes do not

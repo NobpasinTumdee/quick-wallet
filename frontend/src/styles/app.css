@@ -5066,6 +5066,364 @@ line.arate-zero {
 }
 
 /* ==========================================================================
+   Debt management
+   --------------------------------------------------------------------------
+   Structurally the twin of the Goals screen — a list of amounts with progress
+   bars — which is exactly why it must not look like it. Funding a goal is
+   optional and cheerful; paying a debt is obligatory and takes real money out
+   of a wallet, and two screens that read the same teach the user they mean the
+   same.
+
+   The whole page therefore runs on one local token, `--debt`, a deep violet
+   that is grave without being an error state. Red stays reserved for the one
+   genuinely alarming case: a debt whose minimum payment cannot cover its own
+   interest, which grows forever.
+
+   `--debt` is a fixed hue rather than a theme token on purpose. Every palette
+   in this app re-tints `--accent`, and a debt screen that turns cheerful mint
+   in the Forest theme would lose the distinction this file exists to make. It
+   is mixed with `--surface` and `--text` throughout, so it still sits correctly
+   in light and dark.
+   ========================================================================== */
+
+.debt-hero,
+.debt-list,
+.debt-disclaimer {
+  --debt: #6d4aff;
+  --debt-soft: color-mix(in srgb, var(--debt) 14%, transparent);
+  --debt-softer: color-mix(in srgb, var(--debt) 7%, transparent);
+  --debt-ring: color-mix(in srgb, var(--debt) 34%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .debt-hero,
+  :root:not([data-theme='light']) .debt-list,
+  :root:not([data-theme='light']) .debt-disclaimer {
+    /* Lifted for dark grounds: the light-mode violet reads near-black on a
+       #111725 surface and the whole distinction disappears. */
+    --debt: #9b7cff;
+  }
+}
+
+:root[data-theme='dark'] .debt-hero,
+:root[data-theme='dark'] .debt-list,
+:root[data-theme='dark'] .debt-disclaimer {
+  --debt: #9b7cff;
+}
+
+/* ---- Portfolio summary ---- */
+
+.debt-hero {
+  border-color: var(--debt-ring);
+  background:
+    linear-gradient(135deg, var(--debt-softer), transparent 60%),
+    var(--glass-bg);
+}
+
+.debt-hero .hero-value {
+  color: var(--debt);
+}
+
+.debt-hero-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 560px) {
+  .debt-hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+.debt-hero-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.debt-hero-stats strong {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ---- The list ---- */
+
+.debt-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 860px) {
+  .debt-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+}
+
+.debt-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  /* The one violet edge on the card, so the ramp reads without tinting the
+     whole surface and fighting the glass behind it. */
+  border-inline-start: 3px solid var(--debt);
+}
+
+.debt-card.is-settled {
+  border-inline-start-color: var(--positive);
+  opacity: 0.75;
+}
+
+/* The only red on the page. A debt that grows no matter what you pay. */
+.debt-card.is-alarming {
+  border-inline-start-color: var(--negative);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 1px color-mix(in srgb, var(--negative) 28%, transparent);
+}
+
+.debt-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.debt-card-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.debt-card-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--debt-soft);
+  color: var(--debt);
+}
+
+.debt-card.is-settled .debt-card-mark {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.debt-card-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.debt-card-terms {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.debt-card-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+}
+
+.debt-card-balance strong {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.debt-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.debt-card-progress p {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* The bar's fill borrows the page's violet, so progress against a debt is
+   never mistaken for progress against a goal at a glance. */
+.debt-card-progress .progress-fill {
+  background: var(--debt);
+}
+
+.debt-card.is-settled .debt-card-progress .progress-fill {
+  background: var(--positive);
+}
+
+.debt-card-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--divider);
+}
+
+.debt-card-figures > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.debt-card-figures dt {
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.debt-card-figures dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.debt-card-payoff {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.debt-card-payoff.is-alarming {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.debt-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.debt-card-actions > :first-child {
+  margin-inline-end: auto;
+}
+
+/* Sits apart from the cards: it qualifies every number above it, and a
+   disclaimer inside one card would read as being about that card. */
+.debt-disclaimer {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--debt-ring);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ---- The payment modal ---- */
+
+.debt-pay-outstanding {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.debt-pay-outstanding span {
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.debt-pay-outstanding strong {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.debt-pay-presets {
+  flex-wrap: wrap;
+  margin-top: calc(var(--space-2) * -1);
+}
+
+/* The working, shown before the button is pressed rather than after. */
+.debt-pay-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.debt-pay-preview p {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.debt-pay-split {
+  color: var(--text-muted);
+}
+
+.debt-pay-after {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+.debt-pay-note {
+  color: var(--text-muted);
+}
+
+.debt-pay-warn {
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+/* ==========================================================================
    Liability heatmap — committed outgoings, day by day
    --------------------------------------------------------------------------
    Sibling to `.heat` above, and deliberately not the same encoding. That one

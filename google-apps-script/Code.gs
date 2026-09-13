@@ -277,6 +277,56 @@ var SHEETS = {
       { key: 'createdAt', header: 'Created At', type: 'date' }
     ]
   },
+  /**
+   * Real borrowed money — a mortgage, a car loan, money from a friend.
+   *
+   * -----------------------------------------------------------------------
+   * HOW THIS DIFFERS FROM Goals, WHICH IT OTHERWISE RESEMBLES
+   * -----------------------------------------------------------------------
+   * A goal is an envelope: `goals.fund` moves a number and no money leaves any
+   * wallet, which is why that table owns no Transactions. A debt is the
+   * opposite. `debts.pay` writes a real expense against a real wallet and only
+   * then reduces the balance, so paying one makes the user genuinely poorer in
+   * cash and genuinely less indebted, in one call.
+   *
+   * -----------------------------------------------------------------------
+   * WHY NO INTEREST IS EVER ACCRUED HERE
+   * -----------------------------------------------------------------------
+   * `interestRateApr` is read, never applied. Nothing in this script runs on a
+   * schedule — the same rule the Subscriptions section documents — so there is
+   * no safe moment to capitalise a month's interest, and a script that only
+   * accrues when someone happens to open the app would produce a balance that
+   * depends on browsing habits. The lender's statement is the truth; the APR
+   * here drives an *estimate* the user reads, and `debts.update` is how a real
+   * statement figure gets in.
+   */
+  Debts: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      /* Same reason as Goals: every read goes through `userRows_`, which scopes
+         on this column. Without it one profile's mortgage is visible to all. */
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'title', header: 'Title', type: 'string' },
+      /* What was originally borrowed. Fixed at creation and only editable
+         deliberately — it is the denominator of every progress figure. */
+      { key: 'principalAmount', header: 'Principal Amount', type: 'number' },
+      /* What is still owed. Moved only by `debts.pay`, never by a patch. */
+      { key: 'currentBalance', header: 'Current Balance', type: 'number' },
+      /* Annual percentage rate, as a percent: 6.5 means 6.5%. Percent rather
+         than a 0.065 fraction because that is how every lender quotes it, and
+         a field the user types into should not need converting in their head. */
+      { key: 'interestRateApr', header: 'Interest Rate APR %', type: 'number' },
+      { key: 'minimumPayment', header: 'Minimum Payment', type: 'number' },
+      /* Day of month the payment falls due, 1-31. 0 = unset.
+         A day-of-month number rather than a `datekey`, matching the credit-card
+         `dueDate` on Wallets: a loan repays on the same day every month, and
+         storing one calendar date would go stale after the first payment. */
+      { key: 'dueDate', header: 'Due Day', type: 'number' },
+      { key: 'note', header: 'Note', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -459,6 +509,14 @@ function dispatch_(action, method, query, body, token) {
     'goals.update': function () { return goalsUpdate_(requireAuth_(token), query, body); },
     'goals.fund': function () { return goalsFund_(requireAuth_(token), query, body); },
     'goals.delete': function () { return goalsDelete_(requireAuth_(token), query); },
+
+    /* Real money, unlike goals.* above: `debts.pay` writes an expense against a
+       wallet and lowers the balance in the same locked call. */
+    'debts.list': function () { return debtsList_(requireAuth_(token)); },
+    'debts.create': function () { return debtsCreate_(requireAuth_(token), body); },
+    'debts.update': function () { return debtsUpdate_(requireAuth_(token), query, body); },
+    'debts.pay': function () { return debtsPay_(requireAuth_(token), query, body); },
+    'debts.delete': function () { return debtsDelete_(requireAuth_(token), query); },
 
     'watchlist.list': function () { return watchlistList_(requireAuth_(token), query); },
     'watchlist.create': function () { return watchlistCreate_(requireAuth_(token), body); },
@@ -2431,6 +2489,277 @@ function goalsDelete_(user, query) {
   /* No cascade to think about: a goal owns no Transactions by design, so
      deleting one cannot orphan anything or change a balance. */
   deleteRow_('Goals', id);
+  return { ok: true, id: id };
+}
+
+/* =========================================================================
+ * Debts
+ * -------------------------------------------------------------------------
+ * Borrowed money that has to be paid back with real cash — a mortgage, a car
+ * loan, a balance owed to a person.
+ *
+ * The distinction from Goals is the whole point of the table. Funding a goal
+ * moves a number inside an envelope and touches no wallet. Paying a debt writes
+ * an expense against a chosen wallet *and* reduces the balance, in one call, so
+ * the two can never disagree: there is no path that lowers a debt without the
+ * money leaving, and none that spends the money without the debt moving.
+ *
+ * Interest is never accrued here. See the note on the schema.
+ * ========================================================================= */
+
+/** Ceiling on a single stored figure — the same sanity bound money_ implies. */
+var DEBT_MAX_AMOUNT = 1e12;
+
+function parseDebt_(body) {
+  var apr = num_(body.interestRateApr, 'interestRateApr', { min: 0, max: 200, fallback: 0 });
+  var dueDay = num_(body.dueDate, 'dueDate', { min: 0, max: 31, fallback: 0 });
+
+  return {
+    title: str_(body.title, 'title', { required: true, max: 120 }),
+    principalAmount: num_(body.principalAmount, 'principalAmount', {
+      required: true,
+      min: 0,
+      max: DEBT_MAX_AMOUNT
+    }),
+    interestRateApr: money_(apr),
+    minimumPayment: num_(body.minimumPayment, 'minimumPayment', {
+      min: 0,
+      max: DEBT_MAX_AMOUNT,
+      fallback: 0
+    }),
+    dueDate: Math.round(dueDay),
+    note: str_(body.note, 'note', { required: false, max: 300 })
+  };
+}
+
+/**
+ * The figures every screen reads, computed in one place.
+ *
+ * `paidAmount` is *principal reduction*, not cash handed over. In this model
+ * they are the same number — no interest is ever capitalised into the balance,
+ * so every payment reduces it by its full value — but the two part company the
+ * moment someone edits `currentBalance` to match a real statement, and the
+ * label has to mean the thing it is computed from.
+ */
+function decorateDebt_(debt) {
+  var principal = Number(debt.principalAmount) || 0;
+  var balance = Math.max(0, Number(debt.currentBalance) || 0);
+  var apr = Number(debt.interestRateApr) || 0;
+
+  var paid = Math.max(0, principal - balance);
+
+  return {
+    id: debt.id, userId: debt.userId, title: debt.title,
+    principalAmount: money_(principal),
+    currentBalance: money_(balance),
+    interestRateApr: money_(apr),
+    minimumPayment: money_(Number(debt.minimumPayment) || 0),
+    dueDate: Math.round(Number(debt.dueDate) || 0),
+    note: debt.note,
+    createdAt: debt.createdAt,
+
+    /* computed server-side, so every client reads the same arithmetic */
+    paidAmount: money_(paid),
+    /* Capped at 100 here, unlike a goal's percentComplete. Over-funding a goal
+       is a real thing people do and worth showing; owing less than nothing is
+       not a state, so a balance edited below zero is a data correction, not an
+       achievement to display as 140%. */
+    percentPaid: principal > 0 ? money_(Math.min(100, (paid / principal) * 100)) : 0,
+    /* One month of simple interest on today's balance. An estimate the user
+       reads — never added to the balance. See the schema note. */
+    projectedMonthlyInterest: money_((balance * (apr / 100)) / 12),
+    settled: balance <= 0
+  };
+}
+
+function debtsList_(user) {
+  return userRows_('Debts', user.id)
+    .map(function (row) {
+      var copy = {};
+      for (var k in row) if (k !== '_row') copy[k] = row[k];
+      return decorateDebt_(copy);
+    })
+    .sort(function (a, b) {
+      /* Settled debts sink. Above them, the expensive money first: the highest
+         APR is the one costing most per day, which is the order anyone paying
+         debt down deliberately wants to see. Balance breaks an APR tie. */
+      if (a.settled !== b.settled) return a.settled ? 1 : -1;
+      if (a.interestRateApr !== b.interestRateApr) return b.interestRateApr - a.interestRateApr;
+      if (a.currentBalance !== b.currentBalance) return b.currentBalance - a.currentBalance;
+      return String(a.title).localeCompare(String(b.title));
+    });
+}
+
+function debtsCreate_(user, body) {
+  var parsed = parseDebt_(body);
+
+  /* An opening balance is allowed and defaults to the full principal, which is
+     the common case: you record the loan when you take it out. Recording one
+     part-way through is the other common case, so an explicit
+     `currentBalance` is accepted — but never above the principal, which would
+     make `paidAmount` negative and the progress bar meaningless. */
+  var opening = body.currentBalance === undefined || body.currentBalance === null
+    || body.currentBalance === ''
+    ? parsed.principalAmount
+    : num_(body.currentBalance, 'currentBalance', { min: 0, max: DEBT_MAX_AMOUNT });
+
+  var debt = {
+    id: uuid_(), userId: user.id,
+    title: parsed.title,
+    principalAmount: parsed.principalAmount,
+    currentBalance: money_(Math.min(opening, parsed.principalAmount)),
+    interestRateApr: parsed.interestRateApr,
+    minimumPayment: parsed.minimumPayment,
+    dueDate: parsed.dueDate,
+    note: parsed.note,
+    createdAt: new Date().toISOString()
+  };
+
+  insertRow_('Debts', debt);
+  return decorateDebt_(debt);
+}
+
+/**
+ * Edit the terms.
+ *
+ * `currentBalance` is accepted here, unlike a goal's `savedAmount`, and the
+ * difference is deliberate. A goal's balance has exactly one legitimate source
+ * — money the user put in — so a patch could only ever be a lost update. A
+ * debt's balance has two: payments made through this app, and the lender's own
+ * statement, which includes interest this script does not model. Refusing the
+ * correction would leave the user with a figure they can see is wrong and no
+ * way to fix it.
+ *
+ * It is still not how you pay: `debts.pay` is, and it is the only path that
+ * moves money. A patch here is bookkeeping, and writes no Transaction.
+ */
+function debtsUpdate_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Debts', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Debt not found', 404, 'NOT_FOUND');
+  }
+
+  var merged = {};
+  for (var k in existing) if (k !== '_row') merged[k] = existing[k];
+  for (var j in body) merged[j] = body[j];
+
+  var parsed = parseDebt_(merged);
+  var patch = {
+    title: parsed.title,
+    principalAmount: parsed.principalAmount,
+    interestRateApr: parsed.interestRateApr,
+    minimumPayment: parsed.minimumPayment,
+    dueDate: parsed.dueDate,
+    note: parsed.note
+  };
+
+  if (body.currentBalance !== undefined && body.currentBalance !== null && body.currentBalance !== '') {
+    var balance = num_(body.currentBalance, 'currentBalance', { min: 0, max: DEBT_MAX_AMOUNT });
+    patch.currentBalance = money_(Math.min(balance, parsed.principalAmount));
+  }
+
+  var updated = updateRow_('Debts', id, patch);
+  delete updated._row;
+  return decorateDebt_(updated);
+}
+
+/**
+ * Pay real money against a debt.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE TWO WRITES CANNOT DRIFT APART
+ * -------------------------------------------------------------------------
+ * Every non-GET request already runs inside the script lock — see the tail of
+ * `dispatch_` — so this handler holds it for its whole body and no second
+ * caller can interleave a read between the balance this reads and the balance
+ * it writes. That is what makes "insert the expense, then lower the debt" a
+ * single transaction in practice.
+ *
+ * It is not atomic in the database sense: Apps Script has no rollback, so if
+ * the Transactions insert succeeds and the Debts update then throws, the
+ * expense exists and the debt has not moved. That failure is *recoverable and
+ * visible* — the user sees money gone and the debt unchanged, and can correct
+ * the balance with an edit. The reverse order is not: a debt quietly reduced
+ * with no expense behind it is a wrong balance nobody can see. So the ledger
+ * is written first, on purpose.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE AMOUNT IS SENT, NOT THE NEW BALANCE
+ * -------------------------------------------------------------------------
+ * The same lost-update argument `goals.fund` documents. The client sends what
+ * it wants to pay; the server resolves it against the row as it actually is.
+ * Overpaying floors the balance at zero rather than erroring — paying off the
+ * last 900 of a 900.14 debt is what the user meant — but the *expense* is still
+ * written for the amount they actually handed over, because that money really
+ * did leave the wallet.
+ */
+function debtsPay_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Debts', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Debt not found', 404, 'NOT_FOUND');
+  }
+
+  var amount = num_(body.amount, 'amount', { required: true, min: 0, max: DEBT_MAX_AMOUNT });
+  if (!(amount > 0)) throw bad_('"amount" must be greater than zero', 'ZERO_AMOUNT');
+
+  /* Re-checked rather than trusted: the wallet is chosen at pay time and may
+     have been deleted between the modal opening and this call. */
+  var wallet = ownedWallet_(user.id, str_(body.walletId, 'walletId', { required: true }));
+
+  /* An investment wallet is not a current account. Paying a mortgage out of a
+     brokerage is not a transfer this app can model — it would need a sale — so
+     it is refused rather than silently booked as an expense against holdings. */
+  if (wallet.mode === 'investment') {
+    throw bad_('Pay from a spending wallet, not an investment wallet', 'WRONG_WALLET_MODE');
+  }
+
+  var paidOn = isoDate_((body && body.date) || toDateKey_(new Date()), 'date');
+
+  var tx = {
+    id: uuid_(), userId: user.id,
+    walletId: wallet.id, toWalletId: '', type: 'expense',
+    amount: money_(amount),
+    /* Overridable, because a user whose categories include "Mortgage" should be
+       able to use it and have the figure land in the right budget. */
+    category: body.category ? str_(body.category, 'category', { max: 60 }) : 'Debt',
+    note: body.note ? str_(body.note, 'note', { required: false, max: 300 }) : existing.title,
+    date: paidOn,
+    createdAt: new Date().toISOString()
+  };
+  insertRow_('Transactions', tx);
+
+  var current = Number(existing.currentBalance) || 0;
+  var next = money_(Math.max(0, current - amount));
+
+  var updated = updateRow_('Debts', id, { currentBalance: next });
+  delete updated._row;
+
+  /* Both halves, so the client reconciles its optimistic patch against what the
+     server actually decided rather than guessing — the same contract
+     `subscriptions.pay` returns. `overpaid` is the difference the balance could
+     not absorb, which the UI needs to explain a payment larger than the debt. */
+  return {
+    ok: true,
+    debt: decorateDebt_(updated),
+    transaction: tx,
+    overpaid: money_(Math.max(0, amount - current))
+  };
+}
+
+function debtsDelete_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Debts', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Debt not found', 404, 'NOT_FOUND');
+  }
+
+  /* The payments stay. They are ordinary expenses that really happened, and
+     deleting them to tidy up a removed debt would rewrite history and move
+     every balance and monthly total they appear in. Same reasoning as the
+     `keepTransactions` path on bill splits. */
+  deleteRow_('Debts', id);
   return { ok: true, id: id };
 }
 

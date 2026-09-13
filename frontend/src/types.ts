@@ -273,6 +273,55 @@ export interface Goal {
   complete: boolean;
 }
 
+/**
+ * Real borrowed money — a mortgage, a car loan, money owed to a person.
+ *
+ * The counterpart to `Goal`, and deliberately not the same thing. Funding a
+ * goal moves a number inside an envelope and no wallet changes. Paying a debt
+ * writes an expense against a chosen wallet *and* lowers the balance, in one
+ * server call, so cash and indebtedness always move together.
+ */
+export interface Debt {
+  id: string;
+  userId: string;
+  title: string;
+  /** What was originally borrowed. The denominator of every progress figure. */
+  principalAmount: number;
+  /** Still owed. Moved by `debts.pay`, or corrected by an explicit edit. */
+  currentBalance: number;
+  /** Annual percentage rate as a percent: 6.5 means 6.5%. */
+  interestRateApr: number;
+  minimumPayment: number;
+  /** Day of month the payment falls due, 1-31. 0 = unset. */
+  dueDate: number;
+  note: string;
+  createdAt: string;
+
+  /* computed server-side */
+  /** Principal reduction, not cash handed over — see `decorateDebt_`. */
+  paidAmount: number;
+  /** Capped at 100: owing less than nothing is a correction, not progress. */
+  percentPaid: number;
+  /**
+   * One month of simple interest on today's balance.
+   *
+   * An estimate the user reads. Nothing in this app ever adds it to the
+   * balance — no scheduled job exists to accrue it, and a figure that grew
+   * only when someone happened to open the app would be worse than none.
+   */
+  projectedMonthlyInterest: number;
+  settled: boolean;
+}
+
+/** What `debts.pay` answers with — both halves, so the client can reconcile. */
+export interface DebtPaymentResult {
+  ok: boolean;
+  debt: Debt;
+  transaction: Transaction;
+  /** The part of the payment the balance could not absorb. */
+  overpaid: number;
+}
+
 export interface Budget {
   id: string;
   userId: string;

@@ -2,6 +2,7 @@ import {
   ChartNoAxesCombined,
   CreditCard,
   HandCoins,
+  Landmark,
   LayoutDashboard,
   PiggyBank,
   Receipt,
@@ -126,6 +127,7 @@ const SECTIONS: MenuSection[] = [
         descriptionKey: 'more.subscriptions',
         icon: Repeat2,
       },
+      { route: 'debt', labelKey: 'nav.debt', descriptionKey: 'more.debt', icon: Landmark },
     ],
   },
   {
