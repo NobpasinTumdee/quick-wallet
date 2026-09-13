@@ -19,7 +19,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -29,6 +29,8 @@ import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/use
 import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
+import { resolveMobileNav } from '../lib/mobileNav';
+import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
 import { Route, useRoute } from '../lib/router';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -81,17 +83,17 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { route: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
-  { route: 'wallets', labelKey: 'nav.wallets', icon: Wallet },
-  { route: 'cards', labelKey: 'nav.cards', icon: CreditCard },
-  { route: 'transactions', labelKey: 'nav.transactions', icon: Receipt },
-  { route: 'investments', labelKey: 'nav.investments', icon: TrendingUp },
-  { route: 'analytics', labelKey: 'nav.analytics', icon: ChartNoAxesCombined },
-  { route: 'goals', labelKey: 'nav.goals', icon: PiggyBank },
-  { route: 'budgets', labelKey: 'nav.budgets', icon: Target },
-  { route: 'splits', labelKey: 'nav.splits', icon: HandCoins },
-  { route: 'subscriptions', labelKey: 'nav.subscriptions', icon: Repeat2 },
-  { route: 'debt', labelKey: 'nav.debt', icon: Landmark },
+  { route: 'dashboard', labelKey: NAV_LABEL_KEYS.dashboard, icon: LayoutDashboard },
+  { route: 'wallets', labelKey: NAV_LABEL_KEYS.wallets, icon: Wallet },
+  { route: 'cards', labelKey: NAV_LABEL_KEYS.cards, icon: CreditCard },
+  { route: 'transactions', labelKey: NAV_LABEL_KEYS.transactions, icon: Receipt },
+  { route: 'investments', labelKey: NAV_LABEL_KEYS.investments, icon: TrendingUp },
+  { route: 'analytics', labelKey: NAV_LABEL_KEYS.analytics, icon: ChartNoAxesCombined },
+  { route: 'goals', labelKey: NAV_LABEL_KEYS.goals, icon: PiggyBank },
+  { route: 'budgets', labelKey: NAV_LABEL_KEYS.budgets, icon: Target },
+  { route: 'splits', labelKey: NAV_LABEL_KEYS.splits, icon: HandCoins },
+  { route: 'subscriptions', labelKey: NAV_LABEL_KEYS.subscriptions, icon: Repeat2 },
+  { route: 'debt', labelKey: NAV_LABEL_KEYS.debt, icon: Landmark },
 ];
 
 /**
@@ -101,7 +103,7 @@ const NAV: NavItem[] = [
  */
 const SETTINGS_ITEM: NavItem = {
   route: 'settings',
-  labelKey: 'nav.settings',
+  labelKey: NAV_LABEL_KEYS.settings,
   icon: Settings,
 };
 
@@ -112,7 +114,7 @@ const SETTINGS_ITEM: NavItem = {
  */
 const MORE_ITEM: NavItem = {
   route: 'more',
-  labelKey: 'nav.more',
+  labelKey: NAV_LABEL_KEYS.more,
   icon: LayoutGrid,
 };
 
@@ -120,46 +122,34 @@ const MORE_ITEM: NavItem = {
  * How the routes split on a phone.
  *
  * ---------------------------------------------------------------------------
- * WHY FOUR TABS
+ * WHY FOUR TABS AND FIVE ARC SLOTS
  * ---------------------------------------------------------------------------
- * Seven tabs across a 320px bar is 45px each — under the 44px touch minimum
- * once padding is removed, with an 11px label that has to fit "Subscriptions".
- *
- * The split is by *how often you look*, not by importance. The four that keep a
- * slot are the ones opened to read something, repeatedly, in a day.
+ * Both numbers are physical, not editorial. Seven tabs across a 320px bar is
+ * 45px each — under the 44px touch minimum once padding is removed. Six arc
+ * items overlap at that width (see `arcRadius`). So nine slots is what a phone
+ * holds, and the app has more screens than that.
  *
  * ---------------------------------------------------------------------------
- * WHY THE ARC'S LAST SLOT IS A DOOR AND NOT A SHORTCUT
+ * WHY THE LAYOUT IS NOW THE USER'S
  * ---------------------------------------------------------------------------
- * Four tabs plus five arc items is nine slots, and the app has twelve screens.
- * The arc cannot absorb the difference: five is a geometric ceiling on a 320px
- * phone, not a preference — at six the items overlap (see `arcRadius`). So the
- * count was going to break, and adding features would have kept breaking it.
+ * It used to be two hardcoded arrays here, chosen by how often *we* guessed a
+ * screen gets opened. That guess is wrong for anyone whose money works
+ * differently — somebody paying down three loans wants Debt on the bar far more
+ * than Invest. The split now comes from `settings.mobileNavConfig`, and the
+ * defaults this file used to hardcode live in `DEFAULT_MOBILE_NAV`.
  *
- * Giving the last slot to the directory converts a fixed number of shortcuts
- * into an entry point that does not run out. It costs one shortcut — Goals,
- * which moves to being two taps instead of one — and buys every future screen a
- * home. The four that keep their slot are the ones opened to *change* something
- * regularly enough to be worth the gesture.
+ * Nothing reads that setting raw: `resolveMobileNav` repairs it first, which is
+ * what guarantees four tabs, no duplicates, no dead buttons for retired routes,
+ * and — the one rule a user cannot override — a way to reach the directory, and
+ * therefore every screen.
  *
  * The desktop sidebar is unaffected: it renders NAV in full and always has.
  */
-const MOBILE_PRIMARY: Route[] = ['dashboard', 'transactions','investments', 'wallets'];
-/* Five is the most the gesture arc can hold on a 320px phone — see arcRadius
-   in GestureNavWidget. `more` is deliberately last: the arc runs 150° to 30°,
-   so the final item sits at the right-hand end, nearest a right thumb's rest
-   position, which is where the one item that is always worth reaching belongs. */
-const MOBILE_SHORTCUTS: Route[] = ['subscriptions', 'budgets', 'cards', 'splits', 'more'];
 
 /** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
   return [...NAV, SETTINGS_ITEM, MORE_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
-
-/* Split so the bar reads left-to-right around the button: two, button, two. */
-const TAB_LEFT = MOBILE_PRIMARY.slice(0, 2).map(navItemFor);
-const TAB_RIGHT = MOBILE_PRIMARY.slice(2).map(navItemFor);
-const NAV_SHORTCUTS: Shortcut[] = MOBILE_SHORTCUTS.map(navItemFor);
 
 /**
  * What each tab needs before it can paint. Warmed on hover — a pointer takes
@@ -278,6 +268,18 @@ export function AppShell() {
      month picker — which changes `period`, not the route — leaves the reader
      where they were. */
   useScrollToTop(route);
+
+  /* The phone's layout, repaired on the way in — see `resolveMobileNav`. Memoed
+     on the stored value rather than on `settings`, so an unrelated preference
+     change (currency, theme) does not rebuild the nav arrays. */
+  const mobileNav = useMemo(
+    () => resolveMobileNav(settings.mobileNavConfig),
+    [settings.mobileNavConfig],
+  );
+  /* Split so the bar reads left-to-right around the button: two, button, two. */
+  const tabLeft = useMemo(() => mobileNav.tabs.slice(0, 2).map(navItemFor), [mobileNav.tabs]);
+  const tabRight = useMemo(() => mobileNav.tabs.slice(2).map(navItemFor), [mobileNav.tabs]);
+  const navShortcuts = useMemo<Shortcut[]>(() => mobileNav.arc.map(navItemFor), [mobileNav.arc]);
 
   /* Raises the "you have unpaid subscriptions" toast once per app open. Lives
      here rather than on the Recurring page precisely because the point is to
@@ -496,8 +498,8 @@ export function AppShell() {
           {route === 'investments' && <InvestmentsPage />}
           {route === 'budgets' && <BudgetsPage period={period} />}
           {route === 'splits' && <SharedExpensesPage />}
-          {route === 'subscriptions' && <SubscriptionsPage />}
-          {route === 'analytics' && <AnalyticsPage period={period} />}
+          {route === 'subscriptions' && <SubscriptionsPage onNavigate={go} />}
+          {route === 'analytics' && <AnalyticsPage period={period} onNavigate={go} />}
           {route === 'goals' && <GoalsPage />}
           {route === 'debt' && <DebtManagerPage />}
           {route === 'settings' && <SettingsPage />}
@@ -532,17 +534,17 @@ export function AppShell() {
       />
 
       <nav className="tabbar" aria-label={t('nav.mainNavigation')}>
-        {TAB_LEFT.map(tab)}
+        {tabLeft.map(tab)}
         {/* An empty grid cell, not a wrapper: the centre button is a sibling of
             the bar, so it can sit above the backdrop its own menu raises. A
             child could not — .tabbar creates a stacking context. */}
         <span className="tabbar-slot" aria-hidden="true" />
-        {TAB_RIGHT.map(tab)}
+        {tabRight.map(tab)}
       </nav>
 
       {/* Rendered beside the bar rather than inside it, and hidden with it on
           desktop. See the stacking note above. */}
-      <GestureNavWidget shortcuts={NAV_SHORTCUTS} activeRoute={route} onNavigate={go} />
+      <GestureNavWidget shortcuts={navShortcuts} activeRoute={route} onNavigate={go} />
     </div>
   );
 }

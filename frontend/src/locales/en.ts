@@ -1151,6 +1151,79 @@ export const en = {
       'Interest figures are estimates from the APR you entered. Nothing here accrues interest automatically — your lender’s statement is the authority.',
   },
 
+  /**
+   * The category distribution chart.
+   *
+   * Statistical vocabulary is used plainly rather than avoided: "median" and
+   * "outlier" are the words for these things, and a reader who does not know
+   * them is not helped by a vaguer synonym. The tooltip spells out what each
+   * one means in figures, which is where the explaining belongs.
+   */
+  /** Rearranging the phone's two navigation surfaces. */
+  mobileNav: {
+    title: 'Mobile navigation',
+    subtitle: 'Choose which screens the phone’s bottom bar and gesture menu carry',
+
+    barTitle: 'Bottom bar',
+    barHint: 'Four slots, always visible. Best for the screens you open to read something.',
+    centreNote: 'The centre button is fixed — press and hold it for the gesture menu below.',
+
+    arcTitle: 'Gesture menu',
+    arcHint: 'Up to {{max}} shortcuts, fanned out around the centre button. The last one sits nearest your thumb.',
+    moreNote: 'A route to More always stays available, so every screen can be reached from a phone.',
+
+    slotLabel: 'Slot {{index}}',
+    moveUp: 'Move {{name}} earlier',
+    moveDown: 'Move {{name}} later',
+    removeSlot: 'Remove {{name}}',
+    addSlot: 'Add a shortcut',
+    reset: 'Reset to default',
+  },
+
+  /** Salary dates, which anchor the liability heatmap. */
+  payday: {
+    title: 'Paydays',
+    subtitle: 'When your income arrives, so the heatmap can show what falls due before it',
+    dayLabel: 'Day {{day}}',
+    none: 'No paydays set yet.',
+    add: 'Add a payday',
+    remove: 'Remove day {{day}}',
+    hint: 'Add every date you get paid. Day 29–31 is fine — in a shorter month no marker is drawn.',
+    limit: 'That is the maximum of {{max}} paydays.',
+  },
+
+  boxplot: {
+    title: 'Spending distribution',
+    subtitle: 'How individual purchases spread out within each category',
+
+    /* The range loader. Default is this month — a year of rows is thousands of
+       circles, and nobody wants that rendered before they asked for it. */
+    rangeMonth: 'This month',
+    rangeYear: 'Last 12 months',
+    loadYear: 'Load 1-year data',
+    loadingYear: 'Loading a year…',
+    backToMonth: 'Back to this month',
+
+    median: 'Median',
+    iqrRange: 'Middle half {{from}}–{{to}}',
+    rangeSummary: 'Range {{from}}–{{to}}',
+    outlier: 'Unusually large for this category',
+    outlierCount_one: '{{count}} outlier',
+    outlierCount_other: '{{count}} outliers',
+    pointCount_one: '{{count}} tx',
+    pointCount_other: '{{count}} txs',
+
+    hoverHint: 'Hover a box for its spread, or a dot for one transaction',
+    caption: '{{range}} · {{count}} transactions',
+    omitted_one: '{{count}} category not shown',
+    omitted_other: '{{count}} categories not shown',
+    ariaLabel: 'Box plot of transaction amounts across {{count}} categories',
+
+    empty: 'Not enough spending to plot',
+    emptyHint:
+      'A category needs at least two transactions before a distribution says anything.',
+  },
+
   liability: {
     title: 'Upcoming bills',
     subtitle: 'What is already promised, and when it lands',
@@ -1191,6 +1264,14 @@ export const en = {
     beforePaydayHint: 'You cover this from last month{{sep}}s balance',
     afterPayday: 'Due on or after payday',
     paydayUnset: 'Set a payday to see what lands before it',
+    paydaySet: 'Set paydays',
+    /* Shown instead of the before/after split once there is more than one
+       payday, where that split stops being a meaningful reading. */
+    peakPayPeriod: 'Heaviest pay period',
+    payPeriodLeading: 'Days 1–{{to}}, before your first payday',
+    payPeriodFunded: 'Days {{from}}–{{to}}, funded by the {{from}}',
+    paydayCount_one: '{{count}} payday configured',
+    paydayCount_other: '{{count}} paydays configured',
 
     /* Bill splits. Deliberately phrased as money coming in, because it is. */
     expectedBack: 'Expected back',

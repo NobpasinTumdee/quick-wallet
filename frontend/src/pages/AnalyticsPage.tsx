@@ -4,11 +4,13 @@ import { useTranslation } from 'react-i18next';
 
 import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
 import { AnalyticsPayees } from '../components/AnalyticsPayees';
+import { CategoryBoxPlotCard } from '../components/CategoryBoxPlotCard';
 import { Icon } from '../components/Icon';
 import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { Card, EmptyState } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPeriod } from '../lib/format';
+import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Transaction, WalletBalance } from '../types';
 
@@ -47,7 +49,13 @@ const AnalyticsCategories = lazy(() =>
   import('../components/AnalyticsCategories').then((m) => ({ default: m.AnalyticsCategories })),
 );
 
-export function AnalyticsPage({ period }: { period: string }) {
+export function AnalyticsPage({
+  period,
+  onNavigate,
+}: {
+  period: string;
+  onNavigate?: (route: Route) => void;
+}) {
   const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
@@ -95,7 +103,7 @@ export function AnalyticsPage({ period }: { period: string }) {
           bottleneck three weeks out is worth more than any of them. Full width
           because the grid is seven columns of calendar plus an insights row —
           it does not tile into a half. */}
-      <SubscriptionHeatmapCard period={period} className="bento-item--full" />
+      <SubscriptionHeatmapCard period={period} className="bento-item--full" onNavigate={onNavigate} />
 
       {/* Full width: twelve months of a time series, the same argument the
           income-vs-spending chart makes on the Overview screen. It also keeps
@@ -134,6 +142,11 @@ export function AnalyticsPage({ period }: { period: string }) {
           locale={locale}
         />
       </Card>
+
+      {/* Full width: the x-axis is one band per category and the plot scrolls
+          horizontally when it runs out of room, so a half-card would put it in
+          a scroller at every breakpoint. */}
+      <CategoryBoxPlotCard period={period} className="bento-item--full" />
 
       <Card
         className="bento-item--half"

@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
+import { MobileNavSettings } from '../components/MobileNavSettings';
+import { PaydaySettings } from '../components/PaydaySettings';
 import { ThemeSettings } from '../components/ThemeSettings';
 import {
   Alert,
@@ -18,6 +20,7 @@ import {
 } from '../components/ui';
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
+import { MobileNavConfig, resolveMobileNav, resolvePaydays } from '../lib/mobileNav';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
@@ -41,6 +44,28 @@ export function SettingsPage() {
   const [fxRate, setFxRate] = useState(decimalToInput(settings.fxRate));
   const [fxBusy, setFxBusy] = useState(false);
   const [fxMessage, setFxMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+  /* Both of these save on change rather than behind the Preferences form's
+     button. They are direct manipulations — you drag a screen to a slot and
+     expect it to be there — and a layout editor that silently discards your
+     arrangement unless you find a Save button below it is the kind of thing
+     people only discover after losing the work. `save` is already optimistic
+     and rolls back, so a failure is visible without a form around it. */
+  const [navBusy, setNavBusy] = useState(false);
+
+  function saveMobileNav(next: MobileNavConfig) {
+    setNavBusy(true);
+    void save({ mobileNavConfig: next })
+      .catch(() => undefined)
+      .finally(() => setNavBusy(false));
+  }
+
+  function savePaydays(next: number[]) {
+    setNavBusy(true);
+    void save({ paydays: next })
+      .catch(() => undefined)
+      .finally(() => setNavBusy(false));
+  }
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -327,6 +352,18 @@ export function SettingsPage() {
           <p className="text-muted">{t('settings.checkingBackend')}</p>
         )}
       </Card>
+
+      <MobileNavSettings
+        value={resolveMobileNav(settings.mobileNavConfig)}
+        onChange={saveMobileNav}
+        busy={navBusy}
+      />
+
+      <PaydaySettings
+        value={resolvePaydays(settings.paydays)}
+        onChange={savePaydays}
+        busy={navBusy}
+      />
 
       <Card
         title={t('settings.account')}

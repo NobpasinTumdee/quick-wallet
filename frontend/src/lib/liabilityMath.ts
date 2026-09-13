@@ -103,11 +103,36 @@ export interface LiabilityMonth {
   expectedBack: number;
   openSplitCount: number;
 
-  payday: number | null;
-  /** Due strictly before payday — the stretch you fund from last month. */
+  /** Every configured payday that exists in this month, ascending. */
+  paydays: number[];
+  /**
+   * Due strictly before the *first* payday — the stretch you fund out of last
+   * month's balance, and the original reason this anchor exists.
+   */
   beforePayday: number;
-  /** Due on or after it. */
+  /** Everything from the first payday onward. */
   afterPayday: number;
+  /**
+   * The month cut at each payday.
+   *
+   * A single before/after split stops meaning anything once there are two
+   * paydays: with the 1st and the 16th, "after payday" is almost the whole
+   * month and says nothing. Segmenting instead keeps the reading honest —
+   * each period is a stretch of bills funded by one specific pay cheque.
+   */
+  payPeriods: PayPeriod[];
+  /** The costliest stretch, or null when nothing is due. */
+  peakPayPeriod: PayPeriod | null;
+}
+
+/** One stretch of the month, funded by one pay cheque. */
+export interface PayPeriod {
+  /** The payday that funds it, or null for the run-up to the first one. */
+  fundedBy: number | null;
+  startDay: number;
+  endDay: number;
+  total: number;
+  count: number;
 }
 
 export interface LiabilityInput {
@@ -117,8 +142,8 @@ export interface LiabilityInput {
   /** Cards with a computed statement due inside this month. */
   cardBills: CardBill[];
   billSplits: BillSplit[];
-  /** Day of month, 1-31. Out-of-range or absent means no anchor. */
-  payday?: number | null;
+  /** Days of the month a salary lands. Out-of-range entries are ignored. */
+  paydays?: number[] | null;
   /** `YYYY-MM-DD`. Drives `isToday` / `isPast`. */
   today?: string;
 }
@@ -245,10 +270,17 @@ export function buildLiabilityMonth(input: LiabilityInput): LiabilityMonth {
   const parsed = parsePeriod(period);
 
   const daysInMonth = parsed ? new Date(parsed.year, parsed.month, 0).getDate() : 0;
-  const payday =
-    typeof input.payday === 'number' && input.payday >= 1 && input.payday <= daysInMonth
-      ? Math.floor(input.payday)
-      : null;
+  /* A payday past the end of a short month is dropped rather than clamped: a
+     salary set for the 31st does not arrive on the 28th of February, and
+     drawing a marker there would be inventing one. */
+  const paydays = Array.from(
+    new Set(
+      (input.paydays ?? [])
+        .map((day) => Math.round(Number(day)))
+        .filter((day) => Number.isFinite(day) && day >= 1 && day <= daysInMonth),
+    ),
+  ).sort((a, b) => a - b);
+  const paydaySet = new Set(paydays);
 
   const buckets: LiabilityItem[][] = Array.from({ length: daysInMonth }, () => []);
 
@@ -330,7 +362,7 @@ export function buildLiabilityMonth(input: LiabilityInput): LiabilityMonth {
       items: sorted,
       intensity: peak > 0 ? dayTotal / peak : 0,
       level: heatLevel(dayTotal, items.length, meanBilledDay),
-      isPayday: payday === day,
+      isPayday: paydaySet.has(day),
       isToday: today === date,
       isPast: Boolean(today) && date < String(today),
     };
@@ -365,8 +397,36 @@ export function buildLiabilityMonth(input: LiabilityInput): LiabilityMonth {
     null,
   );
 
-  const beforePayday = payday
-    ? money(days.filter((d) => d.day < payday).reduce((sum, d) => sum + d.total, 0))
+  /* Cut the month at each payday. The leading segment — days before the first
+     one — is the stretch funded from last month's balance, which is the reading
+     the single-payday version gave and the one worth keeping. */
+  const payPeriods: PayPeriod[] = [];
+  if (days.length && paydays.length) {
+    const bounds = [1, ...paydays];
+    for (let i = 0; i < bounds.length; i += 1) {
+      const startDay = bounds[i];
+      const endDay = i + 1 < bounds.length ? bounds[i + 1] - 1 : daysInMonth;
+      // The leading segment is empty when a payday falls on the 1st.
+      if (endDay < startDay) continue;
+      const slice = days.slice(startDay - 1, endDay);
+      payPeriods.push({
+        fundedBy: i === 0 && paydays[0] > 1 ? null : bounds[i],
+        startDay,
+        endDay,
+        total: money(slice.reduce((sum, d) => sum + d.total, 0)),
+        count: slice.reduce((sum, d) => sum + d.items.length, 0),
+      });
+    }
+  }
+
+  const peakPayPeriod = payPeriods.reduce<PayPeriod | null>(
+    (best, period) => (period.total > 0 && (!best || period.total > best.total) ? period : best),
+    null,
+  );
+
+  const firstPayday = paydays[0] ?? null;
+  const beforePayday = firstPayday
+    ? money(days.filter((d) => d.day < firstPayday).reduce((sum, d) => sum + d.total, 0))
     : 0;
 
   return {
@@ -383,8 +443,10 @@ export function buildLiabilityMonth(input: LiabilityInput): LiabilityMonth {
     billCount: days.reduce((sum, d) => sum + d.items.length, 0),
     expectedBack: money(expectedBack),
     openSplitCount,
-    payday,
+    paydays,
     beforePayday,
     afterPayday: money(total - beforePayday),
+    payPeriods,
+    peakPayPeriod,
   };
 }

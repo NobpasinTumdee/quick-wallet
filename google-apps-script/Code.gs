@@ -366,7 +366,33 @@ var SHEETS = {
          Storing a name from a closed list keeps arbitrary CSS out of the sheet
          and out of the custom property it ends up in; the client resolves the
          id to a stack. Empty = the system face. */
-      { key: 'fontFamily', header: 'Font Family', type: 'string' }
+      { key: 'fontFamily', header: 'Font Family', type: 'string' },
+
+      /* ---- Personalisation appended after fontFamily ----
+         Positional writes again: new columns only at the end, where
+         createMissingSheets() appends their headers too. Both coerce to a safe
+         empty value for a row written before they existed, so the upgrade is
+         seamless — the client falls back to its defaults for an empty cell. */
+
+      /* { tabs: [route,...], arc: [route,...] } — which screens the phone's
+         bottom bar and gesture arc carry.
+
+         Stored as opaque JSON and validated client-side rather than here. The
+         server has no idea what a route is: the list lives in
+         `frontend/src/lib/router.ts`, it changes when the UI changes, and a
+         copy of it in this file would be a second source of truth that goes
+         stale silently the first time somebody renames a page. What the server
+         guarantees is that the cell holds an object with two arrays of short
+         strings; `resolveMobileNav` in the client decides what they mean and
+         repairs anything it does not recognise. */
+      { key: 'mobileNavConfig', header: 'Mobile Nav Config (JSON)', type: 'json' },
+
+      /* Days of the month a salary lands, e.g. [1, 16] or [7, 14, 21, 28].
+         An array rather than one number because being paid twice a month is
+         ordinary, and the heatmap's whole job is showing which bills fall
+         before the next pay cheque — with one anchor, half of those readings
+         were wrong for anyone paid fortnightly. */
+      { key: 'paydays', header: 'Paydays', type: 'jsonlist' }
     ]
   }
 };
@@ -1174,7 +1200,12 @@ function defaultSettings_(userId) {
     updatedAt: new Date().toISOString(),
     customThemes: [],
     activeCustomThemeId: '',
-    fontFamily: ''
+    fontFamily: '',
+    /* Empty means "the client's defaults". Deliberately not a copy of them:
+       the server does not know the route list, and baking one in here would
+       freeze a stale layout onto every new profile the day a page is renamed. */
+    mobileNavConfig: {},
+    paydays: []
   };
 }
 
@@ -3163,10 +3194,64 @@ function settingsSave_(user, body) {
        That field is a reference into the library and would dangle; a typeface is
        a standalone scalar, so whether a preset keeps or clears it is the
        client's call, not a correctness constraint. */
-    fontFamily: body.fontFamily !== undefined ? fontId_(body.fontFamily) : (current.fontFamily || '')
+    fontFamily: body.fontFamily !== undefined ? fontId_(body.fontFamily) : (current.fontFamily || ''),
+    mobileNavConfig: body.mobileNavConfig !== undefined
+      ? sanitizeNavConfig_(body.mobileNavConfig)
+      : (current.mobileNavConfig || {}),
+    paydays: body.paydays !== undefined
+      ? sanitizePaydays_(body.paydays)
+      : (current.paydays || [])
   };
 
   return persistSettings_(user.id, next);
+}
+
+/**
+ * Shape-check the mobile nav layout without pretending to understand it.
+ *
+ * The server has no route list — see the note on the column — so this enforces
+ * the *shape* and nothing else: two arrays of short, plausible identifiers,
+ * bounded in length. Anything unrecognised is the client's problem to repair,
+ * which it does on every read.
+ *
+ * The bounds are the point. Without them a malformed or hostile write could put
+ * a megabyte of strings in a cell that the app then parses on every boot.
+ */
+var NAV_SLOT_MAX = 12;
+
+function sanitizeNavConfig_(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  var clean = function (list) {
+    if (!Array.isArray(list)) return [];
+    var out = [];
+    for (var i = 0; i < list.length && out.length < NAV_SLOT_MAX; i += 1) {
+      var id = String(list[i] === null || list[i] === undefined ? '' : list[i]).trim();
+      // Route ids are lowercase words. Anything else is not one, whatever the
+      // client thinks it is sending.
+      if (/^[a-z][a-z0-9-]{0,39}$/.test(id) && out.indexOf(id) === -1) out.push(id);
+    }
+    return out;
+  };
+
+  return { tabs: clean(value.tabs), arc: clean(value.arc) };
+}
+
+/** Days of the month, 1-31, deduped and sorted. Anything else is dropped. */
+var MAX_PAYDAYS = 8;
+
+function sanitizePaydays_(value) {
+  if (!Array.isArray(value)) return [];
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < value.length; i += 1) {
+    var day = Math.round(Number(value[i]));
+    if (!isFinite(day) || day < 1 || day > 31 || seen[day]) continue;
+    seen[day] = true;
+    out.push(day);
+  }
+  out.sort(function (a, b) { return a - b; });
+  return out.slice(0, MAX_PAYDAYS);
 }
 
 /* =========================================================================

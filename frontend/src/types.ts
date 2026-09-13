@@ -1,5 +1,9 @@
 /** Mirrors `backend/src/types.ts` — keep the two in sync. */
 
+import type { MobileNavConfig } from './lib/mobileNav';
+
+export type { MobileNavConfig };
+
 export type WalletMode = 'expense' | 'investment';
 export type WalletKind = 'cash' | 'bank' | 'ewallet' | 'credit' | 'brokerage' | 'other';
 /**
@@ -412,6 +416,25 @@ export interface Settings {
   monthlyIncome: number;
   categories: string[];
   updatedAt: string;
+
+  /**
+   * Which screens the phone's bottom bar and gesture arc carry.
+   *
+   * Never read directly — `resolveMobileNav` in `lib/mobileNav` repairs it
+   * first. The stored value outlives the code that wrote it, so it can name
+   * routes that no longer exist, and a dead button in a tab bar is a silent
+   * failure rather than a loud one.
+   */
+  mobileNavConfig: MobileNavConfig;
+
+  /**
+   * Days of the month a salary lands, e.g. `[1, 16]`.
+   *
+   * An array because being paid twice a month is ordinary. Sorted and deduped
+   * by `resolvePaydays`; a day past the end of a short month simply draws no
+   * marker that month.
+   */
+  paydays: number[];
 }
 
 export interface DashboardSummary {

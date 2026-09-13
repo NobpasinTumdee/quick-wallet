@@ -34,6 +34,12 @@ export const DEFAULT_SETTINGS: Settings = {
   monthlyIncome: 0,
   categories: [],
   updatedAt: '',
+  /* Empty rather than a copy of DEFAULT_MOBILE_NAV: "unset" and "deliberately
+     the same as the default" have to stay distinguishable, or the Settings UI
+     cannot tell a fresh profile from one that reset its layout. Everything that
+     reads this runs it through `resolveMobileNav`, which supplies the default. */
+  mobileNavConfig: { tabs: [], arc: [] },
+  paydays: [],
 };
 
 interface SettingsContextValue {

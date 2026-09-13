@@ -10,20 +10,29 @@
  * legible only because nobody had counted.
  *
  * So four routes keep a permanent slot and the rest move behind one control.
- * Which four is not arbitrary: they are the screens you open to *look* at
- * something, several times a day. Behind the button are the ones you open to
- * *change* something, which happens weekly at most and is worth one extra
- * gesture.
  *
  * ---------------------------------------------------------------------------
- * WHY THE LAST SLOT IS A DOOR
+ * WHY THE LAST SLOT IS USUALLY A DOOR
  * ---------------------------------------------------------------------------
  * The arc holds five items and no more — see `arcRadius`, where that is
  * geometry rather than taste. Once the app passed nine screens the arc could
  * not keep absorbing them, and every new feature would have meant demoting an
- * old one. The final slot therefore opens the app directory instead of a single
- * screen: four shortcuts that are worth a gesture, and one entry point that
- * never runs out. See MoreMenuPage.
+ * old one. So one slot opens the app directory instead of a single screen:
+ * shortcuts that are worth a gesture, plus an entry point that never runs out.
+ * See MoreMenuPage.
+ *
+ * ---------------------------------------------------------------------------
+ * WHERE THE CONTENTS COME FROM
+ * ---------------------------------------------------------------------------
+ * `shortcuts` is a prop, and the caller builds it from the user's own
+ * `settings.mobileNavConfig` — so which screens live here is a preference, not
+ * a decision baked into this file. This component only owes the arc its
+ * geometry and its gesture.
+ *
+ * It renders whatever length it is handed, one to five. `arcRadius` grows the
+ * radius to keep items apart as the count rises, and a single shortcut sits
+ * straight up at 90°. Five is enforced upstream in `resolveMobileNav`, because
+ * that is where a layout can be repaired; here it would only be a crash.
  *
  * ---------------------------------------------------------------------------
  * THE INTERACTION

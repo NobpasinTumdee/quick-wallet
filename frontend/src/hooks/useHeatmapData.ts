@@ -39,14 +39,21 @@ export interface HeatmapData extends LiabilityMonth {
 
 export function useHeatmapData(
   period: string,
-  options: { payday?: number | null; today?: string } = {},
+  options: { paydays?: number[] | null; today?: string } = {},
 ): HeatmapData {
   const subscriptions = useExcelDB<Subscription>('subscriptions');
   const cards = useCreditCards();
   const splitter = useBillSplitter();
 
   const today = options.today ?? todayKey();
-  const payday = options.payday ?? null;
+  /* Normalised here so the identity is stable across renders — an inline array
+     literal from the caller would rebuild the month on every keystroke
+     elsewhere on the page. */
+  const paydayKey = (options.paydays ?? []).join(',');
+  const paydays = useMemo(
+    () => (paydayKey ? paydayKey.split(',').map(Number) : []),
+    [paydayKey],
+  );
 
   /* Narrowed to the two fields the engine needs before it reaches the memo, so
      a re-render that changes an unrelated part of a CardState does not rebuild
@@ -72,10 +79,10 @@ export function useHeatmapData(
         subscriptions: subscriptions.items,
         cardBills,
         billSplits: splitter.bills,
-        payday,
+        paydays,
         today,
       }),
-    [period, subscriptions.items, cardBills, splitter.bills, payday, today],
+    [period, subscriptions.items, cardBills, splitter.bills, paydays, today],
   );
 
   return {

@@ -170,7 +170,7 @@ export function SubscriptionHeatmap({
           <span className="liab-key is-medium" aria-hidden="true" />
           <span className="liab-key is-high" aria-hidden="true" />
           <span>{t('liability.legendHeavy')}</span>
-          {data.payday !== null && (
+          {data.paydays.length > 0 && (
             <span className="liab-legend-payday">
               <span className="liab-key is-payday" aria-hidden="true" />
               {t('liability.legendPayday')}
@@ -278,9 +278,18 @@ function LiabilityInsights({
         </span>
       </div>
 
-      {/* The warning the widget exists for: money that has to come out of last
-          month's balance, because it lands before the next pay cheque. */}
-      {data.payday !== null ? (
+      {/* The warning the widget exists for.
+
+          With one payday this is the original reading: money that has to come
+          out of last month's balance because it lands before the next cheque.
+          With several, that split says almost nothing — paid on the 1st and the
+          16th, "after payday" is the whole month — so the heaviest *pay period*
+          is shown instead, which is the same question asked correctly. */}
+      {data.paydays.length === 0 ? (
+        <div className="liab-insight liab-insight--muted">
+          <span className="liab-insight-hint">{t('liability.paydayUnset')}</span>
+        </div>
+      ) : data.paydays.length === 1 ? (
         <div className={cx('liab-insight', data.beforePayday > data.afterPayday && 'is-warning')}>
           <span className="liab-insight-label">
             <Icon icon={TrendingDown} size="sm" />
@@ -292,8 +301,28 @@ function LiabilityInsights({
           </span>
         </div>
       ) : (
-        <div className="liab-insight liab-insight--muted">
-          <span className="liab-insight-hint">{t('liability.paydayUnset')}</span>
+        <div className="liab-insight">
+          <span className="liab-insight-label">
+            <Icon icon={TrendingDown} size="sm" />
+            {t('liability.peakPayPeriod')}
+          </span>
+          <span className="liab-insight-value">
+            {data.peakPayPeriod
+              ? money(data.peakPayPeriod.total)
+              : money(0)}
+          </span>
+          <span className="liab-insight-hint">
+            {data.peakPayPeriod
+              ? data.peakPayPeriod.fundedBy === null
+                ? t('liability.payPeriodLeading', {
+                    to: data.peakPayPeriod.endDay,
+                  })
+                : t('liability.payPeriodFunded', {
+                    from: data.peakPayPeriod.startDay,
+                    to: data.peakPayPeriod.endDay,
+                  })
+              : t('liability.paydayCount', { count: data.paydays.length })}
+          </span>
         </div>
       )}
 

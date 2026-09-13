@@ -24,6 +24,7 @@ import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../compon
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { todayKey, useSubscriptions } from '../hooks/useSubscriptions';
 import { currentPeriod, cx, formatDate } from '../lib/format';
+import { Route } from '../lib/router';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, WalletBalance } from '../types';
@@ -73,7 +74,7 @@ function relativeLabel(days: number, t: TFunction): string {
   return t('recurring.dueIn', { count: days });
 }
 
-export function SubscriptionsPage() {
+export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) => void }) {
   const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
@@ -218,7 +219,7 @@ export function SubscriptionsPage() {
           `currentPeriod()` rather than the shell's month: this screen has no
           month picker, and a forecast of a month you already lived through is
           not a forecast. */}
-      {subscriptions.items.length > 0 && <SubscriptionHeatmapCard period={currentPeriod()} />}
+      {subscriptions.items.length > 0 && <SubscriptionHeatmapCard period={currentPeriod()} onNavigate={onNavigate} />}
 
       {subscriptions.initialLoading ? (
         <Card padded>
