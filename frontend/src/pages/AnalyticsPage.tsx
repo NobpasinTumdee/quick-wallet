@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
 import { AnalyticsPayees } from '../components/AnalyticsPayees';
 import { Icon } from '../components/Icon';
+import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { Card, EmptyState } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPeriod } from '../lib/format';
@@ -89,6 +90,13 @@ export function AnalyticsPage({ period }: { period: string }) {
 
   return (
     <div className="bento">
+      {/* First, and full width. Every other widget here looks backwards at
+          money already gone; this is the only one that looks forward, and a
+          bottleneck three weeks out is worth more than any of them. Full width
+          because the grid is seven columns of calendar plus an insights row —
+          it does not tile into a half. */}
+      <SubscriptionHeatmapCard period={period} className="bento-item--full" />
+
       {/* Full width: twelve months of a time series, the same argument the
           income-vs-spending chart makes on the Overview screen. It also keeps
           the half-card count even — an odd one strands itself beside a

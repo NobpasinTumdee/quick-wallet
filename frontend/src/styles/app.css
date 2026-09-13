@@ -5065,6 +5065,482 @@ line.arate-zero {
   border-radius: 3px;
 }
 
+/* ==========================================================================
+   Liability heatmap — committed outgoings, day by day
+   --------------------------------------------------------------------------
+   Sibling to `.heat` above, and deliberately not the same encoding. That one
+   ramps one hue by opacity to show how much was spent; this one steps through
+   four named levels because its question is categorical — is this day a
+   problem — and nobody reads 0.55 opacity as worse than 0.48.
+
+   Every colour is a token bar the payday gold, which is a fixed hue on purpose:
+   it is the one mark here that means "not a liability", and borrowing a theme
+   colour would make it change meaning between palettes.
+   ========================================================================== */
+
+.liab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.liab-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.liab-weekdays,
+.liab-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.liab-weekdays {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/**
+ * One day.
+ *
+ * `--liab-cell` is the day's share of the heaviest day, 0…1. It only modulates
+ * the fill *within* a level, so the four steps stay distinguishable from each
+ * other while a light amber day still reads lighter than a heavy one.
+ */
+.liab-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  aspect-ratio: 1;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.liab-cell--blank {
+  background: transparent;
+  border-color: transparent;
+}
+
+.liab-cell-day {
+  font-size: var(--text-2xs);
+  line-height: 1;
+}
+
+/* One dot per bill, capped at three. Carries the count through greyscale and
+   through the amber/red pair that some readers cannot separate. */
+.liab-cell-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.liab-cell-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+/* ---- The four steps ---- */
+
+/* Quiet: a bill, but a small one against this month's own normal. Barely
+   tinted — the whole point is that it does not compete for attention. */
+.liab-cell.is-low {
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(8% + var(--liab-cell, 0) * 10%),
+    var(--surface-2)
+  );
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--divider));
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+/* Watch this. */
+.liab-cell.is-medium {
+  background: color-mix(
+    in srgb,
+    var(--warning) calc(22% + var(--liab-cell, 0) * 22%),
+    var(--surface)
+  );
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Danger. The glow is what makes it findable in peripheral vision when you are
+   scanning the month rather than reading it. */
+.liab-cell.is-high {
+  background: color-mix(
+    in srgb,
+    var(--negative) calc(38% + var(--liab-cell, 0) * 30%),
+    var(--surface)
+  );
+  border-color: var(--negative);
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--negative) 35%, transparent),
+    0 0 14px -2px color-mix(in srgb, var(--negative) 55%, transparent);
+  cursor: pointer;
+}
+
+.liab-cell.is-high .liab-cell-day {
+  font-weight: var(--weight-semi);
+}
+
+/* Days already gone. Still shown — the month's shape is the point, and hiding
+   the first half of it would make every month look light by the 20th. */
+.liab-cell.is-past {
+  opacity: 0.45;
+}
+
+.liab-cell.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/**
+ * Payday.
+ *
+ * A gold rule down the leading edge rather than a fill, because payday is not a
+ * liability and must not read as one. It is the line the reader mentally splits
+ * the month on — bills to its left come out of last month's money.
+ */
+.liab-cell.is-payday::before {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-start: -3px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to bottom, #d4af37, color-mix(in srgb, #d4af37 35%, transparent));
+  box-shadow: 0 0 8px -1px color-mix(in srgb, #d4af37 70%, transparent);
+}
+
+.liab-cell:is(.is-low, .is-medium, .is-high):hover {
+  transform: scale(1.08);
+  z-index: 1;
+}
+
+.liab-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+.liab-cell.is-selected {
+  transform: scale(1.08);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+  z-index: 1;
+}
+
+/* ---- Legend ---- */
+
+.liab-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.liab-key {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--divider);
+}
+
+.liab-key.is-low {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+}
+
+.liab-key.is-medium {
+  background: color-mix(in srgb, var(--warning) 40%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.liab-key.is-high {
+  background: color-mix(in srgb, var(--negative) 60%, var(--surface));
+  border-color: var(--negative);
+}
+
+.liab-key.is-payday {
+  width: 3px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: #d4af37;
+}
+
+.liab-legend-payday {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+/* ---- The detail ---- */
+
+.liab-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-md);
+  animation: reveal var(--dur-base) var(--ease-out) both;
+}
+
+.liab-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.liab-detail-total {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.liab-detail-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.liab-detail-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.liab-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liab-detail-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.liab-detail-list li:nth-child(odd) {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.liab-detail-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.liab-detail-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.liab-detail-name small {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.liab-detail-amount {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ---- Insights ---- */
+
+.liab-insights {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+@media (min-width: 560px) {
+  .liab-insights {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+}
+
+.liab-insight {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.liab-insight-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-faint);
+}
+
+.liab-insight-value {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.liab-insight-value--strong {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.liab-insight-hint {
+  font-size: var(--text-2xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* More lands before payday than after — the one state worth colouring. */
+.liab-insight.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: var(--warning-soft);
+}
+
+/* Money coming back. Tinted the other way so it cannot be misread as a cost. */
+.liab-insight.is-credit {
+  border-color: color-mix(in srgb, var(--positive) 40%, transparent);
+  background: var(--positive-soft);
+}
+
+.liab-insight.is-credit .liab-insight-value {
+  color: var(--positive);
+}
+
+.liab-insight--muted {
+  justify-content: center;
+  background: transparent;
+  border-style: dashed;
+}
+
+/* ---- Empty ---- */
+
+.liab--empty {
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.liab-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--accent-softer);
+  color: var(--accent);
+}
+
+.liab-empty-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.liab-empty-hint {
+  margin: 0;
+  max-width: 34ch;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liab-cell,
+  .liab-detail {
+    transition: none;
+    animation: none;
+  }
+
+  .liab-cell:hover,
+  .liab-cell.is-selected {
+    transform: none;
+  }
+}
+
+/* The payday selector in the card header. Compact because it sits beside the
+   title, and native because a 31-item list is exactly what a <select> is for —
+   on a phone it opens the OS picker, which beats anything hand-rolled. */
+.liab-payday-picker select {
+  padding: 5px var(--space-2);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.liab-payday-picker select:hover {
+  border-color: var(--accent-ring);
+  color: var(--text);
+}
+
+.liab-payday-picker select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ---- Category treemap ---- */
 
 .atree {

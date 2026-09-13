@@ -26,28 +26,13 @@ import { useCallback } from 'react';
 
 import { mutateMatching } from '../api/cache';
 import { CollectionState, useExcelDB } from '../hooks/useExcelDB';
+import { advanceDueDate } from '../lib/recurrence';
 import { Subscription, SubscriptionPayment, Transaction, WalletBalance } from '../types';
 
-/** Mirrors `advanceDueDate_` in Code.gs — see the note there about month ends. */
-export function advanceDueDate(dateKey: string, frequency: Subscription['frequency']): string {
-  const [year, month, day] = String(dateKey ?? '').split('-').map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return dateKey;
-
-  const toKey = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
-  if (frequency === 'weekly') return toKey(new Date(year, month - 1, day + 7));
-
-  const step = frequency === 'yearly' ? 12 : 1;
-  const target = month - 1 + step;
-  const targetYear = year + Math.floor(target / 12);
-  const targetMonth = ((target % 12) + 12) % 12;
-
-  // Day 0 of the next month is the last day of the target month, so a bill on
-  // the 31st lands on the 28th in February rather than overflowing into March.
-  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
-  return toKey(new Date(targetYear, targetMonth, Math.min(day, lastDay)));
-}
+/* Re-exported so the call sites that reach for it here keep working; the
+   implementation moved to `lib/recurrence` when the liability heatmap needed to
+   project bills without pulling in React. */
+export { advanceDueDate };
 
 /** Today as `YYYY-MM-DD`, in local time — the same clock the user reads. */
 export function todayKey(): string {

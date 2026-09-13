@@ -1041,6 +1041,59 @@ export const en = {
     settings: 'Currency, language, theme and your workbook',
   },
 
+  /**
+   * The liability heatmap — committed outgoings, day by day.
+   *
+   * Its own section rather than living under `analytics`, because the widget
+   * appears on two screens and belongs to neither.
+   */
+  liability: {
+    title: 'Upcoming bills',
+    subtitle: 'What is already promised, and when it lands',
+    empty: 'Nothing is scheduled this month.',
+    emptyHint: 'Subscriptions and card statements appear here as they fall due.',
+
+    /* Day cells. `count` drives the plural. */
+    dayEmpty: '{{date}} · nothing due',
+    daySummary_one: '{{date}} · {{amount}} across {{count}} bill',
+    daySummary_other: '{{date}} · {{amount}} across {{count}} bills',
+
+    /* The detail popover. */
+    dueOn: 'Due {{date}}',
+    dayTotal: 'Total due',
+    close: 'Close',
+    kindSubscription: 'Subscription',
+    kindCard: 'Card statement',
+
+    /* Legend. */
+    legendQuiet: 'Quiet',
+    legendHeavy: 'Heavy',
+    legendPayday: 'Payday',
+    paydayNone: 'No payday set',
+    paydayOption: 'Payday: day {{day}}',
+
+    /* Insights. */
+    insights: 'Insights',
+    peakWeek: 'Peak billing week',
+    peakWeekValue: 'Week {{week}} ({{from}}–{{to}}) costs {{amount}}',
+    peakDay: 'Heaviest day',
+    peakDayValue: '{{date}} · {{amount}}',
+    totalLiabilities: 'Total monthly liabilities',
+    fromSubscriptions: '{{amount}} subscriptions',
+    fromCards: '{{amount}} card statements',
+
+    /* The payday split — the actual warning this screen exists to give. */
+    beforePayday: 'Due before payday',
+    beforePaydayHint: 'You cover this from last month{{sep}}s balance',
+    afterPayday: 'Due on or after payday',
+    paydayUnset: 'Set a payday to see what lands before it',
+
+    /* Bill splits. Deliberately phrased as money coming in, because it is. */
+    expectedBack: 'Expected back',
+    expectedBackHint_one: 'From {{count}} open shared bill — not counted above',
+    expectedBackHint_other: 'From {{count}} open shared bills — not counted above',
+  },
+
   notFound: {
     title: 'Lost in the ledger',
     message: 'That page is not in the books. It may have been renamed, or the link may be wrong.',

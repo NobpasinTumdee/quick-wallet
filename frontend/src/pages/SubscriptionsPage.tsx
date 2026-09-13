@@ -17,12 +17,13 @@ import type { TFunction } from 'i18next';
 
 import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
+import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { TranslationKey } from '../locales';
 import { SubscriptionForm, SubscriptionPayload } from '../components/SubscriptionForm';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { todayKey, useSubscriptions } from '../hooks/useSubscriptions';
-import { cx, formatDate } from '../lib/format';
+import { currentPeriod, cx, formatDate } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, WalletBalance } from '../types';
@@ -205,6 +206,19 @@ export function SubscriptionsPage() {
           </div>
         </section>
       )}
+
+      {/* The month ahead, above the list.
+
+          Below the summary because the summary answers "how much" and this
+          answers "when", and the second question only becomes interesting once
+          you have the first. Above the timeline because the timeline is sorted
+          by urgency and therefore cannot show you a shape — three bills landing
+          on the same Tuesday look like three ordinary rows in it.
+
+          `currentPeriod()` rather than the shell's month: this screen has no
+          month picker, and a forecast of a month you already lived through is
+          not a forecast. */}
+      {subscriptions.items.length > 0 && <SubscriptionHeatmapCard period={currentPeriod()} />}
 
       {subscriptions.initialLoading ? (
         <Card padded>

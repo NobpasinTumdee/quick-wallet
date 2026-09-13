@@ -1027,6 +1027,47 @@ export const th: TranslationSchema = {
     settings: 'สกุลเงิน ภาษา ธีม และไฟล์ข้อมูลของคุณ',
   },
 
+  liability: {
+    title: 'บิลที่กำลังจะถึง',
+    subtitle: 'สิ่งที่ผูกพันไว้แล้ว และจะครบกำหนดเมื่อไร',
+    empty: 'เดือนนี้ไม่มีรายการที่ต้องชำระ',
+    emptyHint: 'รายจ่ายประจำและใบแจ้งยอดบัตรจะแสดงที่นี่เมื่อถึงกำหนด',
+
+    dayEmpty: '{{date}} · ไม่มีรายการ',
+    daySummary_one: '{{date}} · {{amount}} จาก {{count}} รายการ',
+    daySummary_other: '{{date}} · {{amount}} จาก {{count}} รายการ',
+
+    dueOn: 'ครบกำหนด {{date}}',
+    dayTotal: 'รวมที่ต้องชำระ',
+    close: 'ปิด',
+    kindSubscription: 'รายจ่ายประจำ',
+    kindCard: 'ใบแจ้งยอดบัตร',
+
+    legendQuiet: 'เบา',
+    legendHeavy: 'หนัก',
+    legendPayday: 'วันเงินเดือนออก',
+    paydayNone: 'ยังไม่ได้ตั้งวันเงินเดือน',
+    paydayOption: 'เงินเดือนออก: วันที่ {{day}}',
+
+    insights: 'ข้อสังเกต',
+    peakWeek: 'สัปดาห์ที่หนักที่สุด',
+    peakWeekValue: 'สัปดาห์ที่ {{week}} ({{from}}–{{to}}) รวม {{amount}}',
+    peakDay: 'วันที่หนักที่สุด',
+    peakDayValue: '{{date}} · {{amount}}',
+    totalLiabilities: 'ภาระผูกพันรวมทั้งเดือน',
+    fromSubscriptions: 'รายจ่ายประจำ {{amount}}',
+    fromCards: 'ใบแจ้งยอดบัตร {{amount}}',
+
+    beforePayday: 'ครบกำหนดก่อนเงินเดือนออก',
+    beforePaydayHint: 'ต้องใช้เงินคงเหลือจากเดือนก่อน{{sep}}',
+    afterPayday: 'ครบกำหนดตั้งแต่วันเงินเดือนออก',
+    paydayUnset: 'ตั้งวันเงินเดือนออกเพื่อดูว่ามีอะไรครบกำหนดก่อนหน้านั้น',
+
+    expectedBack: 'เงินที่จะได้คืน',
+    expectedBackHint_one: 'จากบิลหารที่ยังค้าง {{count}} รายการ — ไม่รวมในยอดด้านบน',
+    expectedBackHint_other: 'จากบิลหารที่ยังค้าง {{count}} รายการ — ไม่รวมในยอดด้านบน',
+  },
+
   notFound: {
     title: 'หลงอยู่ในสมุดบัญชี',
     message: 'ไม่พบหน้านี้ในระบบ อาจถูกเปลี่ยนชื่อ หรือลิงก์อาจไม่ถูกต้อง',
