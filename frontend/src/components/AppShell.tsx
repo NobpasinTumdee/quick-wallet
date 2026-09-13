@@ -5,6 +5,7 @@ import {
   HandCoins,
   PiggyBank,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   ChartNoAxesCombined,
   PanelLeftClose,
@@ -35,6 +36,7 @@ import { SharedExpensesPage } from '../pages/SharedExpensesPage';
 import { AnalyticsPage } from '../pages/AnalyticsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { GoalsPage } from '../pages/GoalsPage';
+import { MoreMenuPage } from '../pages/MoreMenuPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -101,29 +103,54 @@ const SETTINGS_ITEM: NavItem = {
 };
 
 /**
- * How the seven routes split on a phone.
+ * The app directory. Also outside NAV, and for the opposite reason to Settings:
+ * the sidebar lists every screen already, so a "More" entry there would be a
+ * link to a list of the links beside it. It exists for the phone.
+ */
+const MORE_ITEM: NavItem = {
+  route: 'more',
+  labelKey: 'nav.more',
+  icon: LayoutGrid,
+};
+
+/**
+ * How the routes split on a phone.
  *
  * ---------------------------------------------------------------------------
- * WHY FOUR AND FOUR RATHER THAN SEVEN
+ * WHY FOUR TABS
  * ---------------------------------------------------------------------------
  * Seven tabs across a 320px bar is 45px each — under the 44px touch minimum
  * once padding is removed, with an 11px label that has to fit "Subscriptions".
  *
  * The split is by *how often you look*, not by importance. The four that keep a
- * slot are the ones opened to read something, repeatedly, in a day. The four
- * behind the centre button are opened to change something — a budget, a card, a
- * setting — which happens weekly at most and comfortably affords one gesture.
+ * slot are the ones opened to read something, repeatedly, in a day.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE ARC'S LAST SLOT IS A DOOR AND NOT A SHORTCUT
+ * ---------------------------------------------------------------------------
+ * Four tabs plus five arc items is nine slots, and the app has twelve screens.
+ * The arc cannot absorb the difference: five is a geometric ceiling on a 320px
+ * phone, not a preference — at six the items overlap (see `arcRadius`). So the
+ * count was going to break, and adding features would have kept breaking it.
+ *
+ * Giving the last slot to the directory converts a fixed number of shortcuts
+ * into an entry point that does not run out. It costs one shortcut — Goals,
+ * which moves to being two taps instead of one — and buys every future screen a
+ * home. The four that keep their slot are the ones opened to *change* something
+ * regularly enough to be worth the gesture.
  *
  * The desktop sidebar is unaffected: it renders NAV in full and always has.
  */
 const MOBILE_PRIMARY: Route[] = ['dashboard', 'transactions','investments', 'wallets'];
 /* Five is the most the gesture arc can hold on a 320px phone — see arcRadius
-   in GestureNavWidget. Anything added beyond this needs a different menu. */
-const MOBILE_SHORTCUTS: Route[] = ['subscriptions', 'budgets', 'cards', 'splits', 'goals'];
+   in GestureNavWidget. `more` is deliberately last: the arc runs 150° to 30°,
+   so the final item sits at the right-hand end, nearest a right thumb's rest
+   position, which is where the one item that is always worth reaching belongs. */
+const MOBILE_SHORTCUTS: Route[] = ['subscriptions', 'budgets', 'cards', 'splits', 'more'];
 
-/** Resolves a route id to its NAV row. Settings lives outside NAV, in the topbar. */
+/** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
-  return [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
+  return [...NAV, SETTINGS_ITEM, MORE_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
 
 /* Split so the bar reads left-to-right around the button: two, button, two. */
@@ -206,7 +233,8 @@ const ROUTE_DATA: Record<Route, string[]> = {
   splits: ['/api/bill-splits', '/api/wallets'],
   subscriptions: ['/api/subscriptions', '/api/wallets'],
   settings: ['/api/health'],
-  /* Nothing to refresh on a screen that shows no data. */
+  /* Nothing to refresh on screens that show no data. */
+  more: [],
   notFound: [],
 };
 
@@ -292,7 +320,7 @@ export function AppShell() {
     await Promise.all(work);
   }, [route, reloadSettings]);
 
-  const active = [...NAV, SETTINGS_ITEM].find((item) => item.route === route) ?? NAV[0];
+  const active = navItemFor(route);
 
   /** One tab-bar link. Shared by both sides of the centre button. */
   const tab = (item: NavItem) => (
@@ -464,6 +492,15 @@ export function AppShell() {
           {route === 'analytics' && <AnalyticsPage period={period} />}
           {route === 'goals' && <GoalsPage />}
           {route === 'settings' && <SettingsPage />}
+          {route === 'more' && (
+            <MoreMenuPage
+              onNavigate={go}
+              /* The shell owns `period`, so warming is passed down rather than
+                 the page reaching for it. A directory is the one screen where
+                 prefetch reliably pays: you are one tap from somewhere. */
+              onPrefetch={(next) => warmRoute(next, period)}
+            />
+          )}
           {route === 'notFound' && <NotFoundPage onNavigate={go} />}
         </main>
       </div>

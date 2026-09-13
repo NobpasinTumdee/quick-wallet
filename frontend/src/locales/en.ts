@@ -42,9 +42,12 @@ export const en = {
     analytics: 'Analytics',
     goals: 'Goals',
     settings: 'Settings',
-    /** The gesture button's accessible name — never rendered as text. */
-    more: 'More pages',
-    moreCurrent: 'More pages — {{label}} is open',
+    more: 'More',
+    /** The gesture button's accessible name — never rendered as text.
+     *  Distinct from `more` above, which is the *page* the arc's last slot
+     *  opens: the arc itself is a shortcut ring, not that page. */
+    shortcuts: 'Shortcuts',
+    shortcutsCurrent: 'Shortcuts — {{label}} is open',
     signOut: 'Sign out',
     signedInAs: 'Signed in as',
     mainNavigation: 'Main navigation',
@@ -1000,6 +1003,42 @@ export const en = {
     onDevice: 'Read on your device — the image is never uploaded',
     rawText: 'What it read',
     useAnyway: 'Use this text as the note',
+  },
+
+  /**
+   * The app directory.
+   *
+   * Only the descriptions live here. Every card's *title* is the same
+   * `nav.<route>` string the sidebar, the tab bar and the topbar already use —
+   * a screen called "Activity" in one place and "Transactions" in another is
+   * two names for one thing, and the reader has to work out they are the same.
+   */
+  more: {
+    title: 'All features',
+    lede: 'Every screen in Quick Wallet, grouped by what you came to do.',
+
+    sectionCore: 'Core Finance',
+    sectionCoreHint: 'Money in, money out, and where it sits right now',
+    sectionTracking: 'Advanced Tracking',
+    sectionTrackingHint: 'The longer view — holdings, patterns and shared costs',
+    sectionPlanning: 'Planning & Goals',
+    sectionPlanningHint: 'Money you have promised to future you',
+    sectionApp: 'App',
+    sectionAppHint: 'Preferences, currency and language',
+
+    /* One line each, keyed by route. Says what the screen is *for*, not what it
+       is called — the title above it already says that. */
+    dashboard: 'Balances, spending and this month at a glance',
+    wallets: 'Accounts, cash and balances you keep track of',
+    transactions: 'Every entry, searchable and filterable by date',
+    cards: 'Statements, due dates and installment plans',
+    investments: 'Holdings, average cost and your watchlist',
+    analytics: 'Savings rate, spending habits and where it all goes',
+    splits: 'Costs shared with other people, and who still owes',
+    subscriptions: 'Recurring bills and what falls due next',
+    goals: 'What you are saving towards, and how far along',
+    budgets: 'Monthly limits per category, and how much is left',
+    settings: 'Currency, language, theme and your workbook',
   },
 
   notFound: {

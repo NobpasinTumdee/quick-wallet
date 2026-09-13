@@ -11,9 +11,19 @@
  *
  * So four routes keep a permanent slot and the rest move behind one control.
  * Which four is not arbitrary: they are the screens you open to *look* at
- * something, several times a day. The four behind the button — Cards, Budgets,
- * Recurring, Settings — are the ones you open to *change* something, which
- * happens weekly at most and is worth one extra gesture.
+ * something, several times a day. Behind the button are the ones you open to
+ * *change* something, which happens weekly at most and is worth one extra
+ * gesture.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE LAST SLOT IS A DOOR
+ * ---------------------------------------------------------------------------
+ * The arc holds five items and no more — see `arcRadius`, where that is
+ * geometry rather than taste. Once the app passed nine screens the arc could
+ * not keep absorbing them, and every new feature would have meant demoting an
+ * old one. The final slot therefore opens the app directory instead of a single
+ * screen: four shortcuts that are worth a gesture, and one entry point that
+ * never runs out. See MoreMenuPage.
  *
  * ---------------------------------------------------------------------------
  * THE INTERACTION
@@ -328,7 +338,7 @@ export function GestureNavWidget({
       )}
 
       <div className="gnav-anchor">
-        <div className="gnav-arc" role="menu" aria-label={t('nav.more')} aria-hidden={!open}>
+        <div className="gnav-arc" role="menu" aria-label={t('nav.shortcuts')} aria-hidden={!open}>
           {shortcuts.map((item, index) => {
             const { x, y } = arcOffset(index, shortcuts.length);
             return (
@@ -381,8 +391,8 @@ export function GestureNavWidget({
              something a translator cannot reach. */
           aria-label={
             activeShortcut
-              ? t('nav.moreCurrent', { label: t(activeShortcut.labelKey) })
-              : t('nav.more')
+              ? t('nav.shortcutsCurrent', { label: t(activeShortcut.labelKey) })
+              : t('nav.shortcuts')
           }
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

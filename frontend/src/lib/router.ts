@@ -19,6 +19,10 @@ export const ROUTES = [
   'splits',
   'subscriptions',
   'settings',
+  /* The app directory. Not a feature screen — a way *to* the feature screens,
+     for the phone, where the sidebar does not exist and the gesture arc holds
+     five items at most. See MoreMenuPage. */
+  'more',
 ] as const;
 
 /**
