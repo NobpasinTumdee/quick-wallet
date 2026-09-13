@@ -6414,6 +6414,252 @@ line.arate-zero {
   outline-offset: 1px;
 }
 
+/* ==========================================================================
+   Liability heatmap — the year view
+   --------------------------------------------------------------------------
+   Weeks run left to right as columns, weekdays top to bottom as rows. The month
+   view's cell classes (`is-low`/`is-medium`/`is-high`/`is-payday`) are reused
+   verbatim so the two views cannot drift into meaning different things by
+   colour; only the geometry differs.
+
+   Everything is driven off `--liabyear-cell`, so the whole band scales from one
+   number per breakpoint and the month labels, the weekday axis and the grid
+   cannot fall out of step.
+   ========================================================================== */
+
+.liab--year {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.liabyear {
+  --liabyear-cell: 11px;
+  --liabyear-gap: 3px;
+  --liabyear-axis: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .liabyear {
+    --liabyear-cell: 13px;
+    --liabyear-gap: 3px;
+    --liabyear-axis: 34px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .liabyear {
+    --liabyear-cell: 15px;
+    --liabyear-gap: 4px;
+  }
+}
+
+/**
+ * The scroller.
+ *
+ * 53 columns at 15px is ~1000px, which fits a desktop card and does not fit a
+ * phone. The band scrolls inside this container rather than the view being
+ * hidden below a breakpoint: a year is exactly as useful on a phone, and the
+ * page layout never widens because the overflow is owned here.
+ */
+.liabyear-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* Bleeds to the card edge so a scrolled band does not appear to stop short
+     of it, then pays the padding back on the inside. */
+  margin-inline: calc(var(--space-1) * -1);
+  padding-inline: var(--space-1);
+  padding-bottom: var(--space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* A slim scrollbar rather than a hidden one. Hiding it entirely removes the
+   only cue that there is more year to the right, which on a touch device is
+   the difference between a feature and a mystery. */
+.liabyear-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.liabyear-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.liabyear-scroll::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.liabyear-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+.liabyear-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+}
+
+/* Month labels sit above the column their month begins in, so a label is always
+   over its own data. The empty spans hold the rhythm — without them the labels
+   would collapse together and drift off the columns they name. */
+.liabyear-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--liabyear-cell);
+  gap: var(--liabyear-gap);
+  margin-inline-start: calc(var(--liabyear-axis) + var(--space-2));
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.liabyear-month {
+  /* Allowed to spill past its own column: a month name is wider than 15px, and
+     clipping it to the cell would render every label as one letter. */
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.liabyear-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.liabyear-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, var(--liabyear-cell));
+  gap: var(--liabyear-gap);
+  width: var(--liabyear-axis);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.liabyear-weekdays span {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.liabyear-grid {
+  display: flex;
+  gap: var(--liabyear-gap);
+}
+
+.liabyear-col {
+  display: grid;
+  grid-template-rows: repeat(7, var(--liabyear-cell));
+  gap: var(--liabyear-gap);
+}
+
+.liabyear-cell {
+  width: var(--liabyear-cell);
+  height: var(--liabyear-cell);
+  padding: 0;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  background: var(--surface-2);
+  cursor: default;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* Padding at the start and end of the year, where the window does not begin on
+   a Sunday. Invisible, and not hit-testable. */
+.liabyear-cell.is-blank {
+  border-color: transparent;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ---- The same four steps as the month view ---- */
+
+.liabyear-cell.is-low {
+  background: color-mix(
+    in srgb,
+    var(--accent) calc(10% + var(--liab-cell, 0) * 14%),
+    var(--surface-2)
+  );
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--divider));
+  cursor: pointer;
+}
+
+.liabyear-cell.is-medium {
+  background: color-mix(
+    in srgb,
+    var(--warning) calc(28% + var(--liab-cell, 0) * 26%),
+    var(--surface)
+  );
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  cursor: pointer;
+}
+
+.liabyear-cell.is-high {
+  background: color-mix(
+    in srgb,
+    var(--negative) calc(45% + var(--liab-cell, 0) * 35%),
+    var(--surface)
+  );
+  border-color: var(--negative);
+  cursor: pointer;
+  /* No glow here, unlike the month view. At 15px a shadow bleeds into the four
+     neighbouring cells and turns a dense week into a smear. */
+}
+
+.liabyear-cell.is-past {
+  opacity: 0.45;
+}
+
+.liabyear-cell.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Payday. A gold underline rather than the month view's leading edge — at this
+   size a 3px rule on the side would be a quarter of the cell. */
+.liabyear-cell.is-payday {
+  box-shadow: inset 0 -2px 0 0 #d4af37;
+}
+
+.liabyear-cell:is(.is-low, .is-medium, .is-high):hover {
+  transform: scale(1.35);
+  z-index: 1;
+}
+
+.liabyear-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 2;
+}
+
+.liabyear-cell.is-selected {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 2px var(--accent);
+  z-index: 1;
+}
+
+/* The one hole in a year projection, stated in the legend. */
+.liabyear-caveat {
+  margin-inline-start: auto;
+  color: var(--text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liabyear-cell {
+    transition: none;
+  }
+
+  .liabyear-cell:hover,
+  .liabyear-cell.is-selected {
+    transform: none;
+  }
+}
+
 /* ---- Category treemap ---- */
 
 .atree {

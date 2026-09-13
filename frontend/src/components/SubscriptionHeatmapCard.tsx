@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useHeatmapData } from '../hooks/useHeatmapData';
+import { HeatmapRange, useHeatmapData } from '../hooks/useHeatmapData';
 import { formatPeriod } from '../lib/format';
 import { resolvePaydays } from '../lib/mobileNav';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Button, Card, Skeleton } from './ui';
+import { Button, Card, Segmented, Skeleton } from './ui';
 import { SubscriptionHeatmap } from './SubscriptionHeatmap';
 
 /**
@@ -80,24 +80,49 @@ export function SubscriptionHeatmapCard({
   const locale = settings.locale;
 
   const paydays = useMigratedPaydays();
-  const data = useHeatmapData(period, { paydays });
+
+  /* A month by default on every screen.
+
+     The year is the more informative view and the more expensive one to read:
+     it is 365 cells in a horizontally scrolling band, which on a phone is a
+     thing you swipe rather than a thing you glance at. Defaulting to the month
+     keeps the first render of both host pages cheap and immediately legible,
+     and the toggle is one tap away — no fetch behind it, since every source is
+     already cached (see useHeatmapData). */
+  const [months, setMonths] = useState<HeatmapRange>(1);
+  const data = useHeatmapData(period, { paydays, months });
 
   return (
     <Card
       className={className}
       title={t('liability.title')}
-      subtitle={`${t('liability.subtitle')} · ${formatPeriod(period, locale)}`}
+      subtitle={
+        months === 12
+          ? t('liability.yearTotal', { amount: money(data.year?.total ?? 0) })
+          : `${t('liability.subtitle')} · ${formatPeriod(period, locale)}`
+      }
       actions={
         /* A link rather than a picker. One payday fitted in a <select>; a
            configurable set of up to eight does not belong in a card header, and
            duplicating the editor here would give the same setting two homes. */
-        onNavigate && (
-          <Button size="sm" variant="ghost" onClick={() => onNavigate('settings')}>
-            {paydays.length
-              ? t('liability.paydayCount', { count: paydays.length })
-              : t('liability.paydaySet')}
-          </Button>
-        )
+        <div className="cluster">
+          <Segmented
+            value={String(months)}
+            ariaLabel={t('liability.rangeAria')}
+            onChange={(next) => setMonths(Number(next) as HeatmapRange)}
+            options={[
+              { value: '1', label: t('liability.rangeMonth') },
+              { value: '12', label: t('liability.rangeYear') },
+            ]}
+          />
+          {onNavigate && (
+            <Button size="sm" variant="ghost" onClick={() => onNavigate('settings')}>
+              {paydays.length
+                ? t('liability.paydayCount', { count: paydays.length })
+                : t('liability.paydaySet')}
+            </Button>
+          )}
+        </div>
       }
     >
       {data.initialLoading ? (

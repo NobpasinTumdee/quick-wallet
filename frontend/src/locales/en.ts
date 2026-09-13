@@ -1241,11 +1241,20 @@ export const en = {
     close: 'Close',
     kindSubscription: 'Subscription',
     kindCard: 'Card statement',
+    kindDebt: 'Debt payment',
+    kindInstallment: 'Installment',
 
     /* Legend. */
     legendQuiet: 'Quiet',
     legendHeavy: 'Heavy',
     legendPayday: 'Payday',
+    yearAria: 'Twelve months of upcoming bills, one square per day',
+    cardsUnprojected: 'Card statements beyond the next one are not projected',
+    rangeMonth: '1 month',
+    rangeYear: '1 year',
+    rangeAria: 'Time range',
+    yearTotal: '{{amount}} over 12 months',
+    yearPeakMonth: 'Heaviest month: {{month}} · {{amount}}',
     paydayNone: 'No payday set',
     paydayOption: 'Payday: day {{day}}',
 
@@ -1258,6 +1267,11 @@ export const en = {
     totalLiabilities: 'Total monthly liabilities',
     fromSubscriptions: '{{amount}} subscriptions',
     fromCards: '{{amount}} card statements',
+    peakMonth: 'Heaviest month',
+    monthlyAverage: 'Average per month',
+    acrossMonths: 'Across {{count}} months of commitments',
+    fromDebts: '{{amount}} debt payments',
+    fromInstallments: '{{amount}} installments',
 
     /* The payday split — the actual warning this screen exists to give. */
     beforePayday: 'Due before payday',

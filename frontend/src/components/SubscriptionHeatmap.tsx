@@ -1,10 +1,20 @@
-import { CalendarClock, CreditCard, Repeat2, TrendingDown, TrendingUp, X } from 'lucide-react';
+import {
+  CalendarClock,
+  CreditCard,
+  Landmark,
+  Receipt,
+  Repeat2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { HeatmapData } from '../hooks/useHeatmapData';
 import { cx, formatDate } from '../lib/format';
-import { HeatmapDay } from '../lib/liabilityMath';
+import { HeatmapDay, LiabilityKind, LiabilityYear } from '../lib/liabilityMath';
+import { TranslationKey } from '../locales';
 import { MoneyFormatter } from '../state/SettingsContext';
 import { Icon } from './Icon';
 
@@ -44,10 +54,21 @@ import { Icon } from './Icon';
  * never being clipped, never covering the data, and staying legible at 320px.
  */
 
-const KIND_ICON = {
+/* Typed as a full Record, so a new LiabilityKind is a compile error here rather
+   than an `undefined` icon that crashes the detail panel at render. */
+const KIND_ICON: Record<LiabilityKind, typeof Repeat2> = {
   subscription: Repeat2,
   card: CreditCard,
-} as const;
+  debt: Landmark,
+  installment: Receipt,
+};
+
+const KIND_LABEL: Record<LiabilityKind, TranslationKey> = {
+  subscription: 'liability.kindSubscription',
+  card: 'liability.kindCard',
+  debt: 'liability.kindDebt',
+  installment: 'liability.kindInstallment',
+};
 
 export function SubscriptionHeatmap({
   data,
@@ -59,10 +80,13 @@ export function SubscriptionHeatmap({
   locale: string;
 }) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<number | null>(null);
+  /* Keyed on the date rather than the day number: in the year view the 5th
+     happens twelve times, and a day-of-month key would highlight all of them. */
+  const [selected, setSelected] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedDay = selected === null ? null : (data.days[selected - 1] ?? null);
+  const source = data.year ? data.year.days : data.days;
+  const selectedDay = selected === null ? null : (source.find((d) => d.date === selected) ?? null);
 
   /* Escape closes the detail — the one keyboard affordance a transient panel
      owes you, and the same idiom the gesture arc uses. */
@@ -112,6 +136,35 @@ export function SubscriptionHeatmap({
         })
       : t('liability.dayEmpty', { date: formatDate(day.date, locale) });
 
+  /* ---- The year view ----
+     A different layout for a different question. The month grid is read by
+     date; a year is read as a shape, so weeks become columns, weekdays become
+     rows, and the dates come off entirely. */
+  if (data.year) {
+    return (
+      <div className="liab liab--year">
+        <YearGrid
+          year={data.year}
+          locale={locale}
+          selected={selected}
+          onPick={setSelected}
+          label={dayLabel}
+        />
+        {selectedDay && selectedDay.items.length > 0 && (
+          <DayDetail
+            day={selectedDay}
+            money={money}
+            locale={locale}
+            panelRef={panelRef}
+            label={dayLabel(selectedDay)}
+            onClose={() => setSelected(null)}
+          />
+        )}
+        <LiabilityInsights data={data} money={money} locale={locale} />
+      </div>
+    );
+  }
+
   return (
     <div className="liab">
       <div className="liab-grid-wrap">
@@ -136,16 +189,20 @@ export function SubscriptionHeatmap({
                 day.isPayday && 'is-payday',
                 day.isToday && 'is-today',
                 day.isPast && 'is-past',
-                selected === day.day && 'is-selected',
+                selected === day.date && 'is-selected',
               )}
               /* The tint rides on a custom property so the stylesheet owns how
                  intensity becomes colour, and this owns only the number. */
               style={{ '--liab-cell': day.intensity } as React.CSSProperties}
               aria-label={dayLabel(day)}
-              aria-pressed={selected === day.day}
+              aria-pressed={selected === day.date}
               /* Nothing to open on a day with no bills, but it stays focusable
                  so arrow-key travel across the month is not full of holes. */
-              onClick={() => setSelected((current) => (current === day.day || !day.items.length ? null : day.day))}
+              onClick={() =>
+                setSelected((current) =>
+                  current === day.date || !day.items.length ? null : day.date,
+                )
+              }
             >
               <span className="liab-cell-day">{day.day}</span>
 
@@ -179,46 +236,205 @@ export function SubscriptionHeatmap({
         </div>
       </div>
 
-      {/* ---- The detail ---- */}
       {selectedDay && selectedDay.items.length > 0 && (
-        <div className="liab-detail" ref={panelRef} role="group" aria-label={dayLabel(selectedDay)}>
-          <div className="liab-detail-head">
-            <div>
-              <span className="section-label">
-                {t('liability.dueOn', { date: formatDate(selectedDay.date, locale) })}
-              </span>
-              <strong className="liab-detail-total">{money(selectedDay.total)}</strong>
-            </div>
-            <button
-              type="button"
-              className="liab-detail-close"
-              aria-label={t('liability.close')}
-              onClick={() => setSelected(null)}
-            >
-              <Icon icon={X} size="sm" />
-            </button>
-          </div>
-
-          <ul className="liab-detail-list">
-            {selectedDay.items.map((item) => (
-              <li key={item.key}>
-                <span className="liab-detail-icon" aria-hidden="true">
-                  <Icon icon={KIND_ICON[item.kind]} size="sm" />
-                </span>
-                <span className="liab-detail-name">
-                  {item.name}
-                  <small>
-                    {t(item.kind === 'card' ? 'liability.kindCard' : 'liability.kindSubscription')}
-                  </small>
-                </span>
-                <span className="liab-detail-amount">{money(item.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <DayDetail
+          day={selectedDay}
+          money={money}
+          locale={locale}
+          panelRef={panelRef}
+          label={dayLabel(selectedDay)}
+          onClose={() => setSelected(null)}
+        />
       )}
 
       <LiabilityInsights data={data} money={money} locale={locale} />
+    </div>
+  );
+}
+
+/**
+ * One day's bills, as a panel under whichever grid opened it.
+ *
+ * Extracted when the year view arrived: both grids needed the identical panel,
+ * and the alternative was duplicating forty lines of JSX or having the year
+ * reach into the month view's markup. Shared here, the two can never drift into
+ * showing the same day differently.
+ */
+function DayDetail({
+  day,
+  money,
+  locale,
+  label,
+  panelRef,
+  onClose,
+}: {
+  day: HeatmapDay;
+  money: MoneyFormatter;
+  locale: string;
+  label: string;
+  panelRef: React.MutableRefObject<HTMLDivElement | null>;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="liab-detail" ref={panelRef} role="group" aria-label={label}>
+      <div className="liab-detail-head">
+        <div>
+          <span className="section-label">
+            {t('liability.dueOn', { date: formatDate(day.date, locale) })}
+          </span>
+          <strong className="liab-detail-total">{money(day.total)}</strong>
+        </div>
+        <button
+          type="button"
+          className="liab-detail-close"
+          aria-label={t('liability.close')}
+          onClick={onClose}
+        >
+          <Icon icon={X} size="sm" />
+        </button>
+      </div>
+
+      <ul className="liab-detail-list">
+        {day.items.map((item) => (
+          <li key={item.key}>
+            <span className="liab-detail-icon" aria-hidden="true">
+              <Icon icon={KIND_ICON[item.kind]} size="sm" />
+            </span>
+            <span className="liab-detail-name">
+              {item.name}
+              <small>{t(KIND_LABEL[item.kind])}</small>
+            </span>
+            <span className="liab-detail-amount">{money(item.amount)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Twelve months as a contribution graph.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE AXES SWAP
+ * ---------------------------------------------------------------------------
+ * The month grid runs weeks down the page because that is a calendar, and
+ * calendars are read by date. A year cannot be read that way — 365 labelled
+ * cells is not something anyone scans — so weeks become columns and weekdays
+ * become rows. That is the shape that fits a year into one horizontal band and
+ * makes clusters visible at a glance, which is the only question a year answers.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE SCROLLER IS ALWAYS THERE
+ * ---------------------------------------------------------------------------
+ * Fifty-three columns at a legible cell size is ~800px: fine on a laptop, not
+ * on a phone. Rather than hiding the view below a breakpoint — a year is just
+ * as useful on a phone, and hiding it decides for the user — the band scrolls
+ * inside its own container. The page layout never widens, and on a narrow
+ * screen it degrades to something you swipe rather than something you cannot
+ * have.
+ */
+function YearGrid({
+  year,
+  locale,
+  selected,
+  onPick,
+  label,
+}: {
+  year: LiabilityYear;
+  locale: string;
+  selected: string | null;
+  onPick: (date: string | null) => void;
+  label: (day: HeatmapDay) => string;
+}) {
+  const { t } = useTranslation();
+
+  /* Every other row labelled, the way a contribution graph does it: seven
+     stacked labels at this cell size is unreadable, and three is enough to
+     orient. 4 Jan 1970 was a Sunday. */
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) =>
+    new Date(Date.UTC(1970, 0, 4 + index)).toLocaleDateString(locale, {
+      weekday: 'short',
+      timeZone: 'UTC',
+    }),
+  );
+
+  const monthName = (period: string) => {
+    const [year_, month] = period.split('-').map(Number);
+    return new Date(year_, month - 1, 1).toLocaleDateString(locale, { month: 'short' });
+  };
+
+  return (
+    <div className="liabyear">
+      <div className="liabyear-scroll">
+        <div className="liabyear-inner">
+          {/* Month labels ride above the column each month starts in, so they
+              land over their own data rather than at even intervals that drift
+              a week or two out by December. */}
+          <div className="liabyear-months" aria-hidden="true">
+            {year.columns.map((column, index) => (
+              <span key={index} className="liabyear-month">
+                {column.monthLabel ? monthName(column.monthLabel) : ''}
+              </span>
+            ))}
+          </div>
+
+          <div className="liabyear-body">
+            <div className="liabyear-weekdays" aria-hidden="true">
+              {weekdayLabels.map((day, index) => (
+                <span key={index}>{index % 2 === 1 ? day : ''}</span>
+              ))}
+            </div>
+
+            <div className="liabyear-grid" role="grid" aria-label={t('liability.yearAria')}>
+              {year.columns.map((column, index) => (
+                <div key={index} className="liabyear-col" role="row">
+                  {column.days.map((day, row) =>
+                    day === null ? (
+                      <span key={row} className="liabyear-cell is-blank" aria-hidden="true" />
+                    ) : (
+                      <button
+                        key={row}
+                        type="button"
+                        role="gridcell"
+                        className={cx(
+                          'liabyear-cell',
+                          `is-${day.level}`,
+                          day.isPayday && 'is-payday',
+                          day.isToday && 'is-today',
+                          day.isPast && 'is-past',
+                          selected === day.date && 'is-selected',
+                        )}
+                        style={{ '--liab-cell': day.intensity } as React.CSSProperties}
+                        title={label(day)}
+                        aria-label={label(day)}
+                        onClick={() =>
+                          onPick(selected === day.date || !day.items.length ? null : day.date)
+                        }
+                      />
+                    ),
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="liab-legend">
+        <span>{t('liability.legendQuiet')}</span>
+        <span className="liab-key is-low" aria-hidden="true" />
+        <span className="liab-key is-medium" aria-hidden="true" />
+        <span className="liab-key is-high" aria-hidden="true" />
+        <span>{t('liability.legendHeavy')}</span>
+        {/* The one hole in a year projection, admitted rather than left for the
+            reader to discover. See the note on buildLiabilityYear. */}
+        {year.cardsUnprojected && (
+          <span className="liabyear-caveat">{t('liability.cardsUnprojected')}</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -241,6 +457,80 @@ function LiabilityInsights({
   locale: string;
 }) {
   const { t } = useTranslation();
+
+  /* The year has its own figures, and showing the month's under a year graph
+     would be the worst kind of wrong — plausible numbers describing a different
+     window. The payday split is deliberately absent here: it answers "before
+     your next cheque", which is a question about the next few weeks, not about
+     next August. */
+  if (data.year) {
+    const year = data.year;
+    return (
+      <div className="liab-insights">
+        {year.peakMonth && (
+          <div className="liab-insight">
+            <span className="liab-insight-label">{t('liability.peakMonth')}</span>
+            <span className="liab-insight-value">
+              {t('liability.yearPeakMonth', {
+                month: new Date(
+                  Number(year.peakMonth.period.slice(0, 4)),
+                  Number(year.peakMonth.period.slice(5, 7)) - 1,
+                  1,
+                ).toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
+                amount: money(year.peakMonth.total),
+              })}
+            </span>
+            {year.peakDay && (
+              <span className="liab-insight-hint">
+                {t('liability.peakDay')} ·{' '}
+                {t('liability.peakDayValue', {
+                  date: formatDate(year.peakDay.date, locale),
+                  amount: money(year.peakDay.total),
+                })}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="liab-insight">
+          <span className="liab-insight-label">{t('liability.totalLiabilities')}</span>
+          <span className="liab-insight-value liab-insight-value--strong">
+            {money(year.total)}
+          </span>
+          <span className="liab-insight-hint">
+            {t('liability.fromSubscriptions', { amount: money(year.subscriptionTotal) })}
+            {year.debtTotal > 0 && (
+              <> · {t('liability.fromDebts', { amount: money(year.debtTotal) })}</>
+            )}
+            {year.installmentTotal > 0 && (
+              <> · {t('liability.fromInstallments', { amount: money(year.installmentTotal) })}</>
+            )}
+          </span>
+        </div>
+
+        <div className="liab-insight">
+          <span className="liab-insight-label">{t('liability.monthlyAverage')}</span>
+          <span className="liab-insight-value">{money(year.total / 12)}</span>
+          <span className="liab-insight-hint">
+            {t('liability.acrossMonths', { count: year.months.length })}
+          </span>
+        </div>
+
+        {year.expectedBack > 0 && (
+          <div className="liab-insight is-credit">
+            <span className="liab-insight-label">
+              <Icon icon={TrendingUp} size="sm" />
+              {t('liability.expectedBack')}
+            </span>
+            <span className="liab-insight-value">{money(year.expectedBack)}</span>
+            <span className="liab-insight-hint">
+              {t('liability.expectedBackHint', { count: year.openSplitCount })}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="liab-insights">
