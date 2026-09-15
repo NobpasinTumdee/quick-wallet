@@ -126,6 +126,11 @@ export const th: TranslationSchema = {
 
   dashboard: {
     netWorth: 'ความมั่งคั่งสุทธิ',
+    endOfMonthBalance: 'ยอดคงเหลือสิ้น{{month}}',
+    showEndOfMonthBalance: 'ดูยอดคงเหลือ ณ สิ้นเดือน',
+    showCurrentBalance: 'ดูยอดคงเหลือปัจจุบัน',
+    asItStood: 'ยอด ณ วันที่ {{date}}',
+    holdingsAtCost: 'สินทรัพย์คิดตามราคาทุน',
     refresh: 'รีเฟรชภาพรวม',
     loadFailed: 'ไม่สามารถโหลดภาพรวมได้',
     noData: 'ไม่พบข้อมูล',
@@ -1141,6 +1146,18 @@ export const th: TranslationSchema = {
     remove: 'ลบวันที่ {{day}}',
     hint: 'เพิ่มได้ทุกวันที่เงินเข้า เลือกวันที่ 29–31 ได้ หากเดือนนั้นไม่มีวันดังกล่าวจะไม่แสดงเครื่องหมาย',
     limit: 'ตั้งได้สูงสุด {{max}} วันเท่านั้น',
+  },
+
+  pie: {
+    title: 'สัดส่วนรายจ่าย',
+    subtitle: 'แต่ละหมวดคิดเป็นสัดส่วนเท่าไรของรายจ่ายทั้งหมด',
+    empty: 'ไม่มีรายจ่ายในช่วงนี้',
+    emptyHint: 'รายจ่ายจะแสดงที่นี่ทันทีที่มีการบันทึก',
+    ariaLabel: 'แผนภูมิวงแหวนแสดงรายจ่าย {{amount}} จาก {{count}} หมวด',
+    rangeMonth: 'เดือนนี้',
+    rangeYear: '12 เดือนล่าสุด',
+    loadYear: 'โหลดข้อมูล 1 ปี',
+    backToMonth: 'กลับไปดูเดือนนี้',
   },
 
   boxplot: {

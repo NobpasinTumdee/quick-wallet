@@ -1468,6 +1468,136 @@ function computeWalletBalances_(userId, period) {
   });
 }
 
+/**
+ * Wallet balances as they stood on a given date.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THIS IS SERVER-SIDE AND NOT DERIVED IN THE CLIENT
+ * -------------------------------------------------------------------------
+ * The obvious implementation is to sum the ledger in the browser. It would be
+ * wrong, and silently: every client-side fetch of Transactions carries a
+ * `limit` — 500 by default, 2000 for the screens that need history — and the
+ * rows come back newest first. On a workbook with more rows than the cap, the
+ * *oldest* transactions are the ones missing, which are exactly the ones a
+ * historical balance is built from. The figure would drift further from the
+ * truth the further back you looked, with nothing on screen to say so.
+ *
+ * Here, `userRows_` is the whole table. There is no cap to be wrong about.
+ *
+ * -------------------------------------------------------------------------
+ * WHAT "AS OF" MEANS FOR EACH ROW TYPE
+ * -------------------------------------------------------------------------
+ *   - transactions: counted when `date <= asOf`. Future-dated rows — the later
+ *     chunks of an installment plan — are excluded, which is the whole point.
+ *   - holdings: counted when the lot was bought on or before `asOf` and had not
+ *     been sold by then. A lot sold later is still a holding at `asOf`, and a
+ *     lot bought later did not exist yet.
+ *
+ * `asOf` empty means "all time", which is the original behaviour to the
+ * decimal — `balanceAsOf_` with no cutoff returns what `computeWalletBalances_`
+ * always returned.
+ */
+function balancesAsOf_(userId, asOf) {
+  var wallets = userRows_('Wallets', userId);
+  var transactions = userRows_('Transactions', userId);
+  var investments = userRows_('Investments', userId);
+  var cutoff = String(asOf || '');
+
+  var byId = {};
+  wallets.forEach(function (wallet) {
+    byId[wallet.id] = {
+      mode: wallet.mode,
+      type: walletType_(wallet),
+      archived: wallet.archived,
+      balance: Number(wallet.openingBalance) || 0,
+      investedCost: 0
+    };
+  });
+
+  transactions.forEach(function (tx) {
+    if (cutoff && String(tx.date || '') > cutoff) return;
+
+    var source = byId[tx.walletId];
+    var target = byId[tx.toWalletId];
+    var amount = Number(tx.amount) || 0;
+
+    if (tx.type === 'income') {
+      if (source) source.balance += amount;
+    } else if (tx.type === 'expense') {
+      if (source) source.balance -= amount;
+    } else if (tx.type === 'transfer') {
+      if (source) source.balance -= amount;
+      if (target) target.balance += amount;
+    }
+  });
+
+  investments.forEach(function (inv) {
+    var wallet = byId[inv.walletId];
+    if (!wallet) return;
+
+    var buyDate = String(inv.buyDate || '');
+    // Not bought yet at the cutoff, so it is not part of that day's picture.
+    if (cutoff && buyDate && buyDate > cutoff) return;
+
+    var quantity = Number(inv.quantity) || 0;
+    var cost = quantity * (Number(inv.buyPrice) || 0) + (Number(inv.fees) || 0);
+
+    /* Sold *after* the cutoff still counts as held on the cutoff date. This is
+       the case a naive `status === 'hold'` check gets wrong: a lot sold last
+       week was an asset all through last year, and treating it as cash back
+       then would move money into the past. */
+    var sellDate = String(inv.sellDate || '');
+    var soldByCutoff = inv.status !== 'hold' && (!cutoff || (sellDate && sellDate <= cutoff));
+
+    if (soldByCutoff) {
+      wallet.balance += quantity * (Number(inv.sellPrice) || 0) - cost;
+    } else {
+      wallet.investedCost += cost;
+      wallet.balance -= cost;
+    }
+  });
+
+  var cashBalance = 0;
+  var creditDebt = 0;
+  var liquidBalance = 0;
+  var investmentCash = 0;
+  var investedCost = 0;
+
+  Object.keys(byId).forEach(function (id) {
+    var w = byId[id];
+    if (w.archived) return;
+    if (w.mode === 'expense') {
+      liquidBalance += w.balance;
+      if (w.type === 'CREDIT') creditDebt += Math.max(0, -w.balance);
+      else cashBalance += w.balance;
+    } else {
+      investmentCash += w.balance;
+    }
+    investedCost += w.investedCost;
+  });
+
+  return {
+    asOf: cutoff,
+    netWorth: money_(liquidBalance + investmentCash + investedCost),
+    liquidBalance: money_(liquidBalance),
+    cashBalance: money_(cashBalance),
+    creditDebt: money_(creditDebt),
+    investedCost: money_(investedCost),
+    investmentCash: money_(investmentCash)
+  };
+}
+
+/** Last day of a `YYYY-MM`, as `YYYY-MM-DD`. */
+function endOfPeriod_(period) {
+  var parts = String(period || '').split('-');
+  var year = Number(parts[0]);
+  var month = Number(parts[1]);
+  if (!isFinite(year) || !isFinite(month) || month < 1 || month > 12) return '';
+  var lastDay = new Date(year, month, 0).getDate();
+  return year + '-' + String(month < 10 ? '0' + month : month) + '-' +
+    String(lastDay < 10 ? '0' + lastDay : lastDay);
+}
+
 function getSettingsRow_(userId) {
   var row = findById_('Settings', userId);
   if (!row) return null;
@@ -3941,6 +4071,9 @@ function dashboardGet_(user, query) {
     });
   }
 
+  var asOfDate = endOfPeriod_(period);
+  var historical = balancesAsOf_(user.id, asOfDate);
+
   var recentTransactions = transactions
     .slice()
     .sort(function (a, b) {
@@ -3989,7 +4122,25 @@ function dashboardGet_(user, query) {
     categoryBreakdown: categoryBreakdown,
     trend: trend,
     positionCount: openPositions.length,
-    walletCount: wallets.length
+    walletCount: wallets.length,
+
+    /* ---- The end-of-period snapshot ----
+       Every figure above is all-time: `computeWalletBalances_` applies every
+       transaction whatever month is being browsed, so the hero card showed
+       today's money even when the user had stepped back to March. These are the
+       same quantities as they stood on the last day of `period`, so the screen
+       can answer "what did I have then" as well as "what do I have now".
+
+       `asOfDate` is the end of the period rather than min(end, today) on
+       purpose: the label the client renders says "end of March", and the
+       arithmetic has to match the label. For the current month that means it
+       includes anything already dated later this month — which is exactly what
+       "end of this month" means. */
+    asOfDate: asOfDate,
+    historical: historical,
+    /* Whether that snapshot is genuinely in the past. The client defaults the
+       card to the historical reading only when this is true. */
+    isHistorical: asOfDate !== '' && asOfDate < toDateKey_(new Date())
   };
 }
 

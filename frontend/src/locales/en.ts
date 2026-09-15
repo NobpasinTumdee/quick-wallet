@@ -117,6 +117,14 @@ export const en = {
 
   dashboard: {
     netWorth: 'Net worth',
+    /* ---- Time travel ----
+       The label has to name the month, because the one expensive mistake this
+       feature can cause is reading a past balance as today's. */
+    endOfMonthBalance: 'End of {{month}} balance',
+    showEndOfMonthBalance: 'Show end-of-month balance',
+    showCurrentBalance: 'Show current balance',
+    asItStood: 'As it stood on {{date}}',
+    holdingsAtCost: 'Holdings at cost',
     refresh: 'Refresh dashboard',
     loadFailed: "Couldn't load the dashboard",
     noData: 'No data returned',
@@ -1190,6 +1198,24 @@ export const en = {
     remove: 'Remove day {{day}}',
     hint: 'Add every date you get paid. Day 29–31 is fine — in a shorter month no marker is drawn.',
     limit: 'That is the maximum of {{max}} paydays.',
+  },
+
+  /**
+   * The expense donut.
+   *
+   * Its own section rather than under `analytics`, because the component takes
+   * a transaction list and a label and belongs to no particular screen.
+   */
+  pie: {
+    title: 'Expense breakdown',
+    subtitle: 'What share of spending each category takes',
+    empty: 'Nothing spent in this range',
+    emptyHint: 'Expenses appear here as soon as one is recorded.',
+    ariaLabel: 'Donut chart of {{amount}} spending across {{count}} categories',
+    rangeMonth: 'This month',
+    rangeYear: 'Last 12 months',
+    loadYear: 'Load 1-year data',
+    backToMonth: 'Back to this month',
   },
 
   boxplot: {

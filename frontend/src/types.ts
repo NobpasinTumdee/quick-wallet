@@ -437,6 +437,19 @@ export interface Settings {
   paydays: number[];
 }
 
+/** The end-of-period snapshot carried on every dashboard payload. */
+export interface HistoricalBalance {
+  /** `YYYY-MM-DD`, or empty for an all-time figure. */
+  asOf: string;
+  netWorth: number;
+  liquidBalance: number;
+  cashBalance: number;
+  /** Positive = owed. */
+  creditDebt: number;
+  investedCost: number;
+  investmentCash: number;
+}
+
 export interface DashboardSummary {
   period: string;
   currency: string;
@@ -467,6 +480,23 @@ export interface DashboardSummary {
   openPositions: Investment[];
   categoryBreakdown: { category: string; amount: number; share: number }[];
   trend: { period: string; income: number; expense: number; net: number }[];
+
+  /**
+   * Balances as they stood on the last day of `period`.
+   *
+   * Every other figure on this payload is all-time — `computeWalletBalances_`
+   * applies every transaction whatever month is being browsed — so stepping
+   * back to March still showed today's money. This is the same set of
+   * quantities as at the end of the month being looked at.
+   *
+   * Optional because a frontend can be deployed before the matching Code.gs;
+   * the dashboard falls back to its previous behaviour when it is absent.
+   */
+  historical?: HistoricalBalance;
+  /** `YYYY-MM-DD` the snapshot is computed to: the last day of `period`. */
+  asOfDate?: string;
+  /** True when `asOfDate` is genuinely in the past. Drives the card's default. */
+  isHistorical?: boolean;
 }
 
 export interface DbHealth {

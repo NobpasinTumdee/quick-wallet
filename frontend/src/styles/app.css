@@ -5725,6 +5725,267 @@ line.arate-zero {
 }
 
 /* ==========================================================================
+   Category donut
+   --------------------------------------------------------------------------
+   Colour encodes rank, not identity: `--pie-weight` runs 1 down to ~0.28 across
+   the slices and becomes an alpha on the accent. One hue, monotone by
+   construction, correct in all thirteen themes — see the note in the component
+   for why a categorical palette is not verifiable here.
+   ========================================================================== */
+
+.pie {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+@media (min-width: 560px) {
+  .pie {
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  }
+}
+
+.pie-figure {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.pie-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 240px;
+  overflow: visible;
+}
+
+.pie-slice {
+  fill: color-mix(in srgb, var(--accent) calc(var(--pie-weight, 1) * 100%), transparent);
+  stroke: var(--surface);
+  stroke-width: 1;
+  cursor: pointer;
+  transform-origin: center;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+
+/* The tail bucket is not a category, so it reads as the absence of one: a flat
+   neutral rather than a place on the accent ramp it does not occupy. */
+.pie-slice.is-other {
+  fill: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+/* Everything else recedes rather than the active slice growing. Scaling one
+   sector of a proportional chart distorts the very thing it encodes — the
+   reader would be comparing areas that are no longer to scale. */
+.pie-slice.is-dimmed {
+  opacity: 0.32;
+}
+
+.pie-slice.is-active {
+  filter: brightness(1.12);
+}
+
+/* ---- The hole ---- */
+
+.pie-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  /* Never intercepts the pointer — the ring underneath owns hover, and a
+     centred div would create a dead zone in the middle of it. */
+  pointer-events: none;
+  padding: 0 22%;
+}
+
+.pie-centre-share {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semi);
+  line-height: 1.1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.pie-centre-total-strong {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  line-height: 1.15;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.pie-centre-total {
+  font-size: var(--text-xs);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pie-centre-label {
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Legend ---- */
+
+.pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pie-legend-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 5px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  text-align: start;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+.pie-legend-item:hover,
+.pie-legend-item.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.pie-legend-item.is-dimmed {
+  opacity: 0.45;
+}
+
+.pie-legend-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pie-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) calc(var(--pie-weight, 1) * 100%), transparent);
+}
+
+.pie-legend-item:has(.pie-legend-name) .pie-legend-swatch {
+  flex: none;
+}
+
+.pie-legend-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pie-legend-share {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.pie-legend-amount {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ---- Empty ---- */
+
+.pie--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.pie--empty p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.pie--empty .pie-hint {
+  max-width: 34ch;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pie-slice,
+  .pie-legend-item {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Time travel — the historical balance reading on the dashboard hero
+   ========================================================================== */
+
+/* The toggle sits with the refresh button and stays quiet until it is the
+   active reading, at which point it carries the same accent as the figure. */
+.hero-timetravel.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* A past balance is not present-day money, and the figure itself says so before
+   the caption is read: the accent is what the live total wears. */
+.hero-value.is-historical {
+  color: var(--text-muted);
+}
+
+.hero-timetravel-note {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  /* Gold, the same hue the payday marker uses, and for the same reason: it is
+     a fixed hue because it means one thing — a moment in time — and borrowing
+     a theme token would let that meaning shift between palettes. */
+  border: 1px solid color-mix(in srgb, #d4af37 40%, transparent);
+  background: color-mix(in srgb, #d4af37 10%, transparent);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  align-self: flex-start;
+}
+
+.hero-timetravel-note em {
+  font-style: normal;
+  color: var(--text-faint);
+}
+
+.hero-timetravel-note em::before {
+  content: '·';
+  margin-inline-end: 5px;
+}
+
+/* ==========================================================================
    Category box plot
    --------------------------------------------------------------------------
    Every colour is a token. The chart is hand-drawn SVG precisely so that it

@@ -1,4 +1,12 @@
-import { ArrowRight, Calculator, ChartNoAxesCombined, Receipt, Target, Wallet } from 'lucide-react';
+import {
+  ArrowRight,
+  Calculator,
+  ChartNoAxesCombined,
+  History,
+  Receipt,
+  Target,
+  Wallet,
+} from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -65,6 +73,22 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
      pressed — see the note at the top of TaxCalculatorModal. */
   const [taxOpen, setTaxOpen] = useState(false);
 
+  /**
+   * Which reading the balance card shows.
+   *
+   * The override is keyed on the period, not held as a bare boolean, so that
+   * stepping the month picker returns to the sensible default for wherever you
+   * land — historical in the past, current in the present — while an explicit
+   * choice still sticks for as long as you stay on that month. A plain boolean
+   * would carry "show me today's money" into March and quietly make the label
+   * and the figure disagree.
+   *
+   * Declared up here with the other hooks rather than beside the markup it
+   * drives: everything below the early returns runs conditionally, and a hook
+   * there changes the hook count between renders.
+   */
+  const [override, setOverride] = useState<{ period: string; historical: boolean } | null>(null);
+
   /* `positions` is one row per *purchase*, so a dollar-cost-averaged ticker
      appears several times. The headline counts holdings instead — three buys of
      Apple is one position, and saying "3 positions" would overstate how spread
@@ -99,6 +123,20 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   const netWorthLive = hasPositions
     ? data.netWorth - portfolio.totalCost + portfolio.totalValue
     : data.netWorth;
+
+  /* ---- Time travel ----
+     Same fallback convention as the figures below: an older Code.gs sends no
+     snapshot, and the card simply behaves as it always did. */
+  const canTimeTravel = Boolean(data.isHistorical && data.historical);
+
+  const showingHistorical =
+    canTimeTravel && (override?.period === period ? override.historical : true);
+
+  /* Deliberately NOT `netWorthLive`. Live quotes are today's prices, and
+     applying them to a March balance would report what those holdings are worth
+     now against the cash position as it was then — a figure true of no moment in
+     time. The snapshot carries holdings at cost, and the caption says so. */
+  const heroValue = showingHistorical ? (data.historical?.netWorth ?? 0) : netWorthLive;
 
   /* ---- Cash and card debt ----
      `netWorth` already nets the two: a credit wallet's balance is negative, so
@@ -167,15 +205,60 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
               also being actionable. */}
           <div className="hero-label-row">
             <span className="section-label">
-              {t('dashboard.netWorth')} · {formatPeriod(period, locale)}
+              {showingHistorical
+                ? t('dashboard.endOfMonthBalance', { month: formatPeriod(period, locale) })
+                : `${t('dashboard.netWorth')} · ${formatPeriod(period, locale)}`}
             </span>
-            <RefreshButton
-              onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
-              busy={isValidating}
-              label={t('dashboard.refresh')}
-            />
+            <div className="cluster" style={{ gap: 4 }}>
+              {canTimeTravel && (
+                /* One button, not a segmented control: there are exactly two
+                   readings and the icon plus the label above already say which
+                   one is showing, so a second persistent control would be
+                   restating it. */
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cx('hero-timetravel', showingHistorical && 'is-active')}
+                  aria-pressed={showingHistorical}
+                  title={
+                    showingHistorical
+                      ? t('dashboard.showCurrentBalance')
+                      : t('dashboard.showEndOfMonthBalance')
+                  }
+                  aria-label={
+                    showingHistorical
+                      ? t('dashboard.showCurrentBalance')
+                      : t('dashboard.showEndOfMonthBalance')
+                  }
+                  onClick={() =>
+                    setOverride({ period, historical: !showingHistorical })
+                  }
+                >
+                  <Icon icon={showingHistorical ? History : Wallet} size="sm" />
+                </Button>
+              )}
+              <RefreshButton
+                onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
+                busy={isValidating}
+                label={t('dashboard.refresh')}
+              />
+            </div>
           </div>
-          <span className="hero-value">{money(netWorthLive)}</span>
+          <span className={cx('hero-value', showingHistorical && 'is-historical')}>
+            {money(heroValue)}
+          </span>
+
+          {/* The indicator that this is not present-day money. Stated in words
+              under the figure rather than only as an icon, because the one
+              mistake this feature can cause — reading a March balance as your
+              current one — is expensive and silent. */}
+          {showingHistorical && (
+            <span className="hero-timetravel-note">
+              <Icon icon={History} size="sm" />
+              {t('dashboard.asItStood', { date: formatDate(data.asOfDate ?? '', locale) })}
+              {hasPositions && <em>{t('dashboard.holdingsAtCost')}</em>}
+            </span>
+          )}
           <div className="hero-meta">
             <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
               {data.monthNet >= 0

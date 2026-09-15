@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
 import { AnalyticsPayees } from '../components/AnalyticsPayees';
 import { CategoryBoxPlotCard } from '../components/CategoryBoxPlotCard';
+import { CategoryPieChartCard } from '../components/CategoryPieChartCard';
 import { Icon } from '../components/Icon';
 import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { Card, EmptyState } from '../components/ui';
@@ -105,10 +106,26 @@ export function AnalyticsPage({
           it does not tile into a half. */}
       <SubscriptionHeatmapCard period={period} className="bento-item--full" onNavigate={onNavigate} />
 
+      <Card
+        className="bento-item"
+        title={t('analytics.savingsRateTitle')}
+        subtitle={t('analytics.savingsRateSubtitle')}
+      >
+        <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
+          <AnalyticsSavingsRate trend={trend} money={money} locale={locale} />
+        </Suspense>
+      </Card>
+
       {/* Full width: twelve months of a time series, the same argument the
           income-vs-spending chart makes on the Overview screen. It also keeps
           the half-card count even — an odd one strands itself beside a
           three-column hole. */}
+
+      {/* Paired with the treemap on purpose. The two read the same
+          composition differently: a donut is good at "what share", a treemap at
+          "how do the small ones compare", and side by side neither has to be
+          both. They share `categoryComposition`, so the parts always agree. */}
+      <CategoryPieChartCard className="bento-item--half" period={period} />
 
       <Card
         className="bento-item--half"
@@ -117,16 +134,6 @@ export function AnalyticsPage({
       >
         <Suspense fallback={<div className="atree atree--loading" aria-hidden="true" />}>
           <AnalyticsCategories transactions={monthTransactions.items} money={money} />
-        </Suspense>
-      </Card>
-
-      <Card
-        className="bento-item--half"
-        title={t('analytics.savingsRateTitle')}
-        subtitle={t('analytics.savingsRateSubtitle')}
-      >
-        <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
-          <AnalyticsSavingsRate trend={trend} money={money} locale={locale} />
         </Suspense>
       </Card>
 
