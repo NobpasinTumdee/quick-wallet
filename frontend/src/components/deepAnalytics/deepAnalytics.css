@@ -936,3 +936,212 @@
     transition: none;
   }
 }
+
+/* ================================================================== */
+/* Variable shelves — X and Y as removable pills                        */
+/* ================================================================== */
+
+.xp-field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.xp-field-label small {
+  font-weight: normal;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.xp-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--accent-ring);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--text-xs);
+}
+
+.xp-pill-index {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-inline-start: -4px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.xp-pill-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 24px hit target on a 16px-looking control. */
+.xp-pill-remove {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.xp-pill-remove:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.xp-pill-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.xp-pill-add {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.xp-pill-add > svg {
+  position: absolute;
+  inset-inline-start: 9px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.xp-field .xp-pill-add select {
+  padding-inline-start: 28px;
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+/* A role that exists but is not in effect — kept, visibly set aside. */
+.xp-field.is-paused select {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-faint);
+}
+
+/* ================================================================== */
+/* Small multiples                                                      */
+/* ================================================================== */
+
+.xp-facet-caption {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.xp-facets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .xp-facets--2,
+  .xp-facets--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .xp-facets--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.xp-facet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-xs);
+}
+
+.xp-facet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.xp-facet-head h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.xp-facet-head span {
+  flex: none;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.xp-chart.is-compact .xp-tooltip {
+  max-width: 220px;
+}
+
+/* The outer level of a nested band axis. */
+.xp-tick-outer {
+  fill: var(--text-muted);
+  font-weight: 600;
+}
+
+.xp-nest-divider {
+  stroke: var(--divider);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.xp-facet-limit strong {
+  color: var(--text);
+}
+
+.xp-facet-limit p {
+  max-width: 44ch;
+}

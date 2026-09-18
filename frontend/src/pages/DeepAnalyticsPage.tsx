@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowLeft, ChevronDown, Database, SlidersHorizontal } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /* Imported here, not from app.css, so Vite emits it with this lazily loaded
@@ -7,30 +7,27 @@ import { useTranslation } from 'react-i18next';
 import '../components/deepAnalytics/deepAnalytics.css';
 
 import { Icon } from '../components/Icon';
-import { ExplorerChart } from '../components/deepAnalytics/ExplorerChart';
 import { ExplorerControls, SOURCE_LABEL } from '../components/deepAnalytics/ExplorerControls';
 import { ExplorerFilters } from '../components/deepAnalytics/ExplorerFilters';
 import { ExplorerLegend } from '../components/deepAnalytics/ExplorerLegend';
 import { ExplorerTable } from '../components/deepAnalytics/ExplorerTable';
-import { useExcelQuery } from '../hooks/useExcelDB';
+import { FacetGrid, TooManyFacets } from '../components/deepAnalytics/FacetGrid';
+import { useChartMath } from '../hooks/useChartMath';
+import { View, useDeepAnalyticsState } from '../hooks/useDeepAnalyticsState';
+import { ChartNotes, facetTwin } from '../lib/explorerChartMath';
 import {
   Aggregation,
   BLANK,
-  ChartSpec,
   ChartType,
   OTHER,
-  RawDataset,
-  RawSource,
-  Series,
+  RawColumn,
   SpecProblem,
   columnFor,
   defaultSpec,
-  shapeData,
-  tableTwin,
+  splitNestKey,
 } from '../lib/explorerData';
-import { Filter, applyFilters, isActive } from '../lib/explorerFilters';
+import { isActive } from '../lib/explorerFilters';
 import { formatBucket, formatExplorerNumber, formatInstant } from '../lib/explorerFormat';
-import { OTHER_DARK, OTHER_LIGHT, isDarkSurface, seriesColor } from '../lib/explorerPalette';
 import { cx } from '../lib/format';
 import { Route } from '../lib/router';
 import { TranslationKey } from '../locales';
@@ -40,24 +37,22 @@ import { useSettings } from '../state/SettingsContext';
  * Deep Analytics — the raw-data explorer, as a page of its own.
  *
  * ---------------------------------------------------------------------------
- * WHY IT LEFT THE MODAL
- * ---------------------------------------------------------------------------
- * A dialog was the right first shape: it kept the router flat and the feature
- * self-contained. It stopped being right once the explorer grew filters and a
- * colour editor. A chart builder is somewhere people stay and iterate, and a
- * dialog cannot be bookmarked, cannot be returned to with Back, and competes
- * with the page behind it for the same viewport. As a route it gets the whole
- * width, a URL, and ordinary browser history.
- *
- * ---------------------------------------------------------------------------
  * THE PIPELINE
  * ---------------------------------------------------------------------------
- *   raw rows ──filters──▶ filtered rows ──shapeData──▶ chart / table
- *        └───────── group ranking (colour identity) ─────────┘
+ *   raw rows ──filters──▶ filtered rows ──partition (Page By)──▶ panels
+ *        │                      │                                 │
+ *        │                      └──frame: bands, line positions,  │
+ *        │                         series — over ALL panels ──────┤
+ *        └── series ranking (colour identity) ────────────────────┤
+ *                                           shapes ──▶ domains over ALL panels
  *
  * Filters run on raw rows, before anything is summarised: filtering sums would
- * answer a different question. Group colours are ranked on the *unfiltered*
- * rows, so hiding one group never repaints the others — see `groupSlots`.
+ * answer a different question. The frame and the domains are taken across
+ * every panel, so the panels share one coordinate system and can be compared
+ * by position — see `explorerChartMath.ts`.
+ *
+ * State lives in `useDeepAnalyticsState`, drawing math in `useChartMath`; this
+ * file is labels and layout.
  *
  * ---------------------------------------------------------------------------
  * STILL OUT OF THE MAIN BUNDLE
@@ -66,8 +61,6 @@ import { useSettings } from '../state/SettingsContext';
  * `lazy()`, and only renders on this route. `bundlecheck.mjs` fails the build
  * if a static import ever pulls any of it back in.
  */
-
-type View = 'chart' | 'twin' | 'raw';
 
 const AGG_KEY: Record<Aggregation, TranslationKey> = {
   sum: 'explorer.aggSum',
@@ -83,10 +76,14 @@ const VIEW_KEY: Record<View, TranslationKey> = {
 const PROBLEM_KEY: Record<SpecProblem, TranslationKey> = {
   needX: 'explorer.problemNeedX',
   badX: 'explorer.problemBadX',
+  tooManyX: 'explorer.problemTooManyX',
   needY: 'explorer.problemNeedY',
   badY: 'explorer.problemBadY',
-  badGroup: 'explorer.problemBadGroup',
+  tooManyY: 'explorer.problemTooManyY',
+  badOverlay: 'explorer.problemBadOverlay',
+  badPage: 'explorer.problemBadPage',
   tooManyBuckets: 'explorer.problemTooManyBuckets',
+  tooManyFacets: 'explorer.problemTooManyFacets',
 };
 const CHART_KEY: Record<ChartType, TranslationKey> = {
   bar: 'explorer.chartBar',
@@ -103,184 +100,110 @@ const STAT_KEY: Record<string, TranslationKey> = {
   max: 'explorer.statMax',
 };
 
-/* ------------------------------------------------------------------ */
-/* Colour choices, remembered per device                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * `{ "transactions:type": { "expense": "#c0392b", … }, … }`
- *
- * Scoped by source *and* group column. "expense" coloured red while grouping
- * Transactions by Type says nothing about a group that happens to share the
- * name under a different column, and the colour must not follow it there.
- *
- * localStorage rather than the workbook: a chart colour is a view preference
- * of one screen on one device, and a Settings column for it would put a
- * cosmetic choice in the same row as the user's currency. Every access is
- * guarded — blocked storage just means the choice lasts for the session.
- */
-type ColorMap = Record<string, Record<string, string>>;
-const COLOR_KEY = 'quick-wallet.explorer-colors';
-
-function readColors(): ColorMap {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLOR_KEY) ?? '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeColors(map: ColorMap): void {
-  try {
-    localStorage.setItem(COLOR_KEY, JSON.stringify(map));
-  } catch {
-    /* Quota or blocked storage — the colours last for this session. */
-  }
-}
+/** Bucket keys as `discreteKey` writes them — `2026`, `2026-03`, `2026-03-14`. */
+const BUCKET_KEY = /^\d{4}(-\d{2}){0,2}$/;
 
 export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const { t } = useTranslation();
-  const { settings } = useSettings();
-  const locale = settings.locale;
+  const state = useDeepAnalyticsState();
+  const { source, dataset, filtered, spec, mode, view, query } = state;
+  const locale = useSettings().settings.locale;
 
-  const [source, setSource] = useState<RawSource>('transactions');
-  const [spec, setSpec] = useState<ChartSpec | null>(null);
-  const [view, setView] = useState<View>('chart');
-  /* Per source, so switching to Debts and back restores the Transactions
-     filters rather than discarding them or applying them to the wrong table. */
-  const [filtersBySource, setFiltersBySource] = useState<Partial<Record<RawSource, Filter[]>>>({});
-  const [colors, setColors] = useState<ColorMap>(readColors);
-  /* Mobile only — the panel is always open beside the chart on a desktop. */
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  useEffect(() => writeColors(colors), [colors]);
-
-  /* On-demand by construction: this component does not exist until the route
-     is visited, and `enabled` states the intent where the fetch is declared. */
-  const query = useExcelQuery<RawDataset>('/api/analytics/raw-data', { source }, { enabled: true });
-  const dataset = query.data && query.data.source === source ? query.data : null;
-
-  const filters = filtersBySource[source] ?? [];
-  const setFilters = useCallback(
-    (next: Filter[]) => setFiltersBySource((previous) => ({ ...previous, [source]: next })),
-    [source],
-  );
-
-  /* A new table means new columns: rebuild the spec against them, keeping
-     whatever the previous one chose that the new table also has. */
-  useEffect(() => {
-    if (!dataset) return;
-    setSpec((previous) => defaultSpec(previous?.type ?? 'bar', dataset.columns, previous ?? undefined));
-  }, [dataset]);
-
-  /* The painted surface — for the palette set and the contrast warning. Read
-     rather than inferred from the theme name so `custom` works too. */
-  const surface = useMemo(() => {
-    if (typeof window === 'undefined') return '#111725';
-    return getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#111725';
-  }, [settings.theme, settings.customVars]);
-  const dark = isDarkSurface(surface);
-
-  /* ---- The pipeline ---- */
-  const filtered = useMemo(() => (dataset ? applyFilters(dataset, filters) : null), [dataset, filters]);
-
-  const scope = `${source}:${spec?.group ?? ''}`;
-  const scopeColors = useMemo(() => (spec?.group ? colors[scope] ?? {} : {}), [colors, scope, spec?.group]);
-  const customized = useMemo(() => new Set(Object.keys(scopeColors)), [scopeColors]);
-
-  const result = useMemo(
-    () =>
-      dataset && filtered && spec
-        ? shapeData(filtered, spec, { rankRows: dataset.rows, customColored: customized })
-        : null,
-    [dataset, filtered, spec, customized],
-  );
-
-  const colorOf = useCallback(
-    (series: Series): string => {
-      if (series.key === OTHER) return dark ? OTHER_DARK : OTHER_LIGHT;
-      return scopeColors[series.key] ?? seriesColor(series.slot ?? 0, dark);
-    },
-    [scopeColors, dark],
-  );
-
-  function setColor(key: string, color: string) {
-    setColors((previous) => ({ ...previous, [scope]: { ...(previous[scope] ?? {}), [key]: color } }));
-  }
-  function resetColor(key: string) {
-    setColors((previous) => {
-      const { [key]: _removed, ...rest } = previous[scope] ?? {};
-      return { ...previous, [scope]: rest };
-    });
-  }
-  function resetAllColors() {
-    setColors((previous) => {
-      const { [scope]: _removed, ...rest } = previous;
-      return rest;
-    });
-  }
+  const build = useChartMath(dataset, filtered, spec, state.customized);
 
   /* ---- Labels ---- */
-  const columnLabel = (key: string | null) => (dataset && columnFor(dataset.columns, key)?.header) ?? '';
+  const columns = dataset?.columns ?? [];
+  const columnLabel = useCallback(
+    (key: string | null) => columnFor(dataset?.columns ?? [], key)?.header ?? '',
+    [dataset],
+  );
 
-  const categoryLabel = (key: string): string => {
-    if (key === BLANK) return t('explorer.blank');
-    if (key === OTHER) return t('explorer.other');
-    if (key === 'true') return t('explorer.yes');
-    if (key === 'false') return t('explorer.no');
-    if (
-      spec &&
-      dataset &&
-      columnFor(dataset.columns, spec.x)?.kind === 'date' &&
-      /^\d{4}(-\d{2}){0,2}$/.test(key)
-    ) {
-      return formatBucket(key, spec.dateBucket, locale);
-    }
-    return key;
-  };
-
-  const seriesLabel = (key: string): string =>
-    key === '' ? columnLabel(spec?.y ?? null) : categoryLabel(key);
-
-  const yLabel =
-    spec && (spec.type === 'bar' || spec.type === 'line')
-      ? spec.aggregation === 'count'
-        ? t('explorer.aggCount')
-        : `${t(AGG_KEY[spec.aggregation])} · ${columnLabel(spec.y)}`
-      : columnLabel(spec?.y ?? null);
-
-  /* ---- The table twin ---- */
-  const twin = useMemo(() => {
-    if (!result?.ok || !spec || !dataset) return null;
-    const table = tableTwin(result.shape);
-    const xIsDate = columnFor(dataset.columns, spec.x)?.kind === 'date';
-    const headers = table.headers.map((header, i) => {
-      if (result.shape.type === 'scatter') {
-        return header === 'series' ? t('explorer.roleGroup') : header === 'x' ? columnLabel(spec.x) : columnLabel(spec.y);
+  /** One discrete value of one column, as a reader would say it. */
+  const levelLabel = useCallback(
+    (key: string, column: RawColumn | null): string => {
+      if (key === BLANK) return t('explorer.blank');
+      if (key === OTHER) return t('explorer.other');
+      if (column?.kind === 'boolean') {
+        if (key === 'true') return t('explorer.yes');
+        if (key === 'false') return t('explorer.no');
       }
-      if (header === 'x') return columnLabel(spec.x);
-      if (result.shape.type === 'box' && i > 0) return STAT_KEY[header] ? t(STAT_KEY[header]) : header;
+      if (column?.kind === 'date' && spec && BUCKET_KEY.test(key)) return formatBucket(key, spec.dateBucket, locale);
+      return key;
+    },
+    [t, spec, locale],
+  );
+
+  /* Stable identities: the chart memoises its axis labels on this function. */
+  const bandLabel = useCallback(
+    (key: string): string[] => {
+      if (key === OTHER) return [t('explorer.other')];
+      const xColumns = (spec?.xVars ?? []).map((x) => columnFor(dataset?.columns ?? [], x));
+      return splitNestKey(key).map((part, i) => levelLabel(part, xColumns[i] ?? null));
+    },
+    [spec, dataset, levelLabel, t],
+  );
+
+  const facetLabel = useCallback(
+    (key: string) => levelLabel(key, columnFor(dataset?.columns ?? [], spec?.pageBy ?? null)),
+    [levelLabel, dataset, spec],
+  );
+
+  const metricNames = (spec?.yVars ?? []).map(columnLabel).filter(Boolean).join(', ');
+  const countOnly = spec?.aggregation === 'count' && (spec.type === 'bar' || spec.type === 'line');
+  const yLabel = !spec
+    ? ''
+    : spec.type === 'bar' || spec.type === 'line'
+      ? countOnly
+        ? t('explorer.aggCount')
+        : `${t(AGG_KEY[spec.aggregation])} · ${metricNames}`
+      : metricNames;
+  const xLabel = (spec?.xVars ?? []).map(columnLabel).filter(Boolean).join(' › ');
+
+  const seriesLabel = useCallback(
+    (key: string): string => {
+      if (key === OTHER) return t('explorer.other');
+      if (mode === 'metric') return columnLabel(key);
+      if (mode === 'overlay') return levelLabel(key, columnFor(dataset?.columns ?? [], spec?.overlay ?? null));
+      return yLabel;
+    },
+    [t, mode, columnLabel, levelLabel, dataset, spec, yLabel],
+  );
+
+  /* ---- The table twin: every panel in one table, the panel as a column ---- */
+  const twin = useMemo(() => {
+    if (!build?.ok || !spec) return null;
+    const table = facetTwin(build.facets);
+    const scatter = build.facets[0]?.shape.type === 'scatter';
+    const box = build.facets[0]?.shape.type === 'box';
+    const xIsDate = scatter && build.frame.xKind === 'date';
+
+    const headers = table.headers.map((header) => {
+      if (header === 'page') return columnLabel(spec.pageBy);
+      if (header === 'x') return xLabel;
+      if (header === 'series') return t('explorer.seriesColumn');
+      if (scatter && header === 'y') return yLabel;
+      if (box) return STAT_KEY[header] ? t(STAT_KEY[header]) : header;
       return seriesLabel(header);
     });
+    const numeric = table.headers.map((header) => !['page', 'series'].includes(header) && !(header === 'x' && !scatter));
     const format = (value: unknown, column: number): string => {
       if (value === null || value === undefined) return '—';
-      if (result.shape.type === 'scatter') {
-        if (column === 0) return seriesLabel(String(value));
-        if (column === 1 && xIsDate) return formatInstant(Number(value), locale);
-      } else if (column === 0) {
-        return categoryLabel(String(value));
+      const role = table.headers[column];
+      if (role === 'page') return facetLabel(String(value));
+      if (role === 'series') return seriesLabel(String(value));
+      if (role === 'x') {
+        if (scatter) return xIsDate ? formatInstant(Number(value), locale) : formatExplorerNumber(Number(value), locale);
+        if (typeof value === 'number') return formatExplorerNumber(value, locale);
+        return bandLabel(String(value)).join(' · ');
       }
       return typeof value === 'number' ? formatExplorerNumber(value, locale) : String(value);
     };
-    return { headers, rows: table.rows, numeric: table.headers.map((_, i) => i > 0), format };
-    /* The label helpers close over spec, dataset, locale and t — all keyed. */
-  }, [result, spec, dataset, locale, t]);
+    return { headers, rows: table.rows, numeric, format };
+  }, [build, spec, columnLabel, xLabel, yLabel, seriesLabel, facetLabel, bandLabel, locale, t]);
 
-  const legendSeries =
-    spec?.group && result?.ok && result.shape.type !== 'box' ? result.shape.series : [];
+  const legendSeries = build?.ok && mode !== 'single' ? build.frame.series : [];
 
-  const activeFilters = dataset ? filters.filter((filter) => isActive(filter, dataset.columns)).length : 0;
+  const activeFilters = dataset ? state.filters.filter((filter) => isActive(filter, dataset.columns)).length : 0;
   const rowCount = dataset?.rowCount ?? 0;
 
   /* The collapsed panel's one-line summary, so a phone user can see what the
@@ -288,7 +211,8 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
   const summary = spec
     ? [
         t(CHART_KEY[spec.type]),
-        [yLabel, columnLabel(spec.x)].filter(Boolean).join(' × '),
+        [yLabel, xLabel].filter(Boolean).join(' × '),
+        spec.pageBy ? `${t('explorer.rolePage')}: ${columnLabel(spec.pageBy)}` : '',
         activeFilters > 0 ? t('explorer.filterSummary', { count: activeFilters }) : '',
       ]
         .filter(Boolean)
@@ -317,16 +241,16 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
       </header>
 
       <div className="xp-layout">
-        <aside className={cx('xp-side', !settingsOpen && 'is-collapsed')} aria-label={t('explorer.settings')}>
+        <aside className={cx('xp-side', !state.settingsOpen && 'is-collapsed')} aria-label={t('explorer.settings')}>
           {/* Phones only. The controls take a full screen of height, which on a
               phone would push the chart — the thing being built — below the
               fold. Collapsed by default, with a summary of what is set. */}
           <button
             type="button"
             className="xp-settings-toggle"
-            aria-expanded={settingsOpen}
+            aria-expanded={state.settingsOpen}
             aria-controls="xp-side-body"
-            onClick={() => setSettingsOpen((open) => !open)}
+            onClick={() => state.setSettingsOpen((open) => !open)}
           >
             <Icon icon={SlidersHorizontal} size="sm" />
             <span className="xp-settings-text">
@@ -341,16 +265,11 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
               <h2 id="xp-chart-heading">{t('explorer.chartSection')}</h2>
               <ExplorerControls
                 source={source}
-                onSource={(next) => {
-                  setSource(next);
-                  setView('chart');
-                }}
-                columns={dataset?.columns ?? []}
+                onSource={state.setSource}
+                columns={columns}
                 spec={spec ?? defaultSpec('bar', [])}
-                onSpec={(patch) => setSpec((previous) => (previous ? { ...previous, ...patch } : previous))}
-                onChartType={(type) =>
-                  dataset && setSpec((previous) => defaultSpec(type, dataset.columns, previous ?? undefined))
-                }
+                onSpec={state.patchSpec}
+                onChartType={state.setChartType}
                 disabled={!dataset}
               />
             </section>
@@ -362,8 +281,8 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
               </h2>
               <ExplorerFilters
                 dataset={dataset}
-                filters={filters}
-                onChange={setFilters}
+                filters={state.filters}
+                onChange={state.setFilters}
                 matched={filtered?.rowCount ?? null}
               />
             </section>
@@ -379,7 +298,7 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
                 role="tab"
                 aria-selected={view === id}
                 className={view === id ? 'is-active' : undefined}
-                onClick={() => setView(id)}
+                onClick={() => state.setView(id)}
               >
                 {t(VIEW_KEY[id])}
               </button>
@@ -422,10 +341,14 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
                   return String(value);
                 }}
               />
-            ) : !result ? null : !result.ok ? (
-              <div className="xp-message">
-                <p>{t(PROBLEM_KEY[result.problem])}</p>
-              </div>
+            ) : !build || !spec ? null : !build.ok ? (
+              build.problem === 'tooManyFacets' ? (
+                <TooManyFacets count={build.facetCount ?? 0} column={columnLabel(spec.pageBy)} />
+              ) : (
+                <div className="xp-message">
+                  <p>{t(PROBLEM_KEY[build.problem])}</p>
+                </div>
+              )
             ) : view === 'twin' && twin ? (
               <ExplorerTable
                 headers={twin.headers}
@@ -436,29 +359,36 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
               />
             ) : (
               <>
+                {build.faceted && (
+                  <p className="xp-facet-caption">
+                    {t('explorer.facetCaption', { column: columnLabel(spec.pageBy), count: build.facets.length })}
+                  </p>
+                )}
                 {legendSeries.length > 0 && (
                   <ExplorerLegend
                     series={legendSeries}
-                    colorOf={colorOf}
+                    colorOf={state.colorOf}
                     labelOf={seriesLabel}
-                    customized={customized}
-                    surface={surface}
-                    onColor={setColor}
-                    onReset={resetColor}
-                    onResetAll={resetAllColors}
+                    customized={state.customized}
+                    surface={state.surface}
+                    onColor={state.setColor}
+                    onReset={state.resetColor}
+                    onResetAll={state.resetAllColors}
                   />
                 )}
-                <ExplorerChart
-                  shape={result.shape}
-                  spec={spec as ChartSpec}
-                  colorOf={colorOf}
+                <FacetGrid
+                  facets={build.facets}
+                  faceted={build.faceted}
+                  domains={build.domains}
+                  facetLabel={facetLabel}
+                  colorOf={state.colorOf}
                   locale={locale}
-                  xLabel={columnLabel(spec?.x ?? null)}
+                  xLabel={xLabel}
                   yLabel={yLabel}
-                  categoryLabel={categoryLabel}
+                  bandLabel={bandLabel}
                   seriesLabel={seriesLabel}
                 />
-                <Notes shape={result.shape} />
+                <Notes notes={build.notes} />
               </>
             )}
           </div>
@@ -473,25 +403,21 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
  * rows are decisions made on the reader's behalf, and a chart that makes them
  * silently misreports the table without saying so.
  */
-function Notes({ shape }: { shape: import('../lib/explorerData').Shape }) {
+function Notes({ notes }: { notes: ChartNotes }) {
   const { t } = useTranslation();
-  const notes: string[] = [];
+  const lines: string[] = [];
 
-  if (shape.type === 'scatter' && shape.sampled) {
-    notes.push(t('explorer.noteSampled', { shown: shape.shown, total: shape.total }));
-  }
-  if ('folded' in shape && shape.folded > 0) notes.push(t('explorer.noteFolded', { count: shape.folded }));
-  if (shape.dropped > 0) notes.push(t('explorer.noteDropped', { count: shape.dropped }));
-  if (shape.type === 'box') {
-    const hidden = shape.boxes.reduce((sum, b) => sum + b.hiddenOutliers, 0);
-    if (hidden > 0) notes.push(t('explorer.noteHiddenOutliers', { count: hidden }));
-  }
+  if (notes.sampled) lines.push(t('explorer.noteSampled', { shown: notes.sampled.shown, total: notes.sampled.total }));
+  if (notes.foldedBands > 0) lines.push(t('explorer.noteFoldedBands', { count: notes.foldedBands }));
+  if (notes.foldedGroups > 0) lines.push(t('explorer.noteFolded', { count: notes.foldedGroups }));
+  if (notes.dropped > 0) lines.push(t('explorer.noteDropped', { count: notes.dropped }));
+  if (notes.hiddenOutliers > 0) lines.push(t('explorer.noteHiddenOutliers', { count: notes.hiddenOutliers }));
 
-  if (notes.length === 0) return null;
+  if (lines.length === 0) return null;
   return (
     <ul className="xp-notes">
-      {notes.map((note) => (
-        <li key={note}>{note}</li>
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
       ))}
     </ul>
   );

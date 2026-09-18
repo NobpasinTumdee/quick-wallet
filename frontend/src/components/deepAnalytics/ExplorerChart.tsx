@@ -1,7 +1,8 @@
-import { KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardEvent, MouseEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { ChartSpec, Series, Shape } from '../../lib/explorerData';
+import { Series, Shape } from '../../lib/explorerData';
+import { ChartDomains } from '../../lib/explorerChartMath';
 import { formatExplorerNumber, formatInstant, formatTick } from '../../lib/explorerFormat';
 import {
   bandScale,
@@ -14,22 +15,29 @@ import {
 } from '../../lib/explorerScales';
 
 /**
- * One SVG system for all four chart forms.
+ * One SVG system for all four chart forms — drawn once, or once per panel.
  *
  * ---------------------------------------------------------------------------
  * WHY NOT RECHARTS, WHICH THE REST OF ANALYTICS USES
  * ---------------------------------------------------------------------------
- * Three reasons, in order of weight:
- *
  *   1. The hover layer. A dense scatter needs nearest-point hit testing — an
  *      8px dot you must land on dead centre is unusable — and that needs the
  *      data→pixel scales. Recharts keeps them internal.
- *   2. Recharts has no box plot, so one of the four forms would have been
- *      hand-drawn regardless, on a second axis system that would never quite
- *      match the other three.
- *   3. The chunk. This module loads only when the explorer opens, and a small
- *      self-contained renderer keeps it small — Recharts would ride along into
- *      it as a second copy of work the SVG already does.
+ *   2. Recharts has no box plot, so one form would have been hand-drawn on a
+ *      second axis system that would never quite match the other three.
+ *   3. Small multiples. A trellis needs every panel on a coordinate system
+ *      decided *outside* the panel — see below — and a library that fits its
+ *      own axes has to be fought for every one of them.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS COMPONENT DOES NOT CHOOSE ITS SCALES
+ * ---------------------------------------------------------------------------
+ * The Y domain and the continuous X range arrive as `domains`, computed over
+ * every panel after aggregation (`chartDomains`). The band axis arrives inside
+ * the shape, from a frame shared by every panel. What remains here is only
+ * what depends on this panel's pixel width: how many time ticks fit, and
+ * which band labels to thin. Panels in one grid are the same width, so even
+ * those agree.
  *
  * ---------------------------------------------------------------------------
  * MARK SPECS
@@ -41,13 +49,19 @@ import {
  */
 
 const PLOT_HEIGHT = 340;
+const COMPACT_PLOT_HEIGHT = 220;
 const TOP = 18;
 const FONT_WIDTH = 6.6;
 const BAR_GAP = 2;
+/** The extra row that carries the outer level of a nested band axis. */
+const NEST_ROW = 16;
 
 interface Props {
   shape: Shape;
-  spec: ChartSpec;
+  /** The shared coordinate system — the same object for every panel. */
+  domains: ChartDomains;
+  /** A panel in a grid: shorter, and no direct labels (the legend is shared). */
+  compact?: boolean;
   /**
    * The colour for a series — the user's choice if they made one, otherwise
    * its validated palette slot. Decided by the page, which owns that state, so
@@ -57,8 +71,11 @@ interface Props {
   locale: string;
   xLabel: string;
   yLabel: string;
-  /** Resolves a category or bucket key — including the blank/other sentinels. */
-  categoryLabel: (key: string) => string;
+  /**
+   * A band (or line bucket) key as its labelled levels, outer to inner. One
+   * level for a plain axis; several when X variables are nested.
+   */
+  bandLabel: (key: string) => string[];
   seriesLabel: (key: string) => string;
 }
 
@@ -76,7 +93,7 @@ function useWidth(fallback = 720) {
   useEffect(() => {
     const element = ref.current;
     if (!element) return undefined;
-    const measure = () => setWidth(Math.max(280, Math.round(element.clientWidth)));
+    const measure = () => setWidth(Math.max(260, Math.round(element.clientWidth)));
     measure();
     if (typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(measure);
@@ -90,100 +107,76 @@ function useWidth(fallback = 720) {
 const textWidth = (text: string) => text.length * FONT_WIDTH;
 
 export function ExplorerChart(props: Props) {
-  const { shape, locale } = props;
+  const { shape, locale, domains, compact = false } = props;
   const { t } = useTranslation();
-  const [wrapRef, width] = useWidth();
+  const hintId = useId();
+  const [wrapRef, width] = useWidth(compact ? 360 : 720);
   const [hover, setHover] = useState<Hover | null>(null);
 
   /* A new shape invalidates whatever index was hovered — it may not exist. */
   useEffect(() => setHover(null), [shape]);
 
-  const n = (value: number, compact = false) => formatExplorerNumber(value, locale, compact);
+  const n = (value: number, short = false) => formatExplorerNumber(value, locale, short);
   const color = props.colorOf;
+  const plotHeight = compact ? COMPACT_PLOT_HEIGHT : PLOT_HEIGHT;
 
-  /* ---- Y domain, shared by every form ---- */
-  const yDomain = useMemo(() => {
-    const values: number[] = [];
-    if (shape.type === 'scatter') shape.series.forEach((s) => s.points.forEach((p) => values.push(p.y)));
-    if (shape.type === 'bar' || shape.type === 'line') {
-      shape.series.forEach((s) => s.values.forEach((v) => v !== null && values.push(v)));
-    }
-    if (shape.type === 'box') {
-      shape.boxes.forEach((b) => values.push(b.lowerWhisker, b.upperWhisker, ...b.outliers));
-    }
-    const min = values.length ? Math.min(...values) : 0;
-    const max = values.length ? Math.max(...values) : 1;
-    /* A bar's length is its value, so its axis must start at zero or a small
-       difference is drawn as a large one. The other forms plot positions and
-       are free to fit the data. */
-    return niceDomain(min, max, 5, shape.type === 'bar');
-  }, [shape]);
+  /* ---- Band keys and their labels ---- */
+  const bandKeys = shape.type === 'bar' ? shape.categories : shape.type === 'box' ? shape.bands : [];
+  const bandParts = useMemo(() => bandKeys.map(props.bandLabel), [bandKeys, props.bandLabel]);
+  const nested = bandParts.some((parts) => parts.length > 1);
 
-  const yTickLabels = yDomain.ticks.map((tick) => n(tick, true));
+  /* ---- Y: handed down, never fitted here ---- */
+  const yTickLabels = domains.y.ticks.map((tick) => n(tick, true));
   const left = Math.max(44, Math.ceil(Math.max(...yTickLabels.map(textWidth))) + 16);
 
   const directLabels =
-    shape.type === 'line' && shape.series.length >= 2 && shape.series.length <= 4;
+    !compact && shape.type === 'line' && shape.series.length >= 2 && shape.series.length <= 4;
   const right = directLabels
     ? Math.min(140, 16 + Math.max(...shape.series.map((s) => textWidth(props.seriesLabel(s.key)))))
     : 18;
 
-  const bottom = 46;
-  const height = TOP + PLOT_HEIGHT + bottom;
+  const bottom = 46 + (nested ? NEST_ROW : 0);
+  const height = TOP + plotHeight + bottom;
   const plotLeft = left;
   const plotRight = width - right;
-  const plotBottom = TOP + PLOT_HEIGHT;
+  const plotBottom = TOP + plotHeight;
 
-  const y = linearScale([yDomain.min, yDomain.max], [plotBottom, TOP], yDomain.ticks);
+  const y = linearScale([domains.y.min, domains.y.max], [plotBottom, TOP], domains.y.ticks);
 
-  /* ---- X ---- */
+  /* ---- X: the shared range, ticked for this width ---- */
   const continuous = shape.type === 'scatter' || shape.type === 'line';
-  const xIsTime =
-    (shape.type === 'scatter' && shape.xKind === 'date') || (shape.type === 'line' && shape.xKind === 'date');
+  const xIsTime = continuous && shape.xKind === 'date';
+  const tickBudget = Math.max(2, Math.floor((plotRight - plotLeft) / 90));
 
   const xContinuous = useMemo(() => {
     if (!continuous) return null;
-    const xs =
-      shape.type === 'scatter'
-        ? shape.series.flatMap((s) => s.points.map((p) => p.x))
-        : shape.type === 'line'
-          ? shape.xs
-          : [];
-    const min = xs.length ? Math.min(...xs) : 0;
-    const max = xs.length ? Math.max(...xs) : 1;
+    const min = domains.x?.min ?? 0;
+    const max = domains.x?.max ?? 1;
     if (xIsTime) {
       const span = max - min || 86_400_000;
       const pad = span * 0.02;
-      const { ticks, unit } = timeTicks(min - pad, max + pad, Math.max(2, Math.floor((plotRight - plotLeft) / 90)));
+      const { ticks, unit } = timeTicks(min - pad, max + pad, tickBudget);
       return { min: min - pad, max: max + pad, ticks, unit };
     }
-    const nice = niceDomain(min, max, Math.max(2, Math.floor((plotRight - plotLeft) / 90)));
+    const nice = niceDomain(min, max, tickBudget);
     return { min: nice.min, max: nice.max, ticks: nice.ticks, unit: null };
-  }, [continuous, shape, xIsTime, plotLeft, plotRight]);
+  }, [continuous, domains.x, xIsTime, tickBudget]);
 
   const x = xContinuous
     ? linearScale([xContinuous.min, xContinuous.max], [plotLeft, plotRight], xContinuous.ticks)
     : null;
 
-  const bandCount =
-    shape.type === 'bar' ? shape.categories.length : shape.type === 'box' ? shape.boxes.length : 0;
-  const band = bandScale(bandCount, [plotLeft, plotRight], shape.type === 'box' ? 0.4 : 0.22);
-  const bandKeys = shape.type === 'bar' ? shape.categories : shape.type === 'box' ? shape.boxes.map((b) => b.key) : [];
+  const band = bandScale(bandKeys.length, [plotLeft, plotRight], shape.type === 'box' ? 0.3 : 0.22);
 
   /* ---- Scatter points in pixel space, for drawing and hit testing ---- */
   const scatterPixels = useMemo(() => {
     if (shape.type !== 'scatter' || !x) return [];
     return shape.series.flatMap((series) =>
-      series.points.map((point) => ({
-        px: x(point.x),
-        py: y(point.y),
-        point,
-        series,
-      })),
+      series.points.map((point) => ({ px: x(point.x), py: y(point.y), point, series })),
     );
     /* `x` and `y` are rebuilt every render, so the memo keys on the inputs they
        are built from rather than on the functions themselves. */
-  }, [shape, xContinuous, yDomain, plotLeft, plotRight]);
+  }, [shape, xContinuous, domains.y, plotLeft, plotRight, plotBottom]);
 
   /* Keyboard order for the scatter: left to right, so arrow keys sweep the plot. */
   const scatterOrder = useMemo(
@@ -192,7 +185,7 @@ export function ExplorerChart(props: Props) {
   );
 
   const positions =
-    shape.type === 'scatter' ? scatterPixels.length : shape.type === 'line' ? shape.xs.length : bandCount;
+    shape.type === 'scatter' ? scatterPixels.length : shape.type === 'line' ? shape.xs.length : bandKeys.length;
 
   /* ---- Pointer ---- */
   function pointer(event: MouseEvent<SVGSVGElement>) {
@@ -229,8 +222,7 @@ export function ExplorerChart(props: Props) {
 
     const current =
       shape.type === 'scatter' && hover ? scatterOrder.indexOf(hover.index) : (hover?.index ?? -1);
-    const next = Math.min(positions - 1, Math.max(0, current + step));
-    focusIndex(next);
+    focusIndex(Math.min(positions - 1, Math.max(0, current + step)));
   }
 
   function focusIndex(ordinal: number) {
@@ -239,26 +231,40 @@ export function ExplorerChart(props: Props) {
       if (index === undefined) return;
       setHover({ index, px: scatterPixels[index].px, py: scatterPixels[index].py });
     } else if (shape.type === 'line' && x) {
-      setHover({ index: ordinal, px: x(shape.xs[ordinal]), py: TOP + PLOT_HEIGHT / 3 });
+      setHover({ index: ordinal, px: x(shape.xs[ordinal]), py: TOP + plotHeight / 3 });
     } else {
-      setHover({ index: ordinal, px: band(ordinal) + band.bandwidth / 2, py: TOP + PLOT_HEIGHT / 3 });
+      setHover({ index: ordinal, px: band(ordinal) + band.bandwidth / 2, py: TOP + plotHeight / 3 });
     }
   }
 
   /* ---- Band labels: thinned rather than rotated when they collide ---- */
+  const innerLabels = bandParts.map((parts) => parts[parts.length - 1] ?? '');
   const labelEvery = useMemo(() => {
-    if (!bandKeys.length) return 1;
-    const widest = Math.max(...bandKeys.map((k) => textWidth(props.categoryLabel(k))));
+    if (!innerLabels.length) return 1;
+    const widest = Math.max(...innerLabels.map(textWidth));
     return Math.max(1, Math.ceil((widest + 8) / Math.max(1, band.step)));
-  }, [bandKeys, band.step, props]);
+  }, [innerLabels.join('\n'), band.step]);
+
+  /* The outer levels of a nested axis, as runs of adjacent bands sharing a
+     parent. The frame keeps children of one parent together, so each parent
+     is exactly one run. */
+  const outerRuns = useMemo(() => {
+    if (!nested) return [];
+    const runs: { label: string; from: number; to: number }[] = [];
+    bandParts.forEach((parts, i) => {
+      const label = parts.slice(0, -1).join(' · ');
+      const last = runs[runs.length - 1];
+      if (last && last.label === label) last.to = i;
+      else runs.push({ label, from: i, to: i });
+    });
+    return runs;
+  }, [bandParts, nested]);
 
   /* ---- Tooltip body ---- */
-  let tooltip: ReactNode = null;
-  if (hover) tooltip = tooltipFor();
-
   function swatch(series: Series) {
     return <span className="xp-swatch" style={{ background: color(series) }} aria-hidden="true" />;
   }
+  const heading = (index: number) => (bandParts[index] ?? []).join(' · ');
 
   function tooltipFor(): ReactNode {
     if (!hover) return null;
@@ -278,20 +284,22 @@ export function ExplorerChart(props: Props) {
             <strong>{xIsTime ? formatInstant(hit.point.x, locale) : n(hit.point.x)}</strong>
           </div>
           <div className="xp-tip-row">
-            <span>{props.yLabel}</span>
+            <span>{shape.series.length > 1 ? props.seriesLabel(hit.series.key) : props.yLabel}</span>
             <strong>{n(hit.point.y)}</strong>
           </div>
         </>
       );
     }
-    if (shape.type === 'line') {
-      const heading =
-        shape.xKeys?.[hover.index] !== undefined
-          ? props.categoryLabel(shape.xKeys[hover.index])
-          : n(shape.xs[hover.index]);
+    if (shape.type === 'line' || shape.type === 'bar') {
+      const head =
+        shape.type === 'bar'
+          ? heading(hover.index)
+          : shape.xKeys?.[hover.index] !== undefined
+            ? props.bandLabel(shape.xKeys[hover.index]).join(' · ')
+            : n(shape.xs[hover.index]);
       return (
         <>
-          <div className="xp-tip-row xp-tip-head">{heading}</div>
+          <div className="xp-tip-row xp-tip-head">{head}</div>
           {shape.series.map((s) => (
             <div key={s.key} className="xp-tip-row">
               <span>
@@ -304,51 +312,64 @@ export function ExplorerChart(props: Props) {
         </>
       );
     }
-    if (shape.type === 'bar') {
+
+    const drawn = shape.series
+      .map((s) => ({ s, box: s.boxes[hover.index] }))
+      .filter((entry): entry is { s: (typeof shape.series)[number]; box: NonNullable<typeof entry.box> } =>
+        Boolean(entry.box),
+      );
+    if (drawn.length === 0) return null;
+
+    /* One box: the full five-number reading. Several: one line each, or the
+       tooltip would be taller than the chart. */
+    if (shape.series.length === 1) {
+      const { box } = drawn[0];
       return (
         <>
-          <div className="xp-tip-row xp-tip-head">{props.categoryLabel(shape.categories[hover.index])}</div>
-          {shape.series.map((s) => (
-            <div key={s.key} className="xp-tip-row">
-              <span>
-                {shape.series.length > 1 && swatch(s)}
-                {shape.series.length > 1 ? props.seriesLabel(s.key) : props.yLabel}
-              </span>
-              <strong>{s.values[hover.index] === null ? '—' : n(s.values[hover.index] as number)}</strong>
+          <div className="xp-tip-row xp-tip-head">{heading(hover.index)}</div>
+          <div className="xp-tip-row"><span>{t('explorer.statN')}</span><strong>{n(box.n)}</strong></div>
+          <div className="xp-tip-row"><span>{t('explorer.statMedian')}</span><strong>{n(box.median)}</strong></div>
+          <div className="xp-tip-row">
+            <span>{t('explorer.statIqr')}</span>
+            <strong>{n(box.q1)} – {n(box.q3)}</strong>
+          </div>
+          <div className="xp-tip-row">
+            <span>{t('explorer.statRange')}</span>
+            <strong>{n(box.min)} – {n(box.max)}</strong>
+          </div>
+          {box.outliers.length + box.hiddenOutliers > 0 && (
+            <div className="xp-tip-row">
+              <span>{t('explorer.statOutliers')}</span>
+              <strong>{n(box.outliers.length + box.hiddenOutliers)}</strong>
             </div>
-          ))}
+          )}
         </>
       );
     }
-    const box = shape.boxes[hover.index];
-    if (!box) return null;
     return (
       <>
-        <div className="xp-tip-row xp-tip-head">{props.categoryLabel(box.key)}</div>
-        <div className="xp-tip-row"><span>{t('explorer.statN')}</span><strong>{n(box.n)}</strong></div>
-        <div className="xp-tip-row"><span>{t('explorer.statMedian')}</span><strong>{n(box.median)}</strong></div>
-        <div className="xp-tip-row">
-          <span>{t('explorer.statIqr')}</span>
-          <strong>{n(box.q1)} – {n(box.q3)}</strong>
-        </div>
-        <div className="xp-tip-row">
-          <span>{t('explorer.statRange')}</span>
-          <strong>{n(box.min)} – {n(box.max)}</strong>
-        </div>
-        {box.outliers.length + box.hiddenOutliers > 0 && (
-          <div className="xp-tip-row">
-            <span>{t('explorer.statOutliers')}</span>
-            <strong>{n(box.outliers.length + box.hiddenOutliers)}</strong>
+        <div className="xp-tip-row xp-tip-head">{heading(hover.index)}</div>
+        {drawn.map(({ s, box }) => (
+          <div key={s.key} className="xp-tip-row">
+            <span>
+              {swatch(s)}
+              {props.seriesLabel(s.key)}
+            </span>
+            <strong>
+              {n(box.median)} <small>({n(box.q1)} – {n(box.q3)}, n={n(box.n)})</small>
+            </strong>
           </div>
-        )}
+        ))}
       </>
     );
   }
 
+  const tooltip = hover ? tooltipFor() : null;
+
   return (
-    <div className="xp-chart" ref={wrapRef}>
-      {/* No legend here: the page renders an interactive one above the chart,
-          where each swatch opens a colour picker. */}
+    <div className={compact ? 'xp-chart is-compact' : 'xp-chart'} ref={wrapRef}>
+      {/* No legend here: the page renders one interactive legend above every
+          panel, where each swatch opens a colour picker. */}
       <div className="xp-plot">
         <svg
           className="xp-svg"
@@ -358,14 +379,14 @@ export function ExplorerChart(props: Props) {
           role="img"
           tabIndex={0}
           aria-label={t('explorer.chartAria', { x: props.xLabel, y: props.yLabel })}
-          aria-describedby="xp-keyboard-hint"
+          aria-describedby={hintId}
           onMouseMove={pointer}
           onMouseLeave={() => setHover(null)}
           onKeyDown={key}
           onBlur={() => setHover(null)}
         >
           {/* ---- Y grid and ticks ---- */}
-          {yDomain.ticks.map((tick, i) => (
+          {domains.y.ticks.map((tick, i) => (
             <g key={`y${tick}`}>
               <line className="xp-grid" x1={plotLeft} x2={plotRight} y1={y(tick)} y2={y(tick)} />
               <text className="xp-tick" x={plotLeft - 8} y={y(tick) + 3.5} textAnchor="end">
@@ -385,10 +406,29 @@ export function ExplorerChart(props: Props) {
             bandKeys.map((k, i) =>
               i % labelEvery === 0 ? (
                 <text key={`b${k}`} className="xp-tick" x={band(i) + band.bandwidth / 2} y={plotBottom + 18} textAnchor="middle">
-                  {truncate(props.categoryLabel(k), Math.max(4, Math.floor((band.step * labelEvery) / FONT_WIDTH) - 1))}
+                  {truncate(innerLabels[i], Math.max(4, Math.floor((band.step * labelEvery) / FONT_WIDTH) - 1))}
                 </text>
               ) : null,
             )}
+
+          {/* ---- The outer level of a nested axis: one label per parent,
+                   with a divider where one parent ends and the next begins ---- */}
+          {outerRuns.map((run, ri) => {
+            const from = band(run.from) - (band.step - band.bandwidth) / 2;
+            const to = band(run.to) + band.bandwidth + (band.step - band.bandwidth) / 2;
+            return (
+              <g key={`o${run.from}`}>
+                {ri > 0 && (
+                  <line className="xp-nest-divider" x1={from} x2={from} y1={plotBottom} y2={plotBottom + 18 + NEST_ROW} />
+                )}
+                {run.label && (
+                  <text className="xp-tick xp-tick-outer" x={(from + to) / 2} y={plotBottom + 18 + NEST_ROW} textAnchor="middle">
+                    {truncate(run.label, Math.max(3, Math.floor((to - from) / FONT_WIDTH) - 1))}
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
           {/* The baseline: the only axis rule drawn at full strength. */}
           <line className="xp-axis" x1={plotLeft} x2={plotRight} y1={plotBottom} y2={plotBottom} />
@@ -400,7 +440,7 @@ export function ExplorerChart(props: Props) {
               x={band(hover.index) - (band.step - band.bandwidth) / 2}
               y={TOP}
               width={band.step}
-              height={PLOT_HEIGHT}
+              height={plotHeight}
             />
           )}
 
@@ -455,44 +495,43 @@ export function ExplorerChart(props: Props) {
 
           {shape.type === 'scatter' &&
             scatterPixels.map((p, i) => (
-              <circle
-                key={i}
-                className="xp-dot"
-                cx={p.px}
-                cy={p.py}
-                r={4}
-                fill={color(p.series)}
-              />
+              <circle key={i} className="xp-dot" cx={p.px} cy={p.py} r={4} fill={color(p.series)} />
             ))}
 
+          {/* Box plots, clustered like bars: one box per series in each band. */}
           {shape.type === 'box' &&
-            shape.boxes.map((box, i) => {
-              const cx = band(i) + band.bandwidth / 2;
-              const bw = band.bandwidth;
-              const top = y(box.q3);
-              const bottomY = y(box.q1);
-              const fill = color({ key: '', slot: 0 });
-              return (
-                <g key={box.key}>
-                  <line className="xp-whisker" x1={cx} x2={cx} y1={y(box.upperWhisker)} y2={top} />
-                  <line className="xp-whisker" x1={cx} x2={cx} y1={bottomY} y2={y(box.lowerWhisker)} />
-                  <line className="xp-whisker" x1={cx - bw / 4} x2={cx + bw / 4} y1={y(box.upperWhisker)} y2={y(box.upperWhisker)} />
-                  <line className="xp-whisker" x1={cx - bw / 4} x2={cx + bw / 4} y1={y(box.lowerWhisker)} y2={y(box.lowerWhisker)} />
-                  <rect
-                    className="xp-box"
-                    x={band(i)}
-                    y={top}
-                    width={bw}
-                    height={Math.max(1, bottomY - top)}
-                    rx={4}
-                    fill={fill}
-                  />
-                  <line className="xp-median" x1={band(i)} x2={band(i) + bw} y1={y(box.median)} y2={y(box.median)} />
-                  {box.outliers.map((value, oi) => (
-                    <circle key={oi} className="xp-dot" cx={cx} cy={y(value)} r={4} fill={fill} />
-                  ))}
-                </g>
-              );
+            shape.series.map((series, si) => {
+              const count = shape.series.length;
+              const inner = (band.bandwidth - BAR_GAP * (count - 1)) / count;
+              const fill = color(series);
+              return series.boxes.map((box, i) => {
+                if (!box) return null;
+                const bx = band(i) + si * (inner + BAR_GAP);
+                const cx = bx + inner / 2;
+                const top = y(box.q3);
+                const bottomY = y(box.q1);
+                return (
+                  <g key={`${series.key}-${i}`}>
+                    <line className="xp-whisker" x1={cx} x2={cx} y1={y(box.upperWhisker)} y2={top} />
+                    <line className="xp-whisker" x1={cx} x2={cx} y1={bottomY} y2={y(box.lowerWhisker)} />
+                    <line className="xp-whisker" x1={cx - inner / 4} x2={cx + inner / 4} y1={y(box.upperWhisker)} y2={y(box.upperWhisker)} />
+                    <line className="xp-whisker" x1={cx - inner / 4} x2={cx + inner / 4} y1={y(box.lowerWhisker)} y2={y(box.lowerWhisker)} />
+                    <rect
+                      className="xp-box"
+                      x={bx}
+                      y={top}
+                      width={Math.max(1, inner)}
+                      height={Math.max(1, bottomY - top)}
+                      rx={Math.min(4, inner / 4)}
+                      fill={fill}
+                    />
+                    <line className="xp-median" x1={bx} x2={bx + inner} y1={y(box.median)} y2={y(box.median)} />
+                    {box.outliers.map((value, oi) => (
+                      <circle key={oi} className="xp-dot" cx={cx} cy={y(value)} r={compact ? 3 : 4} fill={fill} />
+                    ))}
+                  </g>
+                );
+              });
             })}
 
           {/* ---- Hover markers, over the marks ---- */}
@@ -520,10 +559,10 @@ export function ExplorerChart(props: Props) {
 
           {/* ---- Axis titles ---- */}
           <text className="xp-axis-title" x={plotLeft} y={TOP - 6}>
-            {props.yLabel}
+            {truncate(props.yLabel, Math.floor((plotRight - plotLeft) / FONT_WIDTH))}
           </text>
           <text className="xp-axis-title" x={(plotLeft + plotRight) / 2} y={height - 8} textAnchor="middle">
-            {props.xLabel}
+            {truncate(props.xLabel, Math.floor((plotRight - plotLeft) / FONT_WIDTH))}
           </text>
         </svg>
 
@@ -542,7 +581,7 @@ export function ExplorerChart(props: Props) {
         )}
       </div>
 
-      <p id="xp-keyboard-hint" className="sr-only">
+      <p id={hintId} className="sr-only">
         {t('explorer.keyboardHint')}
       </p>
     </div>
