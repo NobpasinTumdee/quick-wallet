@@ -1250,6 +1250,114 @@ export const en = {
       'A category needs at least two transactions before a distribution says anything.',
   },
 
+  /**
+   * Deep Analytics — the raw-data explorer.
+   *
+   * Flat keys, not nested: `TranslationKey` is `section.key`, two levels, so
+   * `explorer.chart.bar` could never type-check. The prefixes (`chart…`,
+   * `agg…`, `role…`) do the grouping a nested object would have.
+   *
+   * Statistical terms are used by their proper names. Someone opening a
+   * JMP-style explorer is asking for "median" and "interquartile range", and a
+   * softer synonym would only make them wonder whether it means the same thing.
+   */
+  explorer: {
+    entryTitle: 'Deep Analytics',
+    entryHint: 'Raw data explorer — map any column to any axis',
+    entryAria: 'Open Deep Analytics, the raw data explorer',
+
+    title: 'Deep Analytics',
+    close: 'Close explorer',
+    refresh: 'Reload this table',
+    loading: 'Loading {{source}}…',
+    emptySource: 'This table has no rows yet.',
+    rowCount_one: '{{count}} row',
+    rowCount_other: '{{count}} rows',
+
+    dataSource: 'Data source',
+    sourceTransactions: 'Transactions',
+    sourceInvestments: 'Investments',
+    sourceDebts: 'Debts',
+    sourceGoals: 'Goals',
+    sourceSubscriptions: 'Subscriptions',
+    sourceBudgets: 'Budgets',
+    sourceBillSplits: 'Shared bills',
+    sourceWallets: 'Wallets',
+    sourceWatchlist: 'Watchlist',
+
+    chartType: 'Chart',
+    chartBar: 'Bar',
+    chartLine: 'Line',
+    chartScatter: 'Scatter',
+    chartBox: 'Box plot',
+
+    roleX: 'X axis',
+    roleY: 'Y axis',
+    roleGroup: 'Color / group by',
+    choose: 'Choose a column',
+    none: 'None',
+    noColumnsForRole: 'This table has no column of that kind.',
+    countNeedsNoY: 'Not needed — Count counts rows.',
+
+    kindNumber: 'number',
+    kindDate: 'date',
+    kindCategory: 'category',
+    kindBoolean: 'yes/no',
+
+    aggregation: 'Summarize Y as',
+    aggSum: 'Sum',
+    aggMean: 'Mean',
+    aggMedian: 'Median',
+    aggCount: 'Count',
+
+    dateBucket: 'Group dates by',
+    bucketDay: 'Day',
+    bucketMonth: 'Month',
+    bucketYear: 'Year',
+
+    views: 'Views',
+    viewChart: 'Chart',
+    viewTwin: 'Chart data',
+    viewRaw: 'Raw rows',
+
+    /* Why a selection cannot be drawn — shown in place of the chart. */
+    problemNeedX: 'Choose a column for the X axis.',
+    problemBadX: 'That column cannot go on this chart’s X axis.',
+    problemNeedY: 'Choose a numeric column for the Y axis.',
+    problemBadY: 'The Y axis needs a numeric column.',
+    problemBadGroup: 'That column cannot be used to group this chart.',
+    problemTooManyBuckets: 'Too many bars to read. Group dates by month or year instead.',
+
+    /* What the chart left out, stated rather than done silently. */
+    noteSampled: 'Showing a sample of {{shown}} of {{total}} points — every point is in Chart data.',
+    noteFolded_one: '{{count}} smaller group is combined into Other.',
+    noteFolded_other: '{{count}} smaller groups are combined into Other.',
+    noteDropped_one: '{{count}} row without a usable value was left out.',
+    noteDropped_other: '{{count}} rows without a usable value were left out.',
+    noteHiddenOutliers_one: '{{count}} further outlier is counted but not drawn.',
+    noteHiddenOutliers_other: '{{count}} further outliers are counted but not drawn.',
+
+    statN: 'n',
+    statMin: 'Min',
+    statQ1: 'Q1',
+    statMedian: 'Median',
+    statQ3: 'Q3',
+    statMax: 'Max',
+    statIqr: 'Interquartile range',
+    statRange: 'Range',
+    statOutliers: 'Outliers',
+
+    blank: '(blank)',
+    other: 'Other',
+    yes: 'Yes',
+    no: 'No',
+
+    tableCapped: 'Showing the first {{shown}} of {{total}} rows.',
+    tableEmpty: 'Nothing to show.',
+    chartAria: 'Chart of {{y}} by {{x}}',
+    keyboardHint: 'Use the left and right arrow keys to step through the chart, Home and End to jump, Escape to clear.',
+  },
+
   liability: {
     title: 'Upcoming bills',
     subtitle: 'What is already promised, and when it lands',

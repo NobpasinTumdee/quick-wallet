@@ -287,7 +287,7 @@ export function topPayees(
     if (tx.type !== 'expense') continue;
 
     const raw = String(tx.note ?? '').trim().replace(/\s+/g, ' ');
-    const key = raw.toLowerCase() || ' unlabelled';
+    const key = raw.toLowerCase() || '__unlabelled__';
     const amount = Number(tx.amount) || 0;
 
     const bucket = byKey.get(key) ?? {
@@ -328,7 +328,7 @@ export function topPayees(
         )[0]?.[0] ?? unlabelled;
 
       return {
-        payee: key === ' unlabelled' ? unlabelled : label,
+        payee: key === '__unlabelled__' ? unlabelled : label,
         total: round2(bucket.total),
         count: bucket.count,
         average: round2(bucket.total / bucket.count),

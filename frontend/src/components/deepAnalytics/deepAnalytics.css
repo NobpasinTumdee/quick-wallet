@@ -1,0 +1,644 @@
+/* ==========================================================================
+   Deep Analytics explorer
+   --------------------------------------------------------------------------
+   Imported by DeepAnalyticsModal, so Vite emits it with that lazy chunk and
+   the main app never downloads it.
+
+   Chart chrome follows the dataviz mark specs: hairline recessive grid, text in
+   text tokens (never the series colour), 2px lines, 8px markers with a 2px
+   surface ring. Series fills arrive inline from explorerPalette — they are
+   validated hex, not theme tokens, for the reasons given in that file.
+   ========================================================================== */
+
+.xp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: xp-fade var(--dur-base) var(--ease-out) both;
+}
+
+@media (max-width: 720px) {
+  .xp-backdrop {
+    padding: 0;
+  }
+}
+
+.xp-dialog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .xp-dialog {
+    border-radius: 0;
+    border: 0;
+  }
+}
+
+/* ---- Header ---- */
+
+.xp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--divider);
+}
+
+.xp-title-block {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.xp-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.xp-title-block h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.xp-title-block p {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.xp-header-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.xp-icon-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.xp-icon-button:hover:not(:disabled) {
+  border-color: var(--divider);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.xp-icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.xp-icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xp-spin {
+  animation: xp-spin 0.9s linear infinite;
+}
+
+/* ---- Body: controls beside the stage, stacked on a phone ---- */
+
+.xp-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (min-width: 900px) {
+  .xp-body {
+    grid-template-columns: 272px minmax(0, 1fr);
+    overflow: hidden;
+  }
+}
+
+.xp-side {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--divider);
+}
+
+@media (min-width: 900px) {
+  .xp-side {
+    border-bottom: 0;
+    border-inline-end: 1px solid var(--divider);
+    overflow-y: auto;
+  }
+}
+
+.xp-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .xp-main {
+    overflow-y: auto;
+  }
+}
+
+/* ---- Controls ---- */
+
+.xp-controls,
+.xp-roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.xp-roles {
+  padding: var(--space-3);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.xp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.xp-field > label,
+.xp-field > legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.xp-field > label small {
+  font-weight: normal;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.xp-field select {
+  width: 100%;
+  padding: 7px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.xp-field select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xp-field select:disabled {
+  opacity: 0.55;
+}
+
+.xp-field-hint,
+.xp-field-static {
+  margin: 0;
+  font-size: var(--text-2xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.xp-field-static {
+  padding: 7px 0;
+  color: var(--text-muted);
+}
+
+.xp-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.xp-chart-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.xp-chart-grid button:hover:not(:disabled) {
+  border-color: var(--accent-ring);
+  color: var(--text);
+}
+
+.xp-chart-grid button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.xp-chart-grid button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Tabs ---- */
+
+.xp-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.xp-tabs button {
+  padding: 5px var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.xp-tabs button.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.xp-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Stage ---- */
+
+.xp-stage {
+  min-width: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* A refresh holds the previous render, dimmed — no skeleton flash, no jump. */
+.xp-stage.is-stale {
+  opacity: 0.55;
+}
+
+.xp-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 320px;
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.xp-message p {
+  margin: 0;
+  max-width: 42ch;
+  line-height: 1.5;
+}
+
+.xp-message.is-error {
+  color: var(--negative);
+}
+
+.xp-loader {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--divider);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: xp-spin 0.8s linear infinite;
+}
+
+/* ---- Chart ---- */
+
+.xp-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.xp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.xp-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.xp-legend li.is-other {
+  color: var(--text-faint);
+}
+
+.xp-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 6px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.xp-legend .xp-swatch {
+  margin-inline-end: 0;
+}
+
+/* The container's height is the SVG's, and the SVG's includes the x-axis
+   band — so the axis labels are never cropped into a nested scroll. */
+.xp-plot {
+  position: relative;
+}
+
+.xp-svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+  user-select: none;
+}
+
+.xp-svg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.xp-grid {
+  stroke: var(--divider);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.xp-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.xp-tick {
+  fill: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.xp-axis-title {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.xp-direct {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.xp-bar {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.xp-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* 8px markers; the surface-coloured ring keeps overlapping dots distinct
+   without drawing a dark outline around every one of them. */
+.xp-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+  fill-opacity: 0.9;
+}
+
+.xp-focus {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.xp-crosshair {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
+.xp-band-hover {
+  fill: color-mix(in srgb, var(--text) 5%, transparent);
+  pointer-events: none;
+}
+
+/* Box plot. The box is context and stays soft; the median is the reading. */
+.xp-box {
+  fill-opacity: 0.22;
+  stroke: currentColor;
+  stroke-width: 1;
+  color: var(--text-faint);
+}
+
+.xp-median {
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.xp-whisker {
+  stroke: var(--text-faint);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* ---- Tooltip ---- */
+
+.xp-tooltip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 160px;
+  max-width: 260px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.xp-tip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.xp-tip-row > span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.xp-tip-row strong {
+  color: var(--text);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.xp-tip-head {
+  display: flex;
+  justify-content: flex-start;
+  color: var(--text);
+  font-weight: var(--weight-semi);
+}
+
+/* ---- Notes and tables ---- */
+
+.xp-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.xp-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+.xp-table-wrap {
+  overflow: auto;
+  max-height: min(62vh, 640px);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+}
+
+.xp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.xp-table th,
+.xp-table td {
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--divider);
+  text-align: start;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.xp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  font-weight: var(--weight-semi);
+  color: var(--text-muted);
+}
+
+.xp-table .is-num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.xp-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+@keyframes xp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes xp-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-backdrop,
+  .xp-spin,
+  .xp-loader,
+  .xp-stage,
+  .xp-bar {
+    animation: none;
+    transition: none;
+  }
+}

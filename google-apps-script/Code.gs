@@ -561,6 +561,9 @@ function dispatch_(action, method, query, body, token) {
     'themes.activate': function () { return themesActivate_(requireAuth_(token), query); },
 
     'dashboard.get': function () { return dashboardGet_(requireAuth_(token), query); },
+    /* The Deep Analytics explorer. Read-only and GET, so it never takes the
+       script lock — a slow sheet read here cannot block a write elsewhere. */
+    'analytics.getRawData': function () { return analyticsRawData_(requireAuth_(token), query); },
     'dashboard.periods': function () { return dashboardPeriods_(requireAuth_(token)); },
 
     /* The old backend buffered writes in memory; Sheets writes land immediately,
@@ -4141,6 +4144,116 @@ function dashboardGet_(user, query) {
     /* Whether that snapshot is genuinely in the past. The client defaults the
        card to the historical reading only when this is true. */
     isHistorical: asOfDate !== '' && asOfDate < toDateKey_(new Date())
+  };
+}
+
+/* =========================================================================
+ * Deep Analytics — raw data for the explorer
+ * -------------------------------------------------------------------------
+ * One source at a time, scoped to the caller, flattened to scalars.
+ *
+ * -------------------------------------------------------------------------
+ * WHY AN ALLOWLIST AND NOT "EVERYTHING EXCEPT Users AND Settings"
+ * -------------------------------------------------------------------------
+ * The two are equivalent today and diverge the first time someone adds a
+ * sheet. A blocklist fails open: a future `ApiKeys` or `Sessions` table would
+ * be served to the explorer the moment it existed, with nobody having decided
+ * it should be. An allowlist fails closed — a new sheet is invisible here
+ * until it is added below on purpose, which is the decision that ought to be
+ * made deliberately.
+ *
+ * Every entry must also carry a `userId` column. `userRows_` scopes on it, so a
+ * sheet without one returns nothing rather than everybody's rows — the scope
+ * check fails closed too.
+ *
+ * -------------------------------------------------------------------------
+ * WHY ONE SOURCE PER REQUEST
+ * -------------------------------------------------------------------------
+ * The explorer shows one table at a time. Returning all nine in one payload
+ * would make the first open wait on every sheet, most of which the user never
+ * selects. Per-source requests are cached client-side by URL, so switching
+ * back to a table already opened costs nothing.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE ROWS ARE FLATTENED
+ * -------------------------------------------------------------------------
+ * A chart axis needs a scalar. `json` and `jsonlist` columns (a bill's shares,
+ * a theme's colours) cannot be mapped to X or Y, so they are dropped from both
+ * the column list and the rows rather than shipped as bytes the client must
+ * then learn to ignore. `list` columns become a comma-joined string — a tag
+ * list is a perfectly good category. `userId` and the internal `_row` are
+ * removed: one is the caller, the other is spreadsheet plumbing.
+ * ========================================================================= */
+
+/** Explorer source id → sheet name. The only sheets this action will read. */
+var RAW_DATA_SOURCES = {
+  transactions: 'Transactions',
+  investments: 'Investments',
+  debts: 'Debts',
+  goals: 'Goals',
+  subscriptions: 'Subscriptions',
+  budgets: 'Budgets',
+  billSplits: 'BillSplits',
+  wallets: 'Wallets',
+  watchlist: 'Watchlist'
+};
+
+/**
+ * The explorer's vocabulary for a column, from the schema's storage type.
+ * Four kinds are all a chart needs to know: can it be measured, placed in
+ * time, used to group, or is it a yes/no.
+ */
+function rawColumnKind_(type) {
+  switch (type) {
+    case 'number': return 'number';
+    case 'date':
+    case 'datekey':
+    case 'period': return 'date';
+    case 'boolean': return 'boolean';
+    case 'json':
+    case 'jsonlist': return null; // not plottable — dropped
+    default: return 'category'; // string, list
+  }
+}
+
+function analyticsRawData_(user, query) {
+  var source = String((query && query.source) || '').trim();
+  if (!Object.prototype.hasOwnProperty.call(RAW_DATA_SOURCES, source)) {
+    throw bad_('"source" must be one of: ' + Object.keys(RAW_DATA_SOURCES).join(', '), 'BAD_SOURCE');
+  }
+
+  var sheetName = RAW_DATA_SOURCES[source];
+  var def = schema_(sheetName);
+
+  /* Belt and braces over the allowlist: a sheet with no owner column cannot be
+     scoped, so it is refused outright rather than trusted to filter to nothing. */
+  var hasOwner = def.columns.some(function (col) { return col.key === 'userId'; });
+  if (!hasOwner) throw apiError_('That source is not scoped to a user', 500, 'UNSCOPED_SOURCE');
+
+  var columns = [];
+  def.columns.forEach(function (col) {
+    if (col.key === 'userId') return;
+    var kind = rawColumnKind_(col.type);
+    if (!kind) return;
+    columns.push({ key: col.key, kind: kind, header: col.header });
+  });
+
+  var rows = userRows_(sheetName, user.id).map(function (row) {
+    var flat = {};
+    columns.forEach(function (col) {
+      var value = row[col.key];
+      if (Object.prototype.toString.call(value) === '[object Array]') value = value.join(', ');
+      flat[col.key] = value;
+    });
+    return flat;
+  });
+
+  return {
+    source: source,
+    columns: columns,
+    rows: rows,
+    rowCount: rows.length,
+    generatedAt: new Date().toISOString()
   };
 }
 

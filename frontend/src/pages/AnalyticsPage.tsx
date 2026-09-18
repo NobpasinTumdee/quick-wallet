@@ -1,5 +1,5 @@
-import { ChartNoAxesCombined } from 'lucide-react';
-import { Suspense, lazy } from 'react';
+import { ArrowUpRight, ChartNoAxesCombined, Database } from 'lucide-react';
+import { Suspense, lazy, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
@@ -46,6 +46,17 @@ const NetWorthProjection = lazy(() =>
 const AnalyticsSavingsRate = lazy(() =>
   import('../components/AnalyticsSavingsRate').then((m) => ({ default: m.AnalyticsSavingsRate })),
 );
+/**
+ * Deep Analytics — the raw-data explorer.
+ *
+ * The heaviest thing on this screen and the least used, so it is the most
+ * strictly deferred. `lazy()` alone would only defer it until first render;
+ * the explorer is also rendered *conditionally* below, behind `deepOpen`, so
+ * the import() does not fire until the button is pressed. Until then neither
+ * its JS, its stylesheet, nor a request for raw data exists.
+ */
+const DeepAnalyticsModal = lazy(() => import('../components/deepAnalytics/DeepAnalyticsModal'));
+
 const AnalyticsCategories = lazy(() =>
   import('../components/AnalyticsCategories').then((m) => ({ default: m.AnalyticsCategories })),
 );
@@ -68,6 +79,45 @@ export function AnalyticsPage({
 
   const trend = data?.trend ?? [];
 
+  /* Declared above the early returns below — every render must call the same
+     hooks in the same order, and a hook after a conditional return is the crash
+     this app has already had once. */
+  const [deepOpen, setDeepOpen] = useState(false);
+  /* Stable, because the explorer's dialog effect depends on it: a new function
+     every render would re-run that effect, stealing focus back to the close
+     button whenever anything on this page updated. */
+  const closeDeep = useCallback(() => setDeepOpen(false), []);
+
+  /* The entry and, once opened, the explorer. Rendered in both the full page
+     and the empty state: a user with no spending yet may still have debts, goals
+     or investments worth exploring, and the empty state must not wall them off. */
+  const deep = (
+    <>
+      <button
+        type="button"
+        className="deep-entry bento-item--full"
+        onClick={() => setDeepOpen(true)}
+        aria-label={t('explorer.entryAria')}
+        aria-haspopup="dialog"
+      >
+        <span className="deep-entry-mark" aria-hidden="true">
+          <Icon icon={Database} />
+        </span>
+        <span className="deep-entry-text">
+          <strong>{t('explorer.entryTitle')}</strong>
+          <span>{t('explorer.entryHint')}</span>
+        </span>
+        <Icon icon={ArrowUpRight} size="sm" className="deep-entry-arrow" />
+      </button>
+
+      {deepOpen && (
+        <Suspense fallback={<div className="deep-loading" role="status" aria-label={t('common.loading')} />}>
+          <DeepAnalyticsModal onClose={closeDeep} />
+        </Suspense>
+      )}
+    </>
+  );
+
   /* One empty state for the page beats six cards each drawing their own
      skeleton — this screen is read as a whole, not card by card. */
   if (initialLoading || monthTransactions.initialLoading) {
@@ -87,18 +137,23 @@ export function AnalyticsPage({
 
   if (!hasSpending && !hasHistory) {
     return (
-      <Card title={t('analytics.title')} subtitle={t('analytics.subtitle')}>
-        <EmptyState
-          icon={<Icon icon={ChartNoAxesCombined} size="xl" />}
-          title={t('analytics.empty')}
-          description={t('analytics.emptyHint')}
-        />
-      </Card>
+      <div className="stack">
+        {deep}
+        <Card title={t('analytics.title')} subtitle={t('analytics.subtitle')}>
+          <EmptyState
+            icon={<Icon icon={ChartNoAxesCombined} size="xl" />}
+            title={t('analytics.empty')}
+            description={t('analytics.emptyHint')}
+          />
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="bento">
+      {deep}
+
       {/* First, and full width. Every other widget here looks backwards at
           money already gone; this is the only one that looks forward, and a
           bottleneck three weeks out is worth more than any of them. Full width

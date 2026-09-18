@@ -155,6 +155,9 @@ const NAMED_ACTIONS: Record<string, string> = {
      budgets/copy is listed. */
   'transactions/installment': 'transactions.installment',
   'transactions/cancel-installment': 'transactions.cancelInstallment',
+  /* Without this the CRUD rules below would read "raw-data" as a row id and
+     resolve a GET to `analytics.get`. */
+  'analytics/raw-data': 'analytics.getRawData',
 };
 
 /* NOTE: `bill-splits` must NOT be listed above. NAMED_ACTIONS is consulted
