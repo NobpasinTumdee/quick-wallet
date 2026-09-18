@@ -1,7 +1,7 @@
 /* ==========================================================================
    Deep Analytics explorer
    --------------------------------------------------------------------------
-   Imported by DeepAnalyticsModal, so Vite emits it with that lazy chunk and
+   Imported by DeepAnalyticsPage, so Vite emits it with that lazy chunk and
    the main app never downloads it.
 
    Chart chrome follows the dataviz mark specs: hairline recessive grid, text in
@@ -10,53 +10,49 @@
    validated hex, not theme tokens, for the reasons given in that file.
    ========================================================================== */
 
-.xp-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  padding: var(--space-3);
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  animation: xp-fade var(--dur-base) var(--ease-out) both;
-}
+/* ---- Page layout ----
+   A phone gets one column: a collapsed settings panel above the chart, because
+   the controls are a screen tall and the chart is the point. From 900px the
+   panel becomes a sidebar that stays in view while the chart scrolls — the
+   shape of every BI tool, for a reason: you change a control and watch the
+   chart answer, without scrolling between the two. */
 
-@media (max-width: 720px) {
-  .xp-backdrop {
-    padding: 0;
-  }
-}
-
-.xp-dialog {
+.xp-page {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
-@media (max-width: 720px) {
-  .xp-dialog {
-    border-radius: 0;
-    border: 0;
-  }
-}
-
-/* ---- Header ---- */
-
-.xp-header {
+.xp-page-head {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.xp-back {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--divider);
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px var(--space-2) 4px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.xp-back:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.xp-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .xp-title-block {
@@ -70,16 +66,17 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
 }
 
-.xp-title-block h2 {
+.xp-title-block h1 {
   margin: 0;
-  font-size: var(--text-md);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
   font-weight: var(--weight-semi);
   color: var(--text);
 }
@@ -90,85 +87,159 @@
   color: var(--text-muted);
 }
 
-.xp-header-actions {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.xp-icon-button {
+.xp-layout {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.xp-icon-button:hover:not(:disabled) {
-  border-color: var(--divider);
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.xp-icon-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.xp-icon-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.xp-spin {
-  animation: xp-spin 0.9s linear infinite;
-}
-
-/* ---- Body: controls beside the stage, stacked on a phone ---- */
-
-.xp-body {
-  display: grid;
-  grid-template-columns: 1fr;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
 }
 
 @media (min-width: 900px) {
-  .xp-body {
-    grid-template-columns: 272px minmax(0, 1fr);
-    overflow: hidden;
+  .xp-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: var(--space-5);
   }
 }
 
-.xp-side {
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--divider);
-}
-
-@media (min-width: 900px) {
-  .xp-side {
-    border-bottom: 0;
-    border-inline-end: 1px solid var(--divider);
-    overflow-y: auto;
-  }
+/* Glass panels for both columns — the surface the app's cards use, so this
+   reads as a screen of the app rather than a tool bolted onto it. */
+.xp-side,
+.xp-main {
+  min-width: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
 }
 
 .xp-main {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  min-width: 0;
   padding: var(--space-4);
 }
 
 @media (min-width: 900px) {
-  .xp-main {
+  /* Sticky under the topbar, and scrolling on its own once the filters make it
+     taller than the viewport — so the chart beside it never moves. */
+  .xp-side {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-3));
+    max-height: calc(100vh - var(--header-height) - var(--space-5));
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
+}
+
+/* ---- The mobile settings toggle ---- */
+
+.xp-settings-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.xp-settings-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.xp-settings-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.xp-settings-text strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+}
+
+/* What is set — chart, axes, filter count — so the collapsed panel still says
+   what the chart below it is. */
+.xp-settings-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.xp-settings-chevron {
+  color: var(--text-faint);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.xp-side:not(.is-collapsed) .xp-settings-chevron {
+  transform: rotate(180deg);
+}
+
+.xp-side-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+@media (max-width: 899px) {
+  .xp-side.is-collapsed .xp-side-body {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  /* A desktop has the room, so the panel is simply always open. */
+  .xp-settings-toggle {
+    display: none;
+  }
+
+  .xp-side-body {
+    padding-top: var(--space-4);
+  }
+}
+
+.xp-side-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.xp-side-section h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.xp-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: var(--text-2xs);
+  letter-spacing: 0;
 }
 
 /* ---- Controls ---- */
@@ -561,6 +632,234 @@
   font-weight: var(--weight-semi);
 }
 
+/* ---- Interactive legend ---- */
+
+.xp-legend-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.xp-legend-swatch {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+/* The native colour input, laid invisibly over the swatch. Clicking the swatch
+   is clicking the input, so the OS picker opens, and the input stays in the tab
+   order for a keyboard. */
+.xp-legend-swatch.is-editable {
+  cursor: pointer;
+}
+
+.xp-legend-swatch input {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.xp-legend-swatch:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.xp-legend-swatch.is-editable:hover {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent),
+    0 0 0 2px var(--accent-ring);
+}
+
+.xp-legend-label {
+  color: var(--text-muted);
+}
+
+.xp-legend-warn {
+  display: inline-grid;
+  color: var(--warning);
+}
+
+.xp-legend-reset,
+.xp-link-button {
+  display: inline-grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.xp-legend-reset:hover,
+.xp-link-button:hover {
+  color: var(--text);
+}
+
+.xp-link-button {
+  padding: 2px 4px;
+  font: inherit;
+  font-size: var(--text-2xs);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.xp-legend-reset:focus-visible,
+.xp-link-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Filters ---- */
+
+.xp-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.xp-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An incomplete filter is drawn quieter — dashed, untinted — because it is not
+   being applied, and the chart should not look filtered by it. */
+.xp-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+}
+
+.xp-filter.is-active {
+  border-style: solid;
+  border-color: var(--accent-ring);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.xp-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.xp-filter-index {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  color: var(--text-faint);
+}
+
+.xp-filter-remove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.xp-filter-remove:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.xp-filter-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xp-filter select,
+.xp-filter input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.xp-filter select:focus-visible,
+.xp-filter input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xp-filter select:disabled,
+.xp-filter input:disabled {
+  opacity: 0.5;
+}
+
+.xp-filter-condition {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 6px;
+}
+
+.xp-filter-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.xp-add-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.xp-add-filter:hover:not(:disabled) {
+  border-color: var(--accent-ring);
+}
+
+.xp-add-filter:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.xp-add-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xp-filter-count {
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
 /* ---- Notes and tables ---- */
 
 .xp-notes {
@@ -626,14 +925,9 @@
   }
 }
 
-@keyframes xp-fade {
-  from {
-    opacity: 0;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
-  .xp-backdrop,
+  .xp-settings-chevron,
   .xp-spin,
   .xp-loader,
   .xp-stage,

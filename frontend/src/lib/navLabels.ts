@@ -38,6 +38,7 @@ export const NAV_LABEL_KEYS: Record<Route, TranslationKey> = {
   debt: 'nav.debt',
   settings: 'nav.settings',
   more: 'nav.more',
+  'deep-analytics': 'nav.deepAnalytics',
   /* Reachable but never navigable — it has no nav entry anywhere. Named so the
      Record stays exhaustive rather than needing an exception. */
   notFound: 'notFound.title',

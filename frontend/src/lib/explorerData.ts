@@ -1,5 +1,5 @@
 import { quantile } from './boxPlotMath';
-import { PairScope, seriesCap } from './explorerPalette';
+import { PALETTE_SIZE, PairScope, seriesCap } from './explorerPalette';
 
 /**
  * The Deep Analytics explorer's data layer: from raw sheet rows to something a
@@ -365,13 +365,45 @@ function compareLabels(a: string, b: string): number {
 }
 
 /**
- * Map each group value to a series, folding everything past `cap` into Other.
+ * Map each group value to a series, folding the rest into Other.
+ *
+ * Two orderings are at work, and keeping them apart is the whole trick:
+ *
+ *   - `ranking` is over the *unfiltered* table. A value's position in it is its
+ *     slot, and its slot is its colour. A filter never touches it, so hiding
+ *     "Food" does not promote "Transport" into Food's blue — the dataviz rule
+ *     that colour follows the entity, not its rank on screen.
+ *   - `visible` is what survives the filters. Of those, the first `cap` that
+ *     *can* be coloured are drawn as their own series; the rest become Other.
+ *
+ * A value can be coloured if it has a palette slot (one of the first eight) or
+ * the user has chosen a colour for it. A ninth series is never a generated or
+ * recycled hue — that is exactly the colour a colour-blind reader cannot tell
+ * from slot one.
  */
-export function groupSlots(ranking: string[], cap: number): Map<string, Series> {
+export function groupSlots(
+  ranking: string[],
+  cap: number,
+  visible: Iterable<string> = ranking,
+  customColored: ReadonlySet<string> = new Set(),
+): Map<string, Series> {
+  const index = new Map(ranking.map((value, i) => [value, i]));
+  const shown = [...new Set(visible)].sort(
+    (a, b) => (index.get(a) ?? Infinity) - (index.get(b) ?? Infinity) || compareLabels(a, b),
+  );
+
   const map = new Map<string, Series>();
-  ranking.forEach((value, index) => {
-    map.set(value, index < cap ? { key: value, slot: index } : { key: OTHER, slot: null });
-  });
+  let drawn = 0;
+  for (const value of shown) {
+    const slot = index.get(value) ?? -1;
+    const colorable = (slot >= 0 && slot < PALETTE_SIZE) || customColored.has(value);
+    if (colorable && drawn < cap) {
+      map.set(value, { key: value, slot: slot >= 0 ? slot : null });
+      drawn += 1;
+    } else {
+      map.set(value, { key: OTHER, slot: null });
+    }
+  }
   return map;
 }
 
@@ -513,7 +545,21 @@ function xKeyOf(
   return { key: toCategory(raw), time: null };
 }
 
-export function shapeData(dataset: RawDataset, spec: ChartSpec): ShapeResult {
+export interface ShapeOptions {
+  /**
+   * The rows group colours are ranked over — the unfiltered table. Defaults to
+   * the rows being drawn, which is right only when nothing is filtered.
+   */
+  rankRows?: RawRow[];
+  /** Group values the user has given a colour of their own. */
+  customColored?: ReadonlySet<string>;
+}
+
+export function shapeData(
+  dataset: RawDataset,
+  spec: ChartSpec,
+  options: ShapeOptions = {},
+): ShapeResult {
   const problem = validateSpec(spec, dataset.columns);
   if (problem) return { ok: false, problem };
 
@@ -522,7 +568,12 @@ export function shapeData(dataset: RawDataset, spec: ChartSpec): ShapeResult {
   const groupColumn = columnFor(dataset.columns, spec.group);
 
   const slots = groupColumn
-    ? groupSlots(rankGroups(dataset.rows, groupColumn.key), seriesCap(pairScope(spec.type)))
+    ? groupSlots(
+        rankGroups(options.rankRows ?? dataset.rows, groupColumn.key),
+        seriesCap(pairScope(spec.type)),
+        dataset.rows.map((row) => toCategory(row[groupColumn.key])),
+        options.customColored,
+      )
     : null;
   const seriesOf = (row: RawRow): Series =>
     slots && groupColumn

@@ -6060,15 +6060,19 @@ line.arate-zero {
   color: var(--text-faint);
 }
 
-/* A veil over the page while the explorer's chunk downloads. Fixed, so inside
-   the bento grid it takes no cell. */
-.deep-loading {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+/* Held in place while the explorer page downloads. Sized like the page will
+   be, so the layout does not jump when it arrives. */
+.deep-loading-page {
+  min-height: min(70vh, 640px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+}
+
+/* The explorer takes the full width: a control panel beside a chart builder is
+   exactly the screen a 1320px cap was not designed for. */
+.page.page--wide {
+  max-width: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

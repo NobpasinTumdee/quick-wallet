@@ -1,6 +1,7 @@
 import {
   ChartNoAxesCombined,
   CreditCard,
+  Database,
   HandCoins,
   Landmark,
   LayoutDashboard,
@@ -110,6 +111,12 @@ const SECTIONS: MenuSection[] = [
         labelKey: 'nav.analytics',
         descriptionKey: 'more.analytics',
         icon: ChartNoAxesCombined,
+      },
+      {
+        route: 'deep-analytics',
+        labelKey: 'nav.deepAnalytics',
+        descriptionKey: 'more.deepAnalytics',
+        icon: Database,
       },
       { route: 'splits', labelKey: 'nav.splits', descriptionKey: 'more.splits', icon: HandCoins },
     ],

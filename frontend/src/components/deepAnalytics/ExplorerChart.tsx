@@ -1,9 +1,8 @@
 import { KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { ChartSpec, OTHER, Shape } from '../../lib/explorerData';
+import { ChartSpec, Series, Shape } from '../../lib/explorerData';
 import { formatExplorerNumber, formatInstant, formatTick } from '../../lib/explorerFormat';
-import { seriesColor } from '../../lib/explorerPalette';
 import {
   bandScale,
   barPath,
@@ -49,7 +48,12 @@ const BAR_GAP = 2;
 interface Props {
   shape: Shape;
   spec: ChartSpec;
-  dark: boolean;
+  /**
+   * The colour for a series — the user's choice if they made one, otherwise
+   * its validated palette slot. Decided by the page, which owns that state, so
+   * this component only ever draws what it is told.
+   */
+  colorOf: (series: Series) => string;
   locale: string;
   xLabel: string;
   yLabel: string;
@@ -86,7 +90,7 @@ function useWidth(fallback = 720) {
 const textWidth = (text: string) => text.length * FONT_WIDTH;
 
 export function ExplorerChart(props: Props) {
-  const { shape, dark, locale } = props;
+  const { shape, locale } = props;
   const { t } = useTranslation();
   const [wrapRef, width] = useWidth();
   const [hover, setHover] = useState<Hover | null>(null);
@@ -95,7 +99,7 @@ export function ExplorerChart(props: Props) {
   useEffect(() => setHover(null), [shape]);
 
   const n = (value: number, compact = false) => formatExplorerNumber(value, locale, compact);
-  const color = (slot: number | null) => seriesColor(slot, dark);
+  const color = props.colorOf;
 
   /* ---- Y domain, shared by every form ---- */
   const yDomain = useMemo(() => {
@@ -252,8 +256,8 @@ export function ExplorerChart(props: Props) {
   let tooltip: ReactNode = null;
   if (hover) tooltip = tooltipFor();
 
-  function swatch(slot: number | null) {
-    return <span className="xp-swatch" style={{ background: color(slot) }} aria-hidden="true" />;
+  function swatch(series: Series) {
+    return <span className="xp-swatch" style={{ background: color(series) }} aria-hidden="true" />;
   }
 
   function tooltipFor(): ReactNode {
@@ -265,7 +269,7 @@ export function ExplorerChart(props: Props) {
         <>
           {shape.series.length > 1 && (
             <div className="xp-tip-row xp-tip-head">
-              {swatch(hit.series.slot)}
+              {swatch(hit.series)}
               {props.seriesLabel(hit.series.key)}
             </div>
           )}
@@ -291,7 +295,7 @@ export function ExplorerChart(props: Props) {
           {shape.series.map((s) => (
             <div key={s.key} className="xp-tip-row">
               <span>
-                {shape.series.length > 1 && swatch(s.slot)}
+                {shape.series.length > 1 && swatch(s)}
                 {shape.series.length > 1 ? props.seriesLabel(s.key) : props.yLabel}
               </span>
               <strong>{s.values[hover.index] === null ? '—' : n(s.values[hover.index] as number)}</strong>
@@ -307,7 +311,7 @@ export function ExplorerChart(props: Props) {
           {shape.series.map((s) => (
             <div key={s.key} className="xp-tip-row">
               <span>
-                {shape.series.length > 1 && swatch(s.slot)}
+                {shape.series.length > 1 && swatch(s)}
                 {shape.series.length > 1 ? props.seriesLabel(s.key) : props.yLabel}
               </span>
               <strong>{s.values[hover.index] === null ? '—' : n(s.values[hover.index] as number)}</strong>
@@ -341,23 +345,10 @@ export function ExplorerChart(props: Props) {
     );
   }
 
-  /* ---- Legend: always for two or more series, none for one ---- */
-  const legendSeries =
-    shape.type === 'scatter' || shape.type === 'bar' || shape.type === 'line' ? shape.series : [];
-
   return (
     <div className="xp-chart" ref={wrapRef}>
-      {legendSeries.length >= 2 && (
-        <ul className="xp-legend">
-          {legendSeries.map((s) => (
-            <li key={s.key} className={s.key === OTHER ? 'is-other' : undefined}>
-              {swatch(s.slot)}
-              {props.seriesLabel(s.key)}
-            </li>
-          ))}
-        </ul>
-      )}
-
+      {/* No legend here: the page renders an interactive one above the chart,
+          where each swatch opens a colour picker. */}
       <div className="xp-plot">
         <svg
           className="xp-svg"
@@ -423,7 +414,7 @@ export function ExplorerChart(props: Props) {
                   <path
                     key={`${series.key}-${ci}`}
                     className="xp-bar"
-                    fill={color(series.slot)}
+                    fill={color(series)}
                     d={barPath(band(ci) + si * (inner + BAR_GAP), inner, y(value), y(0))}
                   />
                 ),
@@ -436,7 +427,7 @@ export function ExplorerChart(props: Props) {
               <path
                 key={series.key}
                 className="xp-line"
-                stroke={color(series.slot)}
+                stroke={color(series)}
                 d={linePath(shape.xs.map((v) => x(v)), series.values.map((v) => (v === null ? null : y(v))))}
               />
             ))}
@@ -455,7 +446,7 @@ export function ExplorerChart(props: Props) {
               }),
             ).map((label) => (
               <g key={`dl-${label.key}`}>
-                <circle cx={plotRight + 6} cy={label.y - 3.5} r={3} fill={color(label.slot)} />
+                <circle cx={plotRight + 6} cy={label.y - 3.5} r={3} fill={color(label)} />
                 <text className="xp-direct" x={plotRight + 13} y={label.y}>
                   {props.seriesLabel(label.key)}
                 </text>
@@ -470,7 +461,7 @@ export function ExplorerChart(props: Props) {
                 cx={p.px}
                 cy={p.py}
                 r={4}
-                fill={color(p.series.slot)}
+                fill={color(p.series)}
               />
             ))}
 
@@ -480,7 +471,7 @@ export function ExplorerChart(props: Props) {
               const bw = band.bandwidth;
               const top = y(box.q3);
               const bottomY = y(box.q1);
-              const fill = color(0);
+              const fill = color({ key: '', slot: 0 });
               return (
                 <g key={box.key}>
                   <line className="xp-whisker" x1={cx} x2={cx} y1={y(box.upperWhisker)} y2={top} />
@@ -520,7 +511,7 @@ export function ExplorerChart(props: Props) {
                     cx={hover.px}
                     cy={y(value)}
                     r={4.5}
-                    fill={color(series.slot)}
+                    fill={color(series)}
                   />
                 );
               })}

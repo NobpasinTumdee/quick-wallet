@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Database,
   HandCoins,
   PiggyBank,
   LayoutDashboard,
@@ -19,7 +20,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -119,6 +120,26 @@ const MORE_ITEM: NavItem = {
 };
 
 /**
+ * Deep Analytics. Outside NAV like More and Settings: it is a mode of the
+ * Analytics screen, entered from there, so the sidebar keeps Analytics lit
+ * while it is open rather than listing it as a sibling.
+ */
+const DEEP_ITEM: NavItem = {
+  route: 'deep-analytics',
+  labelKey: NAV_LABEL_KEYS['deep-analytics'],
+  icon: Database,
+};
+
+/**
+ * The explorer page — the heaviest screen in the app and the least visited,
+ * so it is the one screen not bundled with the shell. Every other page here is
+ * a static import because it is cheap and likely; this one pays for its own
+ * download the first time someone opens it, and never otherwise.
+ * `bundlecheck.mjs` fails the build if a static import ever pulls it back in.
+ */
+const DeepAnalyticsPage = lazy(() => import('../pages/DeepAnalyticsPage'));
+
+/**
  * How the routes split on a phone.
  *
  * ---------------------------------------------------------------------------
@@ -148,7 +169,7 @@ const MORE_ITEM: NavItem = {
 
 /** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
-  return [...NAV, SETTINGS_ITEM, MORE_ITEM].find((item) => item.route === route) ?? NAV[0];
+  return [...NAV, SETTINGS_ITEM, MORE_ITEM, DEEP_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
 
 /**
@@ -233,6 +254,9 @@ const ROUTE_DATA: Record<Route, string[]> = {
   settings: ['/api/health'],
   /* Nothing to refresh on screens that show no data. */
   more: [],
+  /* The topbar's Refresh re-fetches whichever raw table is open — the key
+     prefix matches every `?source=` variant in the cache. */
+  'deep-analytics': ['/api/analytics/raw-data'],
   notFound: [],
 };
 
@@ -332,6 +356,12 @@ export function AppShell() {
 
   const active = navItemFor(route);
 
+  /* Deep Analytics is a mode of Analytics, so it lights Analytics in the
+     sidebar — otherwise the one screen reached *from* there would show no
+     active item anywhere. */
+  const sidebarActive = (item: Route) =>
+    route === item || (item === 'analytics' && route === 'deep-analytics');
+
   /** One tab-bar link. Shared by both sides of the centre button. */
   const tab = (item: NavItem) => (
     <button
@@ -379,8 +409,8 @@ export function AppShell() {
             <button
               key={item.route}
               type="button"
-              className={cx('sidebar-item', route === item.route && 'is-active')}
-              aria-current={route === item.route ? 'page' : undefined}
+              className={cx('sidebar-item', sidebarActive(item.route) && 'is-active')}
+              aria-current={sidebarActive(item.route) ? 'page' : undefined}
               /* The label is hidden visually in rail mode but stays in the DOM,
                  so the accessible name never depends on the width. `title`
                  gives the same thing to a mouse. */
@@ -488,7 +518,9 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className="page">
+        {/* The explorer uses the full width: a chart builder beside a control
+            panel is exactly the screen a 1320px cap was not designed for. */}
+        <main className={cx('page', route === 'deep-analytics' && 'page--wide')}>
           <DbStatusBanner />
 
           {route === 'dashboard' && <DashboardPage period={period} onNavigate={go} />}
@@ -511,6 +543,11 @@ export function AppShell() {
                  prefetch reliably pays: you are one tap from somewhere. */
               onPrefetch={(next) => warmRoute(next, period)}
             />
+          )}
+          {route === 'deep-analytics' && (
+            <Suspense fallback={<div className="deep-loading-page" role="status" aria-label={t('common.loading')} />}>
+              <DeepAnalyticsPage onNavigate={go} />
+            </Suspense>
           )}
           {route === 'notFound' && <NotFoundPage onNavigate={go} />}
         </main>

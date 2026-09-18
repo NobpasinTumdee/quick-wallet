@@ -86,9 +86,36 @@ export function seriesCap(scope: PairScope): number {
  * survivors. `null` means the "Other" bucket.
  */
 export function seriesColor(slot: number | null, dark: boolean): string {
-  if (slot === null || slot < 0) return dark ? OTHER_DARK : OTHER_LIGHT;
-  const set = dark ? DARK_SERIES : LIGHT_SERIES;
-  return set[slot % set.length];
+  /* Past the eighth slot there is no colour, only Other. The old `% length`
+     here recycled slot 1's blue for series nine — the one colour guaranteed to
+     be confused with an existing series, which is why the rule forbids it. */
+  if (slot === null || slot < 0 || slot >= PALETTE_SIZE) return dark ? OTHER_DARK : OTHER_LIGHT;
+  return (dark ? DARK_SERIES : LIGHT_SERIES)[slot];
+}
+
+/** How many validated hues there are. Nothing past this gets a generated one. */
+export const PALETTE_SIZE = 8;
+
+/**
+ * WCAG contrast ratio between two colours.
+ *
+ * Used for one warning: a user-picked series colour that falls under 3:1
+ * against the chart surface. It is still allowed — it is their chart — but the
+ * legend says so, and points at the table where the values stay readable.
+ */
+export function contrastRatio(a: string, b: string): number | null {
+  const ca = parseColor(a);
+  const cb = parseColor(b);
+  if (!ca || !cb) return null;
+  const lum = ([r, g, bl]: [number, number, number]) => {
+    const [lr, lg, lb] = [r, g, bl].map((channel) => {
+      const c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+  };
+  const [hi, lo] = [lum(ca), lum(cb)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
 }
 
 /**

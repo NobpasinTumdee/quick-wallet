@@ -24,6 +24,10 @@ export const ROUTES = [
      for the phone, where the sidebar does not exist and the gesture arc holds
      five items at most. See MoreMenuPage. */
   'more',
+  /* A mode of Analytics with its own address, so it can be bookmarked, linked
+     and reached with the back button. Hyphenated because the hash is the URL a
+     person sees; every consumer treats it as an opaque id. */
+  'deep-analytics',
 ] as const;
 
 /**
