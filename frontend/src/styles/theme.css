@@ -243,16 +243,16 @@
 :root[data-theme='custom'] {
   --bg: #071413;
   --bg-deep: #030b0a;
-  --surface: #0f2523;
-  --surface-2: #143230;
-  --surface-3: #1a403d;
-  --border: #1d403d;
-  --border-strong: #2c5c57;
+  --surface: #1b1b1b;
+  --surface-2: #2c2c2c;
+  --surface-3: #3a3a3a;
+  --border: #3d3d3d;
+  --border-strong: #5f5f5f;
 
   --text: #e8f6f2;
-  --text-secondary: #b0cdc7;
-  --text-muted: #86a8a2;
-  --text-faint: #5c7c77;
+  --text-secondary: #cccccc;
+  --text-muted: #a8a8a8;
+  --text-faint: #7e7e7e;
 
   --accent: #3fd0aa;
   --accent-contrast: #032019;
