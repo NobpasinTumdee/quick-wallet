@@ -37,10 +37,15 @@
   --text: #0b1220;
   --text-secondary: #3d4a60;
   --text-muted: #64718a;
-  --text-faint: #94a0b4;
+  /* Darkened from #94a0b4, which measured 2.64:1 on white — under the 3:1
+     floor this project holds every informative colour to. See
+     `themecontrast.mjs`. */
+  --text-faint: #7f8da3;
 
   /* ---------- brand & semantics ---------- */
-  --accent: #3b6fff;
+  /* Nudged from #3b6fff: white on that was 4.28:1, and the text on a primary
+     button is body copy. This is the smallest shift that clears 4.5:1. */
+  --accent: #3768f5;
   --accent-contrast: #ffffff;
   --positive: #0f9d6b;
   --negative: #e03e58;
@@ -73,10 +78,14 @@
   --space-8: 60px;
 
   /* ---------- typography ---------- */
-  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter,
-    system-ui, 'Helvetica Neue', Arial, sans-serif;
-  --font-display: 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, Inter,
-    system-ui, sans-serif;
+  /* The default face, matching the `outfit` entry in lib/fonts.ts byte for
+     byte — that file is what a *chosen* font overwrites this with, and the
+     anti-FOUC snippet in index.html loads the same stylesheet before first
+     paint. Outfit has no Thai glyphs, so Prompt stands directly behind it. */
+  --font-sans: 'Outfit', 'Prompt', 'Segoe UI Variable Text', 'Segoe UI', -apple-system,
+    BlinkMacSystemFont, Inter, system-ui, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Outfit', 'Prompt', 'Segoe UI Variable Display', 'Segoe UI', -apple-system,
+    BlinkMacSystemFont, Inter, system-ui, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'Cascadia Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, 'Roboto Mono', monospace;
 
   --text-2xs: 0.6875rem; /* 11 — micro labels */
@@ -128,6 +137,285 @@
   --dur-slow: 420ms;
 
   color-scheme: light;
+}
+
+/* ==========================================================================
+   Minimal & cute — five light, five dark
+   --------------------------------------------------------------------------
+   Each block sets the same nineteen primitives every other theme does, and
+   nothing else: glass, tints, hovers, elevation and the ambient wash are all
+   derived from these with color-mix further down this file. A theme that
+   needed its own glass token would mean the token system had a hole in it.
+
+   The palettes are soft on purpose, which is exactly where contrast goes
+   wrong — a pastel accent on a pastel surface can look lovely and be
+   unreadable. So every pair a user actually reads is checked by
+   `themecontrast.mjs` against the 3:1 floor (4.5:1 for body text), and the
+   accents below are the *darkest* member of their hue family that still reads
+   as the soft colour intended.
+   ========================================================================== */
+
+/* ---- Matcha: creamy paper, sage, dark olive ---- */
+:root[data-theme='matcha'] {
+  --bg: #f3f6ec;
+  --bg-deep: #e7ecdc;
+  --surface: #fbfcf6;
+  --surface-2: #eef2e4;
+  --surface-3: #e3e9d5;
+  --border: #dfe6d1;
+  --border-strong: #b7c4a4;
+
+  --text: #252d1b;
+  --text-secondary: #414c31;
+  --text-muted: #5b6847;
+  --text-faint: #7d8a68;
+
+  --accent: #55773f;
+  --accent-contrast: #ffffff;
+  --positive: #0f7a52;
+  --negative: #b32d2d;
+  --warning: #8a5e06;
+
+  --ambient-opacity: 0.45;
+
+  color-scheme: light;
+}
+
+/* ---- Oatmilk: warm beige, soft brown, espresso ---- */
+:root[data-theme='oatmilk'] {
+  --bg: #f7f2e9;
+  --bg-deep: #ece3d5;
+  --surface: #fffdf8;
+  --surface-2: #f4ecdf;
+  --surface-3: #eae0ce;
+  --border: #e7dcc9;
+  --border-strong: #c9b69c;
+
+  --text: #2d2118;
+  --text-secondary: #4b382a;
+  --text-muted: #6a5140;
+  --text-faint: #8d7461;
+
+  --accent: #7d4f2c;
+  --accent-contrast: #fffdf8;
+  --positive: #0e7350;
+  --negative: #a83526;
+  --warning: #855808;
+
+  --ambient-opacity: 0.45;
+
+  color-scheme: light;
+}
+
+/* ---- Sakura: blush, rose, deep maroon ---- */
+:root[data-theme='sakura'] {
+  --bg: #fdf1f3;
+  --bg-deep: #f6e1e6;
+  --surface: #fffafb;
+  --surface-2: #fbe9ed;
+  --surface-3: #f5dce3;
+  --border: #f4dae1;
+  --border-strong: #dfaab6;
+
+  --text: #3d121a;
+  --text-secondary: #62232e;
+  --text-muted: #813c48;
+  --text-faint: #a5636f;
+
+  --accent: #a83a55;
+  --accent-contrast: #fffafb;
+  --positive: #0e7350;
+  --negative: #b22a3c;
+  --warning: #8a5c06;
+
+  --ambient-opacity: 0.45;
+
+  color-scheme: light;
+}
+
+/* ---- Lavender: pale lilac, soft purple, deep plum ---- */
+:root[data-theme='lavender'] {
+  --bg: #f5f2fc;
+  --bg-deep: #e9e3f6;
+  --surface: #fdfbff;
+  --surface-2: #f0ebf9;
+  --surface-3: #e6def4;
+  --border: #e5ddf6;
+  --border-strong: #bdaddf;
+
+  --text: #281c39;
+  --text-secondary: #453357;
+  --text-muted: #614e79;
+  --text-faint: #86729e;
+
+  --accent: #64449f;
+  --accent-contrast: #ffffff;
+  --positive: #0e7652;
+  --negative: #b12c40;
+  --warning: #855a06;
+
+  --ambient-opacity: 0.45;
+
+  color-scheme: light;
+}
+
+/* ---- Daylight: crisp white, airy blue, navy ---- */
+:root[data-theme='daylight'] {
+  --bg: #f4f9fd;
+  --bg-deep: #e5eff9;
+  --surface: #ffffff;
+  --surface-2: #eef5fb;
+  --surface-3: #e1ecf7;
+  --border: #e0ebf6;
+  --border-strong: #adc5de;
+
+  --text: #0e2038;
+  --text-secondary: #2a3e59;
+  --text-muted: #465c78;
+  --text-faint: #6e839c;
+
+  --accent: #1f6ca8;
+  --accent-contrast: #ffffff;
+  --positive: #0d7452;
+  --negative: #b12b3d;
+  --warning: #855b06;
+
+  --ambient-opacity: 0.45;
+
+  color-scheme: light;
+}
+
+/* ---- Cocoa: dark chocolate, warm beige, cream ---- */
+:root[data-theme='cocoa'] {
+  --bg: #1c1512;
+  --bg-deep: #130e0c;
+  --surface: #271d19;
+  --surface-2: #322620;
+  --surface-3: #3d2f27;
+  --border: #3a2c25;
+  --border-strong: #55423a;
+
+  --text: #f6ede4;
+  --text-secondary: #dccdbf;
+  --text-muted: #b6a091;
+  --text-faint: #927b6d;
+
+  --accent: #dda775;
+  --accent-contrast: #241a14;
+  --positive: #5fcf9e;
+  --negative: #ff8b82;
+  --warning: #eab663;
+
+  --ambient-opacity: 0.6;
+
+  color-scheme: dark;
+}
+
+/* ---- Moonlight: deep soft navy, muted cyan, icy white ----
+   Named Moonlight rather than Midnight: this set already ships a `midnight`,
+   and two entries reading "Midnight" in one picker is a worse outcome than a
+   different word for the same mood. */
+:root[data-theme='moonlight'] {
+  --bg: #101827;
+  --bg-deep: #0a1019;
+  --surface: #1a2434;
+  --surface-2: #222e42;
+  --surface-3: #2b3950;
+  --border: #2a374c;
+  --border-strong: #435573;
+
+  --text: #eef4fb;
+  --text-secondary: #ccd9ea;
+  --text-muted: #a2b4cb;
+  --text-faint: #7d8fa7;
+
+  --accent: #70d0e0;
+  --accent-contrast: #07131a;
+  --positive: #55d6a5;
+  --negative: #ff8b98;
+  --warning: #eeb762;
+
+  --ambient-opacity: 0.6;
+
+  color-scheme: dark;
+}
+
+/* ---- Pine: charcoal green, soft mint, off-white ---- */
+:root[data-theme='pine'] {
+  --bg: #111a17;
+  --bg-deep: #0b120f;
+  --surface: #1a2622;
+  --surface-2: #22322c;
+  --surface-3: #2b3e37;
+  --border: #2a3b34;
+  --border-strong: #43594f;
+
+  --text: #edf5f0;
+  --text-secondary: #c9dcd3;
+  --text-muted: #a0b7ac;
+  --text-faint: #7c8f84;
+
+  --accent: #7cdeb2;
+  --accent-contrast: #05201a;
+  --positive: #63d9a6;
+  --negative: #ff8b97;
+  --warning: #e9b763;
+
+  --ambient-opacity: 0.6;
+
+  color-scheme: dark;
+}
+
+/* ---- Slate: matte grey-blue, silver, crisp white ---- */
+:root[data-theme='slate'] {
+  --bg: #171b21;
+  --bg-deep: #101318;
+  --surface: #21262e;
+  --surface-2: #2a303a;
+  --surface-3: #343b47;
+  --border: #333a45;
+  --border-strong: #4c5665;
+
+  --text: #f3f6fa;
+  --text-secondary: #d4dbe4;
+  --text-muted: #a7b1bf;
+  --text-faint: #818b99;
+
+  --accent: #a6bbd2;
+  --accent-contrast: #11161c;
+  --positive: #57d3a2;
+  --negative: #ff8b96;
+  --warning: #e8b662;
+
+  --ambient-opacity: 0.55;
+
+  color-scheme: dark;
+}
+
+/* ---- Twilight: muted purple-grey, soft lilac, warm white ---- */
+:root[data-theme='twilight'] {
+  --bg: #1a1726;
+  --bg-deep: #12101d;
+  --surface: #251f35;
+  --surface-2: #2e2740;
+  --surface-3: #38304d;
+  --border: #372f4b;
+  --border-strong: #514768;
+
+  --text: #f4effa;
+  --text-secondary: #d8cfea;
+  --text-muted: #b0a3c7;
+  --text-faint: #8b7fa2;
+
+  --accent: #b9a1ec;
+  --accent-contrast: #140e21;
+  --positive: #5cd3a4;
+  --negative: #ff8b97;
+  --warning: #eab663;
+
+  --ambient-opacity: 0.6;
+
+  color-scheme: dark;
 }
 
 /* ==========================================================================
@@ -243,16 +531,20 @@
 :root[data-theme='custom'] {
   --bg: #071413;
   --bg-deep: #030b0a;
-  --surface: #1b1b1b;
-  --surface-2: #2c2c2c;
-  --surface-3: #3a3a3a;
-  --border: #3d3d3d;
-  --border-strong: #5f5f5f;
+  /* These were neutral greys while the picker's preview, THEME_VARS and the
+     comment above all described a teal. The CSS was the odd one out, so it is
+     the one that moved — a user editing "Surface" started from #0f2523 in the
+     swatch and got #1b1b1b on screen. */
+  --surface: #0f2523;
+  --surface-2: #143230;
+  --surface-3: #1a3b38;
+  --border: #1d403d;
+  --border-strong: #2f5b56;
 
   --text: #e8f6f2;
-  --text-secondary: #cccccc;
-  --text-muted: #a8a8a8;
-  --text-faint: #7e7e7e;
+  --text-secondary: #c2d9d4;
+  --text-muted: #86a8a2;
+  --text-faint: #6d8d88;
 
   --accent: #3fd0aa;
   --accent-contrast: #032019;

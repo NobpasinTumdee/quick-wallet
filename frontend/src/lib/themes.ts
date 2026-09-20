@@ -16,28 +16,46 @@
  */
 
 import {
+  CloudMoon,
+  Coffee,
+  Cookie,
+  Flower,
+  Flower2,
   Gem,
+  Leaf,
+  Mountain,
   Ghost,
   Moon,
   MoonStar,
   Palette,
   Snowflake,
   Sparkles,
+  Stars,
   Sun,
+  SunMedium,
   Sunset,
   Trees,
+  TreePine,
   Waves,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
 
 import { ThemeName } from '../types';
+import { TranslationKey } from '../locales';
 
 export interface ThemePreset {
   value: ThemeName;
-  label: string;
-  /** Short line shown under the name in the picker. */
-  blurb: string;
+  /**
+   * The name and the one-line description, as dictionary keys.
+   *
+   * Held as keys rather than English strings because the picker is the one
+   * screen where a user is choosing by *feel*, and "Oatmilk — warm beige and
+   * espresso" only conveys that feeling in a language they read. Proper nouns
+   * still read as proper nouns in Thai; the blurbs are what carry the sense.
+   */
+  labelKey: TranslationKey;
+  blurbKey: TranslationKey;
   scheme: 'light' | 'dark';
   icon: LucideIcon;
   /** Mirrors --accent for this theme. */
@@ -49,17 +67,17 @@ export interface ThemePreset {
 export const THEME_PRESETS = [
   {
     value: 'light',
-    label: 'Light',
-    blurb: 'The default paper palette',
+    labelKey: 'theme.nameLight',
+    blurbKey: 'theme.blurbLight',
     scheme: 'light',
     icon: Sun,
-    accent: '#3b6fff',
-    swatches: ['#f7f8fb', '#ffffff', '#3b6fff', '#0b1220'],
+    accent: '#3768f5',
+    swatches: ['#f7f8fb', '#ffffff', '#3768f5', '#0b1220'],
   },
   {
     value: 'dark',
-    label: 'Dark',
-    blurb: 'Cool graphite and blue',
+    labelKey: 'theme.nameDark',
+    blurbKey: 'theme.blurbDark',
     scheme: 'dark',
     icon: Moon,
     accent: '#5d8bff',
@@ -67,8 +85,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'ocean',
-    label: 'Ocean',
-    blurb: 'Deep water, cold cyan',
+    labelKey: 'theme.nameOcean',
+    blurbKey: 'theme.blurbOcean',
     scheme: 'dark',
     icon: Waves,
     accent: '#38bde0',
@@ -76,8 +94,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'forest',
-    label: 'Forest',
-    blurb: 'Pine and moss',
+    labelKey: 'theme.nameForest',
+    blurbKey: 'theme.blurbForest',
     scheme: 'dark',
     icon: Trees,
     accent: '#55cf85',
@@ -85,8 +103,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'sunset',
-    label: 'Sunset',
-    blurb: 'Dusk over warm plum',
+    labelKey: 'theme.nameSunset',
+    blurbKey: 'theme.blurbSunset',
     scheme: 'dark',
     icon: Sunset,
     accent: '#ff9264',
@@ -94,8 +112,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'cyberpunk',
-    label: 'Cyberpunk',
-    blurb: 'Neon magenta on near-black',
+    labelKey: 'theme.nameCyberpunk',
+    blurbKey: 'theme.blurbCyberpunk',
     scheme: 'dark',
     icon: Zap,
     accent: '#fa4fdc',
@@ -103,8 +121,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'rosegold',
-    label: 'Rose Gold',
-    blurb: 'Light, warm blush and copper',
+    labelKey: 'theme.nameRosegold',
+    blurbKey: 'theme.blurbRosegold',
     scheme: 'light',
     icon: Gem,
     accent: '#9e5f67',
@@ -112,8 +130,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'midnight',
-    label: 'Midnight',
-    blurb: 'The quietest dark in the set',
+    labelKey: 'theme.nameMidnight',
+    blurbKey: 'theme.blurbMidnight',
     scheme: 'dark',
     icon: MoonStar,
     accent: '#7aa2f7',
@@ -121,8 +139,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'dracula',
-    label: 'Dracula',
-    blurb: 'The classic developer palette',
+    labelKey: 'theme.nameDracula',
+    blurbKey: 'theme.blurbDracula',
     scheme: 'dark',
     icon: Ghost,
     accent: '#bd93f9',
@@ -130,8 +148,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'nord',
-    label: 'Nord',
-    blurb: 'Polar night and frost',
+    labelKey: 'theme.nameNord',
+    blurbKey: 'theme.blurbNord',
     scheme: 'dark',
     icon: Snowflake,
     accent: '#88c0d0',
@@ -139,8 +157,8 @@ export const THEME_PRESETS = [
   },
   {
     value: 'solarized',
-    label: 'Solarized',
-    blurb: 'Light, on warm paper',
+    labelKey: 'theme.nameSolarized',
+    blurbKey: 'theme.blurbSolarized',
     scheme: 'light',
     icon: Sparkles,
     accent: '#1a72ac',
@@ -148,17 +166,116 @@ export const THEME_PRESETS = [
   },
   {
     value: 'amethyst',
-    label: 'Amethyst',
-    blurb: 'Violet, the richest dark here',
+    labelKey: 'theme.nameAmethyst',
+    blurbKey: 'theme.blurbAmethyst',
     scheme: 'dark',
     icon: Gem,
     accent: '#b06bfa',
     swatches: ['#0e0818', '#1a1029', '#b06bfa', '#f2ebfd'],
   },
+  /* ----------------------------------------------------------------
+     Minimal & cute — five light, five dark.
+
+     Softer than the rest of the set by design, which is precisely where
+     contrast slips: every accent below is the darkest member of its hue
+     family that still reads as the soft colour intended, and
+     `themecontrast.mjs` holds all of them to the same floors as the
+     originals.
+     ---------------------------------------------------------------- */
+  {
+    value: 'matcha',
+    labelKey: 'theme.nameMatcha',
+    blurbKey: 'theme.blurbMatcha',
+    scheme: 'light',
+    icon: Leaf,
+    accent: '#55773f',
+    swatches: ['#f3f6ec', '#fbfcf6', '#55773f', '#252d1b'],
+  },
+  {
+    value: 'oatmilk',
+    labelKey: 'theme.nameOatmilk',
+    blurbKey: 'theme.blurbOatmilk',
+    scheme: 'light',
+    icon: Coffee,
+    accent: '#7d4f2c',
+    swatches: ['#f7f2e9', '#fffdf8', '#7d4f2c', '#2d2118'],
+  },
+  {
+    value: 'sakura',
+    labelKey: 'theme.nameSakura',
+    blurbKey: 'theme.blurbSakura',
+    scheme: 'light',
+    icon: Flower2,
+    accent: '#a83a55',
+    swatches: ['#fdf1f3', '#fffafb', '#a83a55', '#3d121a'],
+  },
+  {
+    value: 'lavender',
+    labelKey: 'theme.nameLavender',
+    blurbKey: 'theme.blurbLavender',
+    scheme: 'light',
+    icon: Flower,
+    accent: '#64449f',
+    swatches: ['#f5f2fc', '#fdfbff', '#64449f', '#281c39'],
+  },
+  {
+    value: 'daylight',
+    labelKey: 'theme.nameDaylight',
+    blurbKey: 'theme.blurbDaylight',
+    scheme: 'light',
+    icon: SunMedium,
+    accent: '#1f6ca8',
+    swatches: ['#f4f9fd', '#ffffff', '#1f6ca8', '#0e2038'],
+  },
+  {
+    value: 'cocoa',
+    labelKey: 'theme.nameCocoa',
+    blurbKey: 'theme.blurbCocoa',
+    scheme: 'dark',
+    icon: Cookie,
+    accent: '#dda775',
+    swatches: ['#1c1512', '#271d19', '#dda775', '#f6ede4'],
+  },
+  {
+    value: 'moonlight',
+    labelKey: 'theme.nameMoonlight',
+    blurbKey: 'theme.blurbMoonlight',
+    scheme: 'dark',
+    icon: CloudMoon,
+    accent: '#70d0e0',
+    swatches: ['#101827', '#1a2434', '#70d0e0', '#eef4fb'],
+  },
+  {
+    value: 'pine',
+    labelKey: 'theme.namePine',
+    blurbKey: 'theme.blurbPine',
+    scheme: 'dark',
+    icon: TreePine,
+    accent: '#7cdeb2',
+    swatches: ['#111a17', '#1a2622', '#7cdeb2', '#edf5f0'],
+  },
+  {
+    value: 'slate',
+    labelKey: 'theme.nameSlate',
+    blurbKey: 'theme.blurbSlate',
+    scheme: 'dark',
+    icon: Mountain,
+    accent: '#a6bbd2',
+    swatches: ['#171b21', '#21262e', '#a6bbd2', '#f3f6fa'],
+  },
+  {
+    value: 'twilight',
+    labelKey: 'theme.nameTwilight',
+    blurbKey: 'theme.blurbTwilight',
+    scheme: 'dark',
+    icon: Stars,
+    accent: '#b9a1ec',
+    swatches: ['#1a1726', '#251f35', '#b9a1ec', '#f4effa'],
+  },
   {
     value: 'custom',
-    label: 'Custom base',
-    blurb: 'Midnight teal — the blank canvas',
+    labelKey: 'theme.nameCustom',
+    blurbKey: 'theme.blurbCustom',
     scheme: 'dark',
     icon: Palette,
     accent: '#3fd0aa',

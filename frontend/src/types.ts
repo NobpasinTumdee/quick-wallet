@@ -34,7 +34,20 @@ export type ThemeName =
   | 'dracula'
   | 'nord'
   | 'solarized'
-  | 'amethyst';
+  | 'amethyst'
+  /* Minimal & cute, five light and five dark. `moonlight` is the one the
+     brief called Midnight: that id was already taken, and two cards reading
+     "Midnight" in one picker is worse than a different word. */
+  | 'matcha'
+  | 'oatmilk'
+  | 'sakura'
+  | 'lavender'
+  | 'daylight'
+  | 'cocoa'
+  | 'moonlight'
+  | 'pine'
+  | 'slate'
+  | 'twilight';
 
 export interface PublicUser {
   id: string;

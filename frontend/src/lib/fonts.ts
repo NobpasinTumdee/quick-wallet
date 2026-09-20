@@ -51,14 +51,33 @@ export interface FontOption {
 
 /* The weights the UI actually uses — see --weight-normal…--weight-bold in
    theme.css. Requesting the full 100–900 range would triple the download for
-   faces nothing renders. 680 (--weight-bold) resolves to the 700 cut. */
-const WEIGHTS = 'wght@400;500;600;700';
+   faces nothing renders. 680 (--weight-bold) resolves to the 700 cut; 300 is
+   carried for the display face's large, airy headings. */
+const WEIGHTS = 'wght@300;400;500;600;700';
 
 function googleFont(family: string): string {
   return `https://fonts.googleapis.com/css2?family=${family}:${WEIGHTS}&display=swap`;
 }
 
 export const FONTS: readonly FontOption[] = [
+  {
+    /**
+     * The app's default face, and a *pair*.
+     *
+     * Outfit carries no Thai glyphs, so Prompt sits directly behind it in the
+     * stack: Latin and figures render in Outfit's rounded geometry, Thai falls
+     * through to Prompt — which is geometric in the same way and sits on a
+     * similar x-height, so a bilingual line does not look like two fonts
+     * arguing. The system stack remains the last resort for anything neither
+     * covers.
+     */
+    id: 'outfit',
+    label: 'Outfit + Prompt',
+    blurb: 'Rounded and minimal. Thai renders in Prompt',
+    stack: `'Outfit', 'Prompt', ${SYSTEM_STACK}`,
+    href: 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap',
+    thai: true,
+  },
   {
     id: 'system',
     label: 'System',
@@ -109,7 +128,7 @@ export const FONTS: readonly FontOption[] = [
   },
 ] as const;
 
-export const DEFAULT_FONT_ID = 'system';
+export const DEFAULT_FONT_ID = 'outfit';
 
 /**
  * An id from anywhere — a saved theme, localStorage, a settings row written by

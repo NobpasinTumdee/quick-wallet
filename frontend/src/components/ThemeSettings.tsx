@@ -324,10 +324,16 @@ export function ThemeSettings() {
           {/* Grouped by scheme so a light theme is never a surprise. */}
           {(['light', 'dark'] as const).map((scheme) => (
             <fieldset key={scheme} className="theme-group">
-              <legend className="section-label">{t(scheme === 'light' ? 'theme.schemeLight' : 'theme.schemeDark')}</legend>
+              <legend className="section-label">
+                {t(scheme === 'light' ? 'theme.schemeLight' : 'theme.schemeDark')}
+                {' · '}
+                {THEME_PRESETS.filter((preset) => preset.scheme === scheme).length}
+              </legend>
               <div className="theme-row">
                 {THEME_PRESETS.filter((preset) => preset.scheme === scheme).map((preset) => {
                   const active = activeKey === `preset:${preset.value}`;
+                  const label = t(preset.labelKey);
+                  const blurb = t(preset.blurbKey);
                   return (
                     <button
                       key={preset.value}
@@ -337,14 +343,14 @@ export function ThemeSettings() {
                       className={cx('theme-card', 'theme-card--preset', active && 'is-active')}
                       onClick={() => void applyPreset(preset.value)}
                       disabled={busy}
-                      title={preset.blurb}
+                      title={blurb}
                     >
                       <ThemeChip swatches={preset.swatches} />
                       <span className="theme-card-name">
                         <Icon icon={preset.icon} size="sm" />
-                        {preset.label}
+                        {label}
                       </span>
-                      <span className="theme-card-blurb truncate">{preset.blurb}</span>
+                      <span className="theme-card-blurb truncate">{blurb}</span>
                       {active && (
                         <span className="theme-card-check" aria-hidden="true">
                           <Icon icon={Check} size="sm" />

@@ -3666,12 +3666,15 @@ function subscriptionsPay_(user, query, body) {
 var THEMES = [
   'light', 'dark', 'custom',
   'ocean', 'forest', 'sunset', 'cyberpunk', 'rosegold',
-  'midnight', 'dracula', 'nord', 'solarized', 'amethyst'
+  'midnight', 'dracula', 'nord', 'solarized', 'amethyst',
+  /* Minimal & cute. */
+  'matcha', 'oatmilk', 'sakura', 'lavender', 'daylight',
+  'cocoa', 'moonlight', 'pine', 'slate', 'twilight'
 ];
 
 /* Must stay in step with FONTS in frontend/src/lib/fonts.ts. An id not listed
    here is rejected with a 400 rather than written through to a stylesheet. */
-var FONTS = ['system', 'inter', 'prompt', 'sarabun', 'noto-sans-thai', 'sans-serif'];
+var FONTS = ['outfit', 'system', 'inter', 'prompt', 'sarabun', 'noto-sans-thai', 'sans-serif'];
 
 /** '' (the system face) or a known id. Anything else is a 400. */
 function fontId_(value) {

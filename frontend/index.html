@@ -34,6 +34,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
+  <!-- The default face, loaded statically so the very first paint already has
+       it. A user who has *chosen* a different font gets that one injected by
+       the boot script below, and this stylesheet costs them one cached
+       request; the alternative is everyone else seeing a system-font flash on
+       every cold load. Outfit carries Latin and figures, Prompt carries Thai —
+       the same pair `--font-sans` names in styles/theme.css.
+
+       The id is load-bearing: `ensureFontLoaded` in src/lib/fonts.ts skips a
+       face whose `qw-font-<id>` element already exists, so without it the app
+       would append a second link for this very stylesheet on boot. -->
+  <link
+    id="qw-font-outfit"
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap"
+  />
+
   <!--
     Anti-FOUC. Blocking, inline, and in <head> on purpose: the palette lives in
     the user's Settings row behind an Apps Script round trip, so without this
