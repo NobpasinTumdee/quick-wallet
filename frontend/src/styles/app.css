@@ -4976,6 +4976,133 @@ table.data.data--nested td {
   flex: 1;
 }
 
+/* ---- Ready to buy ----
+   The only card state the app asks a question in, so it is the only one that
+   gets a lit edge. The glow sits on the card, not on the text: a coloured
+   label would fight the chips already using the accent. */
+
+.goal-card.is-ready {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background:
+    radial-gradient(120% 140% at 50% -20%, var(--accent-softer), transparent 62%),
+    var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 12px 30px -18px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.goal-buy {
+  position: relative;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: goal-buy-pulse 2.6s var(--ease-out) infinite;
+}
+
+/* A slow ring rather than a flashing one: enough to draw the eye on arrival,
+   quiet enough to sit on screen while the user reads the rest of the card. */
+@keyframes goal-buy-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  60%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* ---- Bought ----
+   Desaturated and dimmed: the card is a receipt now. Kept legible rather than
+   greyed to the point of being unreadable — the amounts still have to be
+   checkable months later. */
+
+.goal-card.is-purchased {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--positive) 26%, var(--border));
+  filter: saturate(0.72);
+  opacity: 0.82;
+}
+
+.goal-card.is-purchased:hover {
+  filter: none;
+  opacity: 1;
+}
+
+.goal-card.is-purchased .goal-identity h3 {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-faint) 70%, transparent);
+  text-decoration-thickness: 1px;
+}
+
+.goal-chip--purchased {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.goal-done-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- The purchase dialog ---- */
+
+.goal-buy-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.goal-buy-price strong {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-buy-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.goal-buy-preview p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.goal-buy-after {
+  color: var(--text);
+}
+
+.goal-buy-warn {
+  color: var(--warning);
+}
+
+.goal-buy-note {
+  color: var(--text-faint);
+}
+
+/* The pulse is an invitation, not information: without it the lit card and the
+   primary button still say the same thing. */
+@media (prefers-reduced-motion: reduce) {
+  .goal-buy {
+    animation: none;
+  }
+}
+
 @media (max-width: 640px) {
   .goal-grid {
     grid-template-columns: 1fr;

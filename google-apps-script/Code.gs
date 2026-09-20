@@ -274,7 +274,27 @@ var SHEETS = {
       { key: 'deadline', header: 'Deadline', type: 'datekey' },
       { key: 'color', header: 'Color', type: 'string' },
       { key: 'note', header: 'Note', type: 'string' },
-      { key: 'createdAt', header: 'Created At', type: 'date' }
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      /* -------------------------------------------------------------------
+         THE END OF A GOAL'S LIFE
+         -------------------------------------------------------------------
+         'active' | 'purchased'. Only `goals.purchase` ever writes it — never
+         `goals.update`, for the same reason `savedAmount` is not patchable: a
+         status that can be set without the expense behind it is a goal that
+         claims to have been bought with no money having left.
+
+         Blank means 'active'. Rows written before this column existed have no
+         value, and `createMissingSheets()` appends the header without filling
+         it in, so every read goes through `goalStatus_`. */
+      { key: 'status', header: 'Status', type: 'string' },
+      /* The id of the expense written when the goal was bought — the same
+         reasoning as BillSplits' `expenseTxId` above. Without it the purchase
+         is a dead end: nothing can show which row on the Activity screen this
+         goal produced, and nothing could ever undo one as a single act. */
+      { key: 'purchaseTxId', header: 'Purchase Tx ID', type: 'string' },
+      /* `datekey`, not `date`: the same Sheets-parses-it-into-a-Date trap the
+         deadline column documents. */
+      { key: 'purchasedAt', header: 'Purchased At', type: 'datekey' }
     ]
   },
   /**
@@ -534,6 +554,9 @@ function dispatch_(action, method, query, body, token) {
     'goals.create': function () { return goalsCreate_(requireAuth_(token), body); },
     'goals.update': function () { return goalsUpdate_(requireAuth_(token), query, body); },
     'goals.fund': function () { return goalsFund_(requireAuth_(token), query, body); },
+    /* The one goals route that moves real money: it writes an expense against a
+       wallet and marks the goal bought, in this one locked call. */
+    'goals.purchase': function () { return goalsPurchase_(requireAuth_(token), query, body); },
     'goals.delete': function () { return goalsDelete_(requireAuth_(token), query); },
 
     /* Real money, unlike goals.* above: `debts.pay` writes an expense against a
@@ -2514,10 +2537,43 @@ function budgetsCopy_(user, body) {
  * started saving, and every budget would count the transfer as spending. The
  * only figure a goal changes is how much of your cash is already spoken for,
  * which the client derives as `liquid - Σ savedAmount`.
+ *
+ * -------------------------------------------------------------------------
+ * THE ONE EXCEPTION: BUYING THE THING
+ * -------------------------------------------------------------------------
+ * `goals.purchase` is the moment the envelope stops being virtual. The saved-up
+ * money finally leaves a real wallet, so that call — and only that call —
+ * behaves like `debts.pay`: it writes an expense against a chosen wallet and
+ * then marks the goal purchased, in one locked request.
+ *
+ * Note what it does *not* do: it does not zero `savedAmount`. What was set
+ * aside is a fact about the past and stays readable on the card. The client
+ * stops counting a purchased goal as locked money instead — see
+ * `allocationSummary` — which is what keeps "available to spend" from
+ * subtracting the same purchase twice, once as the expense and once as an
+ * envelope that is still reserving cash for a thing already bought.
  * ========================================================================= */
 
 /** A goal with nothing typed into it still needs a swatch. */
 var GOAL_DEFAULT_COLOR = '#3b6fff';
+
+/** Where a goal purchase lands when the user does not name a category. */
+var GOAL_PURCHASE_CATEGORY = 'Goal';
+
+/**
+ * The stored status, defaulted.
+ *
+ * Every read goes through here because a row written before the column existed
+ * has nothing in it, and so does one added by hand in the Sheet. Anything that
+ * is not exactly 'purchased' is an active goal: an unknown value must fail
+ * towards the state that still lets the user act, never towards "already
+ * bought, buttons hidden".
+ */
+function goalStatus_(goal) {
+  return String((goal && goal.status) || '').trim().toLowerCase() === 'purchased'
+    ? 'purchased'
+    : 'active';
+}
 
 function parseGoal_(body) {
   var target = num_(body.targetAmount, 'targetAmount', { min: 0 });
@@ -2537,18 +2593,26 @@ function decorateGoal_(goal) {
   var target = Number(goal.targetAmount) || 0;
   var saved = Number(goal.savedAmount) || 0;
   var remaining = Math.max(0, target - saved);
+  var status = goalStatus_(goal);
 
   return {
     id: goal.id, userId: goal.userId, title: goal.title,
     targetAmount: target, savedAmount: saved,
     deadline: goal.deadline, color: goal.color, note: goal.note,
     createdAt: goal.createdAt,
+    status: status,
+    purchaseTxId: goal.purchaseTxId || '',
+    purchasedAt: goal.purchasedAt || '',
     /* computed server-side */
     remaining: money_(remaining),
     /* Uncapped on purpose. Over-funding a goal is a real thing people do, and
        clamping the percentage at 100 would hide it. The UI caps the *bar*. */
     percentComplete: target > 0 ? money_((saved / target) * 100) : 0,
-    complete: saved >= target
+    complete: saved >= target,
+    /* Sent as its own boolean rather than left as a string comparison for
+       every caller to repeat — and so a future third status does not silently
+       start reading as "not purchased" in half the places. */
+    purchased: status === 'purchased'
   };
 }
 
@@ -2560,6 +2624,9 @@ function goalsList_(user) {
       return decorateGoal_(copy);
     })
     .sort(function (a, b) {
+      /* Bought goals sink to the bottom: they need nothing from the user, and
+         this screen is a to-do list for the ones that still do. */
+      if (a.purchased !== b.purchased) return a.purchased ? 1 : -1;
       /* Unfinished first, then by deadline — a goal with a date is more urgent
          than one without, so a missing deadline sorts last rather than first
          (an empty string would otherwise win every comparison). */
@@ -2580,7 +2647,12 @@ function goalsCreate_(user, body) {
        somewhere, and `goals.fund` is the only thing allowed to say where. */
     savedAmount: 0,
     deadline: parsed.deadline, color: parsed.color, note: parsed.note,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    /* A goal is born unbought. The three purchase columns are written together
+       or not at all — see `goalsPurchase_`. */
+    status: 'active',
+    purchaseTxId: '',
+    purchasedAt: ''
   };
 
   insertRow_('Goals', goal);
@@ -2601,7 +2673,11 @@ function goalsUpdate_(user, query, body) {
   var parsed = parseGoal_(merged);
   /* `savedAmount` is deliberately absent from the patch. Editing a goal must
      not be a back door into its balance — that belongs to `goals.fund`, which
-     is the only path that reads the stored figure before changing it. */
+     is the only path that reads the stored figure before changing it. The same
+     goes for `status`, `purchaseTxId` and `purchasedAt`: `parseGoal_` does not
+     return them, so a PATCH cannot mark a goal bought without the expense that
+     makes it true. Renaming a purchased goal is still fine — the wording of a
+     card is not the record of the payment. */
   var updated = updateRow_('Goals', id, parsed);
   delete updated._row;
   return decorateGoal_(updated);
@@ -2644,14 +2720,114 @@ function goalsFund_(user, query, body) {
   return decorateGoal_(updated);
 }
 
+/**
+ * Buy the thing the goal was for.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE EXPENSE IS WRITTEN FIRST
+ * -------------------------------------------------------------------------
+ * Word for word the argument in `debtsPay_`, and it is worth restating because
+ * this is the second place in the script where two writes have to look like
+ * one. Apps Script has no rollback. Every request already runs under the script
+ * lock, so nothing interleaves with these two writes, but if the Transactions
+ * insert succeeds and the Goals update then throws, the expense exists and the
+ * goal still says active.
+ *
+ * That failure is recoverable and *visible*: the user sees the money gone and a
+ * goal still offering a Buy button, and pressing it again would be a second
+ * expense they can see and delete. The other order is not visible: a goal
+ * marked purchased with no expense behind it is a wallet balance that is wrong
+ * by the price of the thing, and nothing on any screen would ever say so. So
+ * the ledger is written first, on purpose.
+ *
+ * -------------------------------------------------------------------------
+ * WHY AN UNDER-FUNDED GOAL IS STILL ALLOWED TO BE BOUGHT
+ * -------------------------------------------------------------------------
+ * The UI only offers the button at 100%, but the server does not enforce it.
+ * The money comes out of a real wallet either way, and refusing at 99.4% would
+ * push the user to fake a deposit into the envelope first — which would make
+ * `savedAmount` a lie in order to satisfy a rule that protects nothing. The
+ * shortfall is returned instead, so the client can say what happened.
+ *
+ * The price is the goal's own `targetAmount`, read from the stored row rather
+ * than accepted from the client: the whole point of the flow is that the thing
+ * costs what the goal said it costs.
+ */
+function goalsPurchase_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Goals', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Goal not found', 404, 'NOT_FOUND');
+  }
+
+  /* Not an error the client can talk its way past: a second purchase would be
+     a second expense for a thing already owned. Re-checked here rather than
+     trusted from the card, which may have been loaded before another device
+     bought it. */
+  if (goalStatus_(existing) === 'purchased') {
+    throw apiError_('This goal has already been purchased', 409, 'ALREADY_PURCHASED');
+  }
+
+  var price = money_(Number(existing.targetAmount) || 0);
+  if (!(price > 0)) throw bad_('"targetAmount" must be greater than zero', 'ZERO_AMOUNT');
+
+  /* Re-checked rather than trusted: the wallet is chosen at purchase time and
+     may have been deleted between the modal opening and this call. */
+  var wallet = ownedWallet_(user.id, str_(body.walletId, 'walletId', { required: true }));
+
+  /* The same refusal `debts.pay` makes. Buying a sofa out of a brokerage
+     account is not a transfer this app can model — it would need a sale — so
+     it is refused rather than silently booked against holdings. */
+  if (wallet.mode === 'investment') {
+    throw bad_('Pay from a spending wallet, not an investment wallet', 'WRONG_WALLET_MODE');
+  }
+
+  var boughtOn = isoDate_((body && body.date) || toDateKey_(new Date()), 'date');
+
+  var tx = {
+    id: uuid_(), userId: user.id,
+    walletId: wallet.id, toWalletId: '', type: 'expense',
+    amount: price,
+    /* Overridable, because someone whose categories include "Furniture"
+       should be able to have this land in the right budget. */
+    category: body.category ? str_(body.category, 'category', { max: 60 }) : GOAL_PURCHASE_CATEGORY,
+    note: body.note ? str_(body.note, 'note', { required: false, max: 300 }) : 'Goal: ' + existing.title,
+    date: boughtOn,
+    createdAt: new Date().toISOString()
+  };
+  insertRow_('Transactions', tx);
+
+  /* All three together. A status with no transaction id behind it would be a
+     purchase nobody can trace back to the money. */
+  var updated = updateRow_('Goals', id, {
+    status: 'purchased',
+    purchaseTxId: tx.id,
+    purchasedAt: boughtOn
+  });
+  delete updated._row;
+
+  /* Both halves, so the client reconciles its optimistic patch against what the
+     server actually decided rather than guessing — the same contract
+     `debts.pay` and `subscriptions.pay` return. */
+  return {
+    ok: true,
+    goal: decorateGoal_(updated),
+    transaction: tx,
+    /* What the envelope could not cover, paid out of the wallet regardless. */
+    shortfall: money_(Math.max(0, price - (Number(existing.savedAmount) || 0)))
+  };
+}
+
 function goalsDelete_(user, query) {
   var id = str_(query.id, 'id');
   var existing = findById_('Goals', id);
   if (!existing || existing.userId !== user.id) {
     throw apiError_('Goal not found', 404, 'NOT_FOUND');
   }
-  /* No cascade to think about: a goal owns no Transactions by design, so
-     deleting one cannot orphan anything or change a balance. */
+  /* A purchase leaves an ordinary expense behind, and it stays — deleting it
+     to tidy up a removed goal would rewrite history and move every balance and
+     monthly total it appears in. The same rule debts and bill splits follow.
+     Funding, meanwhile, never wrote anything to orphan. */
   deleteRow_('Goals', id);
   return { ok: true, id: id };
 }

@@ -44,9 +44,22 @@ export function spendableCash(wallets: WalletBalance[]): number {
   );
 }
 
+/**
+ * A goal still reserving cash.
+ *
+ * A purchased goal is not one. Its money has actually left a wallet, which the
+ * expense already took off `totalCash`; counting the envelope as well would
+ * subtract the same purchase twice and quietly understate what is free to
+ * spend. The saved figure stays on the card as a record of what was put aside —
+ * it just stops being a claim on money that is no longer there.
+ */
+export function reservesCash(goal: Goal): boolean {
+  return !goal.purchased;
+}
+
 export interface Allocation {
   totalCash: number;
-  /** Σ savedAmount across every goal. */
+  /** Σ savedAmount across goals that have not been bought yet. */
   locked: number;
   /** `totalCash − locked`. Negative when the envelopes outrun the cash. */
   available: number;
@@ -66,7 +79,11 @@ export interface Allocation {
  */
 export function allocationSummary(wallets: WalletBalance[], goals: Goal[]): Allocation {
   const totalCash = spendableCash(wallets);
-  const locked = round2(goals.reduce((sum, goal) => sum + (Number(goal.savedAmount) || 0), 0));
+  const locked = round2(
+    goals
+      .filter(reservesCash)
+      .reduce((sum, goal) => sum + (Number(goal.savedAmount) || 0), 0),
+  );
   const available = round2(totalCash - locked);
 
   return {
@@ -133,6 +150,19 @@ export function goalPace(goal: Goal, today = new Date()): GoalPace {
     overdue: !funded && due < new Date(today.getFullYear(), today.getMonth(), today.getDate()),
     open: false,
   };
+}
+
+/**
+ * Fully funded, and not yet bought — the state the "Complete & Buy" button
+ * exists for.
+ *
+ * Read off the amounts rather than the server's `complete` flag so a goal with
+ * no target (which can only happen to a hand-edited row) never offers to spend
+ * nothing, and so an over-funded goal still qualifies.
+ */
+export function readyToBuy(goal: Goal): boolean {
+  const target = Number(goal.targetAmount) || 0;
+  return !goal.purchased && target > 0 && (Number(goal.savedAmount) || 0) >= target;
 }
 
 /** Progress for the ring: clamped to 0…100, unlike the raw `percentComplete`. */

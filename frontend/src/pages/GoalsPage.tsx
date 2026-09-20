@@ -1,8 +1,10 @@
-import { Minus, PiggyBank, Plus, Target } from 'lucide-react';
-import { useState } from 'react';
+import { PiggyBank, Plus, Target } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { GoalCard } from '../components/GoalCard';
 import { GoalForm, GoalPayload } from '../components/GoalForm';
+import { GoalPurchaseModal } from '../components/GoalPurchaseModal';
 import { Icon } from '../components/Icon';
 import {
   Alert,
@@ -18,9 +20,10 @@ import {
 } from '../components/ui';
 import { useExcelDB } from '../hooks/useExcelDB';
 import { useGoals } from '../hooks/useGoals';
-import { allocationSummary, goalPace, ringPercent } from '../lib/goalMath';
-import { cx, formatDate, formatPercent } from '../lib/format';
-import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
+import { allocationSummary } from '../lib/goalMath';
+import { cx, formatPercent, todayKey } from '../lib/format';
+import { toast } from '../lib/toast';
+import { useMoneyFormatter } from '../state/SettingsContext';
 import { Goal, WalletBalance } from '../types';
 
 /**
@@ -35,33 +38,9 @@ import { Goal, WalletBalance } from '../types';
  * answers "what is actually free".
  *
  * Funding writes no Transaction and moves no balance — see `lib/goalMath.ts`.
+ * Buying does both, once, at the end of a goal's life: see `purchase` in
+ * `useGoals`, and the wallet dialog it goes through.
  */
-
-/** The progress ring. An SVG arc, sized by the dash offset. */
-function GoalRing({ percent, color, label }: { percent: number; color: string; label: string }) {
-  const RADIUS = 26;
-  const circumference = 2 * Math.PI * RADIUS;
-
-  return (
-    <svg className="goal-ring" viewBox="0 0 64 64" role="img" aria-label={label}>
-      <circle className="goal-ring-track" cx="32" cy="32" r={RADIUS} />
-      <circle
-        className="goal-ring-fill"
-        cx="32"
-        cy="32"
-        r={RADIUS}
-        stroke={color}
-        strokeDasharray={circumference}
-        /* Offset shrinks as the goal fills. Rotated -90° in CSS so it starts at
-           twelve o'clock rather than three. */
-        strokeDashoffset={circumference * (1 - percent / 100)}
-      />
-      <text className="goal-ring-text" x="32" y="32">
-        {Math.round(percent)}%
-      </text>
-    </svg>
-  );
-}
 
 interface FundTarget {
   goal: Goal;
@@ -71,9 +50,7 @@ interface FundTarget {
 
 export function GoalsPage() {
   const { t } = useTranslation();
-  const { settings } = useSettings();
   const money = useMoneyFormatter();
-  const locale = settings.locale;
 
   const goals = useGoals();
   const wallets = useExcelDB<WalletBalance>('wallets');
@@ -84,7 +61,52 @@ export function GoalsPage() {
   /** Raw string so a half-typed decimal survives; parsed on confirm. */
   const [fundAmount, setFundAmount] = useState('');
 
+  /* The purchase flow: which goal is being bought, and out of what. */
+  const [buying, setBuying] = useState<Goal | null>(null);
+  const [payWalletId, setPayWalletId] = useState('');
+  const [payDate, setPayDate] = useState(todayKey);
+  const [buyError, setBuyError] = useState<string | null>(null);
+  const [buyBusy, setBuyBusy] = useState(false);
+
   const allocation = allocationSummary(wallets.items, goals.items);
+
+  /* A goal is bought with real cash, so a brokerage account is not an option —
+     the server refuses `mode: 'investment'` outright, and offering it here
+     would only let the user pick something that comes back as an error. */
+  const payableFrom = useMemo(
+    () => wallets.items.filter((w) => !w.archived && w.mode === 'expense'),
+    [wallets.items],
+  );
+
+  function openBuy(goal: Goal) {
+    setBuying(goal);
+    setBuyError(null);
+    /* Defaulted to the fullest wallet: the one most likely to cover it, and
+       the choice is one tap away in the dropdown either way. */
+    const richest = [...payableFrom].sort((a, b) => b.balance - a.balance)[0];
+    setPayWalletId(richest?.id ?? '');
+    setPayDate(todayKey());
+  }
+
+  async function confirmBuy() {
+    if (!buying || !payWalletId) return;
+    setBuyBusy(true);
+    setBuyError(null);
+    try {
+      const result = await goals.purchase(buying.id, payWalletId, { date: payDate });
+      setBuying(null);
+      toast.success(
+        t('goals.purchaseDone', { title: result.goal.title, amount: money(result.transaction.amount) }),
+        t('goals.purchased'),
+      );
+    } catch (error) {
+      /* Kept in the dialog rather than toasted away: the wallet choice is
+         still on screen and is the thing most likely to need changing. */
+      setBuyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBuyBusy(false);
+    }
+  }
 
   function closeForm() {
     setFormOpen(false);
@@ -219,101 +241,36 @@ export function GoalsPage() {
           />
         ) : (
           <div className="goal-grid">
-            {goals.items.map((goal) => {
-              const pace = goalPace(goal);
-              const percent = ringPercent(goal);
-
-              return (
-                <article key={goal.id} className={cx('goal-card', goal.complete && 'is-complete')}>
-                  <header className="goal-head">
-                    <GoalRing
-                      percent={percent}
-                      color={goal.color || 'var(--accent)'}
-                      label={`${goal.title} ${Math.round(percent)}%`}
-                    />
-                    <div className="goal-identity">
-                      <h3>{goal.title}</h3>
-                      <span className="goal-amounts">
-                        {t('goals.saved', {
-                          saved: money(goal.savedAmount),
-                          target: money(goal.targetAmount),
-                        })}
-                      </span>
-                    </div>
-                  </header>
-
-                  {goal.note && <p className="goal-note">{goal.note}</p>}
-
-                  <div className="goal-meta">
-                    {goal.complete ? (
-                      <span className="goal-chip goal-chip--done">{t('goals.complete')}</span>
-                    ) : (
-                      <span className="goal-chip">
-                        {t('goals.remaining', { amount: money(goal.remaining) })}
-                      </span>
-                    )}
-
-                    {goal.deadline ? (
-                      <span className={cx('goal-chip', pace.overdue && 'goal-chip--late')}>
-                        {pace.overdue
-                          ? t('goals.overdue')
-                          : t('goals.deadline', { date: formatDate(goal.deadline, locale) })}
-                      </span>
-                    ) : (
-                      <span className="goal-chip goal-chip--quiet">{t('goals.noDeadline')}</span>
-                    )}
-
-                    {/* Only worth saying while there is still something to save
-                        and a date to hit it by. */}
-                    {!goal.complete && !pace.open && pace.perMonth > 0 && (
-                      <span className="goal-chip goal-chip--quiet">
-                        {pace.overdue
-                          ? t('goals.perMonthPast')
-                          : t('goals.perMonth', { amount: money(pace.perMonth) })}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="goal-actions">
-                    <Button size="sm" variant="primary" onClick={() => openFund(goal, 'add')}>
-                      <Icon icon={Plus} size="sm" />
-                      {t('goals.fund')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={goal.savedAmount <= 0}
-                      onClick={() => openFund(goal, 'withdraw')}
-                    >
-                      <Icon icon={Minus} size="sm" />
-                      {t('goals.withdraw')}
-                    </Button>
-                    <div className="spacer" />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing(goal);
-                        setFormOpen(true);
-                      }}
-                    >
-                      {t('common.edit')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={t('common.delete')}
-                      onClick={() => void remove(goal)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                </article>
-              );
-            })}
+            {goals.items.map((goal) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                onFund={() => openFund(goal, 'add')}
+                onWithdraw={() => openFund(goal, 'withdraw')}
+                onBuy={() => openBuy(goal)}
+                onEdit={() => {
+                  setEditing(goal);
+                  setFormOpen(true);
+                }}
+                onDelete={() => void remove(goal)}
+              />
+            ))}
           </div>
         )}
       </Card>
+
+      <GoalPurchaseModal
+        goal={buying}
+        wallets={payableFrom}
+        walletId={payWalletId}
+        onWalletId={setPayWalletId}
+        date={payDate}
+        onDate={setPayDate}
+        busy={buyBusy}
+        error={buyError}
+        onClose={() => setBuying(null)}
+        onConfirm={() => void confirmBuy()}
+      />
 
       <GoalForm
         open={formOpen}

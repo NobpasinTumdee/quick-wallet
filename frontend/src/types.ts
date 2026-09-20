@@ -258,6 +258,15 @@ export interface WatchlistItem {
  * Funding one writes no Transaction and moves no balance; it only records how
  * much of your cash is spoken for. Mirrors the `Goals` sheet in Code.gs.
  */
+/**
+ * `active` until the thing is actually bought.
+ *
+ * Only `goals.purchase` writes `purchased`, and only alongside the expense that
+ * pays for it — a status set on its own would claim money left a wallet when
+ * none did.
+ */
+export type GoalStatus = 'active' | 'purchased';
+
 export interface Goal {
   id: string;
   userId: string;
@@ -270,11 +279,28 @@ export interface Goal {
   color: string;
   note: string;
   createdAt: string;
+  /** Normalised server-side: a blank cell on an older row reads as `active`. */
+  status: GoalStatus;
+  /** The expense written when the goal was bought, or empty. */
+  purchaseTxId: string;
+  /** `YYYY-MM-DD` the purchase was booked on, or empty. */
+  purchasedAt: string;
   /* computed server-side */
   remaining: number;
   /** Uncapped: over-funding is real, and the bar caps it, not the number. */
   percentComplete: number;
   complete: boolean;
+  /** `status === 'purchased'`, decided once on the server. */
+  purchased: boolean;
+}
+
+/** What `goals.purchase` answers with: both halves of the one write. */
+export interface GoalPurchaseResult {
+  ok: boolean;
+  goal: Goal;
+  transaction: Transaction;
+  /** The part of the price the envelope had not saved up, paid anyway. */
+  shortfall: number;
 }
 
 /**

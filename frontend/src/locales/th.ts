@@ -963,6 +963,27 @@ export const th: TranslationSchema = {
     fundedToast: 'กันเงิน {{amount}} ไว้สำหรับ {{title}} แล้ว',
     withdrewToast: 'ปลดการจองเงิน {{amount}} จาก {{title}} แล้ว',
 
+    /* ---- ซื้อของตามเป้าหมาย ---- */
+    buyNow: 'ครบแล้ว ซื้อเลย',
+    purchaseTitle: 'ซื้อ {{title}}',
+    purchasePrice: 'ราคา',
+    purchaseFrom: 'จะจ่ายจากกระเป๋าไหน',
+    purchaseFromHint: 'เงินจะออกจากกระเป๋านี้และบันทึกเป็นรายจ่าย',
+    purchaseDate: 'วันที่ซื้อ',
+    purchaseConfirm: 'จ่าย {{amount}}',
+    purchaseAfter: 'หลังจ่ายแล้ว {{wallet}} จะเหลือ {{amount}}',
+    purchaseShortfall: 'จำนวน {{amount}} เกินกว่าที่เก็บไว้ในเป้าหมาย ส่วนนี้จะหักจากกระเป๋าด้วย',
+    purchaseOverdraw: 'มากกว่าเงินใน {{wallet}} ({{balance}})',
+    purchaseEffect: 'รายการนี้จะบันทึกเป็นรายจ่ายจริงและปิดเป้าหมาย แก้ไขเป้าหมายย้อนกลับไม่ได้ ต้องลบรายการรายจ่ายแทน',
+    purchaseNoWallet: 'เพิ่มกระเป๋าสำหรับใช้จ่ายก่อน เพราะการซื้อต้องหักจากกระเป๋า',
+    purchaseDone: 'ซื้อ {{title}} แล้วในราคา {{amount}}',
+
+    /* ---- ซื้อแล้ว ---- */
+    purchased: 'ซื้อแล้ว',
+    purchasedOn: 'ซื้อเมื่อ {{date}}',
+    purchasedHint: 'ซื้อและจ่ายเรียบร้อยแล้ว',
+    paidAmount: 'จ่ายแล้ว {{amount}}',
+
     newGoal: 'เป้าหมายใหม่',
     editGoal: 'แก้ไข {{title}}',
     fieldTitle: 'กำลังเก็บเงินเพื่ออะไร',

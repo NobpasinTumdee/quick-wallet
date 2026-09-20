@@ -964,6 +964,29 @@ export const en = {
     fundedToast: '{{amount}} set aside for {{title}}',
     withdrewToast: '{{amount}} released from {{title}}',
 
+    /* ---- Buying the thing ----
+       The one goals flow that spends real money: it writes an expense against
+       a wallet and closes the goal, in one call. */
+    buyNow: 'Complete & Buy',
+    purchaseTitle: 'Buy {{title}}',
+    purchasePrice: 'Price',
+    purchaseFrom: 'Which wallet will you use to pay for this?',
+    purchaseFromHint: 'The money leaves this wallet and appears as an expense.',
+    purchaseDate: 'Purchase date',
+    purchaseConfirm: 'Pay {{amount}}',
+    purchaseAfter: '{{wallet}} will hold {{amount}} afterwards',
+    purchaseShortfall: '{{amount}} of this is more than the goal saved up — it comes out of the wallet too.',
+    purchaseOverdraw: 'This is more than {{wallet}} holds ({{balance}}).',
+    purchaseEffect: 'This records a real expense and closes the goal. It cannot be undone by editing the goal — delete the expense instead.',
+    purchaseNoWallet: 'Add a spending wallet first — a purchase has to come out of one.',
+    purchaseDone: '{{title}} bought for {{amount}}',
+
+    /* ---- Bought ---- */
+    purchased: 'Purchased',
+    purchasedOn: 'Purchased {{date}}',
+    purchasedHint: 'Bought and paid for.',
+    paidAmount: 'Paid {{amount}}',
+
     /* The form. */
     newGoal: 'New goal',
     editGoal: 'Edit {{title}}',

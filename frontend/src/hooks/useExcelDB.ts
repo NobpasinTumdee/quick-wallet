@@ -94,11 +94,21 @@ const RESOURCES: Record<string, ResourceConfig> = {
     sort: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
   },
   goals: {
-    /* A goal owns no Transactions and changes no balance, so nothing downstream
-       of it needs refreshing — the wallets and the dashboard are untouched by
-       funding one. That is the whole design, restated as a cache rule. */
+    /* Funding a goal owns no Transactions and changes no balance, so nothing
+       downstream of it needs refreshing — the wallets and the dashboard are
+       untouched by it. That is the whole design, restated as a cache rule.
+
+       Buying one is the exception, and it is deliberately not widened here:
+       `useGoals.purchase` patches the wallet, the goal and the ledger by hand
+       and refetches budgets and the dashboard itself. Listing those prefixes
+       here instead would make every *funding* — the common case, several taps
+       a day — refetch five payloads it cannot have changed. */
     invalidates: ['/api/goals'],
     sort: (a, b) =>
+      /* Bought goals sink to the bottom, matching goalsList_ — otherwise a
+         purchase would visibly jump the card up the grid before the refetch
+         put it back. */
+      Number(Boolean(a.purchased)) - Number(Boolean(b.purchased)) ||
       Number(Boolean(a.complete)) - Number(Boolean(b.complete)) ||
       String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')) ||
       String(a.title ?? '').localeCompare(String(b.title ?? '')),
