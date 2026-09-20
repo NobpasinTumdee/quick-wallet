@@ -1456,6 +1456,42 @@ export const en = {
     keyboardHint: 'Use the left and right arrow keys to step through the chart, Home and End to jump, Escape to clear.',
   },
 
+  /* ---- The financial inbox ----
+     Micro-IOUs and reminders. The wording stays casual on purpose: this is the
+     one place in the app where writing something down has to feel like sending
+     yourself a message, not filing a record. */
+  inbox: {
+    title: 'Inbox',
+    placeholder: 'Mai owes me 300 for lunch…',
+    newItem: 'New inbox item',
+    add: 'Add to inbox',
+    moreOptions: 'Amount, date and type',
+    type: 'Type',
+    typeNote: 'Just a note',
+    typeToPay: 'I owe',
+    typeToReceive: 'Owed to me',
+    amount: 'Amount',
+    dueDate: 'Due date',
+
+    empty: 'Nothing waiting. Jot down an IOU or a reminder above.',
+    allClear: 'All clear',
+    pendingCount_one: '{{count}} open',
+    pendingCount_other: '{{count}} open',
+    owedSummary: 'you owe {{amount}}',
+    owedToYouSummary: 'owed to you {{amount}}',
+    overdue: 'Overdue · {{date}}',
+    resolveItem: 'Resolve “{{text}}”',
+    deleteItem: 'Delete “{{text}}”',
+
+    /* The one question resolving asks. */
+    convertTitle: 'Record this transaction now?',
+    convertPayHint: 'Yes records an expense for this amount. The form opens so you can pick the wallet and category.',
+    convertReceiveHint: 'Yes records income for this amount. The form opens so you can pick the wallet and category.',
+    convertNoHint: 'No just ticks it off — nothing is added to your ledger.',
+    convertYes: 'Yes, record it',
+    convertNo: 'No, just tick it off',
+  },
+
   liability: {
     title: 'Upcoming bills',
     subtitle: 'What is already promised, and when it lands',

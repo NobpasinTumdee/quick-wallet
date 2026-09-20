@@ -294,6 +294,45 @@ export interface Goal {
   purchased: boolean;
 }
 
+/* ------------------------------------------------------------------ */
+/* The financial inbox                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Which way a resolved item would move money, if it moves any.
+ *
+ * `note` is the default and the majority: a reminder with no figure on it.
+ * The other two decide whether a converted Transaction is an expense or
+ * income, and nothing else.
+ */
+export type InboxType = 'to-pay' | 'to-receive' | 'note';
+
+export type InboxStatus = 'pending' | 'resolved';
+
+/**
+ * One line in the inbox. Deliberately not a Transaction, a Debt or a
+ * Subscription — see the `Inbox` schema note in Code.gs.
+ */
+export interface InboxItem {
+  id: string;
+  userId: string;
+  text: string;
+  /** 0 when the item is just a reminder. */
+  amount: number;
+  /** `YYYY-MM-DD`, or empty. */
+  dueDate: string;
+  type: InboxType;
+  /** Normalised server-side: a blank cell reads as `pending`. */
+  status: InboxStatus;
+  createdAt: string;
+  /** ISO timestamp, or empty while pending. */
+  resolvedAt: string;
+  /** The Transaction this became, when the user chose to record one. */
+  transactionId: string;
+  /** `amount > 0 && type !== 'note'` — decided once, on the server. */
+  convertible: boolean;
+}
+
 /** What `goals.purchase` answers with: both halves of the one write. */
 export interface GoalPurchaseResult {
   ok: boolean;

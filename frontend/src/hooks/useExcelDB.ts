@@ -113,6 +113,18 @@ const RESOURCES: Record<string, ResourceConfig> = {
       String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')) ||
       String(a.title ?? '').localeCompare(String(b.title ?? '')),
   },
+  inbox: {
+    /* Nothing downstream: an inbox item is a note, and no balance, budget or
+       total reads it. Converting one writes a Transaction through the
+       transactions resource, whose own rule already invalidates the ledger. */
+    invalidates: ['/api/inbox'],
+    /* Mirrors inboxList_: open items first, then the soonest due, undated
+       last, newest first within a day. */
+    sort: (a, b) =>
+      Number(a.status === 'resolved') - Number(b.status === 'resolved') ||
+      String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')) ||
+      String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
+  },
   debts: {
     /* The opposite of `goals` above: paying a debt writes a real
        expense against a real wallet, so the ledger, balances, budget progress

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '../components/Icon';
 import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
+import { FinancialInboxWidget } from '../components/FinancialInboxWidget';
 import { BalanceView, SwipeableBalanceCard } from '../components/SwipeableBalanceCard';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
@@ -154,10 +155,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
   const contexts = showingHistorical
     ? historicalContexts(heroValue, data.historical?.liquidBalance ?? 0)
     : balanceContexts({
-        netWorth: netWorthLive,
-        liquidBalance: data.liquidBalance,
-        goals: goals.items,
-      });
+      netWorth: netWorthLive,
+      liquidBalance: data.liquidBalance,
+      goals: goals.items,
+    });
 
   const CONTEXT_ICON: Record<BalanceContextId, typeof Globe> = {
     total: Globe,
@@ -582,6 +583,10 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
             </div>
           )}
         </Card>
+
+        {/* Directly under the balance: the inbox is the other half of "where do
+          I stand" — what the balances do not know about yet. */}
+        <FinancialInboxWidget wallets={data.wallets} />
 
         {/* ---- Gateway to /analytics ----
             Full width and last, so it reads as "there is more, through here"

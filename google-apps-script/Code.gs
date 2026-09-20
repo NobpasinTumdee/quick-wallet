@@ -347,6 +347,57 @@ var SHEETS = {
       { key: 'createdAt', header: 'Created At', type: 'date' }
     ]
   },
+  /**
+   * The financial inbox — the things you have not decided about yet.
+   *
+   * -----------------------------------------------------------------------
+   * WHY THIS IS NOT A TRANSACTION, A DEBT OR A SUBSCRIPTION
+   * -----------------------------------------------------------------------
+   * "Mai owes me 300 for lunch." That is not a Transaction — no money has
+   * moved — and making one would corrupt the month's spending. It is not a
+   * Debt either: that table is for borrowed money with a balance, an APR and a
+   * repayment schedule, and modelling a lunch as one would mean filling in
+   * four fields nobody has. It is a *note with a number on it*, and the only
+   * thing it eventually turns into is either a real Transaction or nothing.
+   *
+   * So the table is deliberately thin: a line of text, an optional amount, an
+   * optional date, and whether it is still open. Writing it down has to be
+   * cheaper than deciding where it belongs, or it will not get written down.
+   *
+   * -----------------------------------------------------------------------
+   * THE ONE RULE
+   * -----------------------------------------------------------------------
+   * Nothing in this table is money. No balance reads it, no budget counts it,
+   * no net-worth figure is affected by it. An item leaves by being resolved,
+   * and if resolving it also recorded a payment, `transactionId` says which —
+   * the same traceability `purchaseTxId` gives a bought goal. That link is the
+   * only connection between this sheet and the ledger, and it points one way.
+   */
+  Inbox: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      /* Same reason as every other table: `userRows_` scopes on it. */
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'text', header: 'Text', type: 'string' },
+      /* Optional. 0 means "no amount" — a reminder with no figure attached is
+         the common case, and it is the reason the resolve flow asks about a
+         transaction only sometimes. */
+      { key: 'amount', header: 'Amount', type: 'number' },
+      /* Optional `datekey` — the same Sheets-parses-it-into-a-Date trap the
+         deadline and purchasedAt columns document. */
+      { key: 'dueDate', header: 'Due Date', type: 'datekey' },
+      /* 'to-pay' | 'to-receive' | 'note'. Decides which way a converted
+         transaction points, and nothing else. */
+      { key: 'type', header: 'Type', type: 'string' },
+      /* 'pending' | 'resolved'. Blank reads as pending — see `inboxStatus_`. */
+      { key: 'status', header: 'Status', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      { key: 'resolvedAt', header: 'Resolved At', type: 'date' },
+      /* The Transaction this item became, when the user chose to record one. */
+      { key: 'transactionId', header: 'Transaction ID', type: 'string' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -571,6 +622,20 @@ function dispatch_(action, method, query, body, token) {
     'watchlist.create': function () { return watchlistCreate_(requireAuth_(token), body); },
     'watchlist.update': function () { return watchlistUpdate_(requireAuth_(token), query, body); },
     'watchlist.delete': function () { return watchlistDelete_(requireAuth_(token), query); },
+
+    /* The financial inbox. Nothing here moves money — resolving an item only
+       closes it and records which Transaction (if any) the client wrote
+       through the ordinary endpoint. `inbox.add` is an alias for `create`, so
+       the name in the feature spec works from a script or curl while the REST
+       client keeps resolving `POST /api/inbox` the way it does every other
+       collection. */
+    'inbox.list': function () { return inboxList_(requireAuth_(token), query); },
+    'inbox.create': function () { return inboxCreate_(requireAuth_(token), body); },
+    'inbox.add': function () { return inboxCreate_(requireAuth_(token), body); },
+    'inbox.update': function () { return inboxUpdate_(requireAuth_(token), query, body); },
+    'inbox.resolve': function () { return inboxResolve_(requireAuth_(token), query, body); },
+    'inbox.reopen': function () { return inboxReopen_(requireAuth_(token), query); },
+    'inbox.delete': function () { return inboxDelete_(requireAuth_(token), query); },
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
@@ -3215,6 +3280,222 @@ function watchlistDelete_(user, query) {
     throw apiError_('Watchlist entry not found', 404, 'NOT_FOUND');
   }
   deleteRow_('Watchlist', id);
+  return { ok: true, id: id };
+}
+
+/* =========================================================================
+ * Financial inbox
+ * -------------------------------------------------------------------------
+ * Micro-IOUs, informal debts and short reminders — the things people
+ * currently keep in a chat message to themselves.
+ *
+ * Every handler here is deliberately dull. The feature's value is entirely in
+ * how cheap capture is, so the write path is one required field and the read
+ * path is a filter and a sort. Nothing here computes money; see the schema
+ * note above the table.
+ * ========================================================================= */
+
+/** The three things an item can be. Anything else is refused at the door. */
+var INBOX_TYPES = ['to-pay', 'to-receive', 'note'];
+
+/** A one-line note. Long enough for a sentence, short enough to stay a note. */
+var INBOX_MAX_TEXT = 200;
+
+/**
+ * The stored status, defaulted.
+ *
+ * Blank means pending, the same convention `goalStatus_` uses and for the same
+ * reason: a row added by hand in the Sheet, or written before a column
+ * existed, must fail towards the state that still lets the user act on it.
+ */
+function inboxStatus_(item) {
+  return String((item && item.status) || '').trim().toLowerCase() === 'resolved'
+    ? 'resolved'
+    : 'pending';
+}
+
+function inboxType_(value) {
+  var type = String(value || '').trim().toLowerCase();
+  return INBOX_TYPES.indexOf(type) === -1 ? 'note' : type;
+}
+
+/**
+ * What the client is allowed to set.
+ *
+ * `status`, `resolvedAt` and `transactionId` are absent on purpose: they are
+ * written by `inbox.resolve` and by nothing else, so a patch cannot close an
+ * item and invent a transaction id that points nowhere.
+ */
+function parseInbox_(body) {
+  var text = str_(body.text, 'text', { max: INBOX_MAX_TEXT });
+  if (!text) throw bad_('"text" is required', 'EMPTY_TEXT');
+
+  return {
+    text: text,
+    /* Optional, and floored at zero rather than refused: an item with no
+       figure is the common case, and a negative one would only ever be a typo
+       for the direction that `type` already carries. */
+    amount: money_(Math.max(0, num_(body.amount, 'amount', { min: 0, fallback: 0 }))),
+    dueDate: body.dueDate ? isoDate_(body.dueDate, 'dueDate') : '',
+    type: inboxType_(body.type)
+  };
+}
+
+function decorateInbox_(item) {
+  var amount = Number(item.amount) || 0;
+  var type = inboxType_(item.type);
+
+  return {
+    id: item.id, userId: item.userId,
+    text: item.text,
+    amount: amount,
+    dueDate: item.dueDate || '',
+    type: type,
+    status: inboxStatus_(item),
+    createdAt: item.createdAt,
+    resolvedAt: item.resolvedAt || '',
+    transactionId: item.transactionId || '',
+    /* Computed here so the client never has to decide what "can be recorded"
+       means: an amount, and a direction to record it in. */
+    convertible: amount > 0 && type !== 'note'
+  };
+}
+
+function inboxList_(user, query) {
+  var rows = userRows_('Inbox', user.id).map(function (row) {
+    var copy = {};
+    for (var k in row) if (k !== '_row') copy[k] = row[k];
+    return decorateInbox_(copy);
+  });
+
+  /* `?status=pending` for the dashboard widget, which never shows the rest.
+     Filtered here rather than client-side so a long history of resolved items
+     does not travel down the wire to be thrown away. */
+  if (query && query.status) {
+    var wanted = String(query.status).toLowerCase();
+    rows = rows.filter(function (row) { return row.status === wanted; });
+  }
+
+  return rows.sort(function (a, b) {
+    /* Open items first; within them, the ones with a date, soonest first. An
+       item with no date is not urgent, it is just unfinished, so it sorts
+       after every dated one rather than winning on an empty string. */
+    if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+    var da = a.dueDate || '9999-12-31';
+    var db = b.dueDate || '9999-12-31';
+    return da.localeCompare(db) || String(b.createdAt).localeCompare(String(a.createdAt));
+  });
+}
+
+function inboxCreate_(user, body) {
+  var parsed = parseInbox_(body);
+
+  var item = {
+    id: uuid_(), userId: user.id,
+    text: parsed.text, amount: parsed.amount, dueDate: parsed.dueDate, type: parsed.type,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    resolvedAt: '',
+    transactionId: ''
+  };
+
+  insertRow_('Inbox', item);
+  return decorateInbox_(item);
+}
+
+function inboxUpdate_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Inbox', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Inbox item not found', 404, 'NOT_FOUND');
+  }
+
+  var merged = {};
+  for (var k in existing) if (k !== '_row') merged[k] = existing[k];
+  for (var j in body) merged[j] = body[j];
+
+  var updated = updateRow_('Inbox', id, parseInbox_(merged));
+  delete updated._row;
+  return decorateInbox_(updated);
+}
+
+/**
+ * Close an item.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THIS DOES NOT WRITE THE TRANSACTION ITSELF
+ * -------------------------------------------------------------------------
+ * The obvious design has this handler take a walletId and post the expense,
+ * the way `goals.purchase` and `debts.pay` do. It would be wrong here.
+ *
+ * Those two know exactly what they are writing: an amount already on the row,
+ * against a goal or debt that defines the category. An inbox item knows a
+ * number and a sentence. Which wallet, which category, which date, whether it
+ * was even the full amount — all of that is still a decision, and it is the
+ * decision the transaction form already exists to take. So the client creates
+ * the Transaction through the normal endpoint, with the normal validation, and
+ * then tells this handler which row it produced.
+ *
+ * `transactionId` is therefore accepted rather than generated. It is a
+ * reference for the user's own benefit, not an integrity constraint: the
+ * Transaction is real whether or not this second write lands, and an item
+ * resolved without a link is simply one somebody ticked off.
+ *
+ * Resolving twice is not an error. The second call is the same request
+ * arriving again after a flaky connection, and failing it would show the user
+ * an error about an item that is already closed.
+ */
+function inboxResolve_(user, query, body) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Inbox', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Inbox item not found', 404, 'NOT_FOUND');
+  }
+
+  if (inboxStatus_(existing) === 'resolved') {
+    var already = {};
+    for (var k in existing) if (k !== '_row') already[k] = existing[k];
+    return decorateInbox_(already);
+  }
+
+  var updated = updateRow_('Inbox', id, {
+    status: 'resolved',
+    resolvedAt: new Date().toISOString(),
+    transactionId: body && body.transactionId
+      ? str_(body.transactionId, 'transactionId', { max: 80 })
+      : ''
+  });
+  delete updated._row;
+  return decorateInbox_(updated);
+}
+
+/** Back to pending — an undo for a mis-tapped checkbox. */
+function inboxReopen_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Inbox', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Inbox item not found', 404, 'NOT_FOUND');
+  }
+
+  /* The transaction link is cleared along with the status. Reopening says
+     "this is not done after all", and a pending item pointing at an expense
+     that was already written would be a claim nobody can act on. The
+     Transaction itself stays: it happened, and removing it is its own
+     decision, taken on the Activity screen. */
+  var updated = updateRow_('Inbox', id, { status: 'pending', resolvedAt: '', transactionId: '' });
+  delete updated._row;
+  return decorateInbox_(updated);
+}
+
+function inboxDelete_(user, query) {
+  var id = str_(query.id, 'id');
+  var existing = findById_('Inbox', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Inbox item not found', 404, 'NOT_FOUND');
+  }
+  /* Nothing to cascade: an inbox item owns no money. A Transaction it points
+     at is an ordinary row and stays exactly where it is. */
+  deleteRow_('Inbox', id);
   return { ok: true, id: id };
 }
 

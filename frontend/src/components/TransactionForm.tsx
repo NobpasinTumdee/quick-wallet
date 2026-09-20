@@ -34,16 +34,20 @@ export interface TransactionPayload {
 /** `amount` stays a raw string while typing; see DecimalInput. */
 type FormState = Omit<TransactionPayload, 'amount'> & { amount: string };
 
-function initialState(wallets: WalletBalance[], transaction?: Transaction): FormState {
+function initialState(
+  wallets: WalletBalance[],
+  transaction?: Transaction,
+  prefill?: Partial<TransactionPayload>,
+): FormState {
   const firstSpendable = wallets.find((w) => w.mode === 'expense' && !w.archived);
   return {
-    walletId: transaction?.walletId ?? firstSpendable?.id ?? wallets[0]?.id ?? '',
-    toWalletId: transaction?.toWalletId ?? '',
-    type: transaction?.type ?? 'expense',
-    amount: decimalToInput(transaction?.amount),
-    category: transaction?.category ?? '',
-    note: transaction?.note ?? '',
-    date: transaction?.date || todayKey(),
+    walletId: transaction?.walletId ?? prefill?.walletId ?? firstSpendable?.id ?? wallets[0]?.id ?? '',
+    toWalletId: transaction?.toWalletId ?? prefill?.toWalletId ?? '',
+    type: transaction?.type ?? prefill?.type ?? 'expense',
+    amount: decimalToInput(transaction?.amount ?? prefill?.amount),
+    category: transaction?.category ?? prefill?.category ?? '',
+    note: transaction?.note ?? prefill?.note ?? '',
+    date: transaction?.date || prefill?.date || todayKey(),
   };
 }
 
@@ -52,6 +56,7 @@ export function TransactionForm({
   open,
   wallets,
   transaction,
+  prefill,
   busy,
   error,
   onClose,
@@ -60,6 +65,13 @@ export function TransactionForm({
   open: boolean;
   wallets: WalletBalance[];
   transaction?: Transaction;
+  /**
+   * Seeds a *new* entry — what the inbox hands over when an item is converted.
+   * Unlike `transaction` it does not put the form into edit mode: the heading
+   * still says "New transaction", because that is what is about to happen.
+   * Fields it omits keep their usual defaults, and every one stays editable.
+   */
+  prefill?: Partial<TransactionPayload>;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -68,7 +80,7 @@ export function TransactionForm({
   const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
-  const [form, setForm] = useState<FormState>(() => initialState(wallets, transaction));
+  const [form, setForm] = useState<FormState>(() => initialState(wallets, transaction, prefill));
   /**
    * Applies whatever the scan could read.
    *
@@ -96,13 +108,17 @@ export function TransactionForm({
   const walletsRef = useRef(wallets);
   walletsRef.current = wallets;
 
+  /* Reseeded on open, and on a different prefill — converting one inbox item
+     and then another without unmounting in between has to refill the fields
+     rather than show the first one's amount. */
+  const prefillKey = prefill ? JSON.stringify(prefill) : '';
   useEffect(() => {
     if (open) {
-      setForm(initialState(walletsRef.current, transaction));
+      setForm(initialState(walletsRef.current, transaction, prefill));
       setLocalError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, transaction?.id]);
+  }, [open, transaction?.id, prefillKey]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
