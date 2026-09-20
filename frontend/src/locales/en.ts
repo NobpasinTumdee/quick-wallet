@@ -863,8 +863,6 @@ export const en = {
     monthlyIncome: 'Monthly income',
     monthlyIncomeHint:
       'Base for percentage budgets. Leave blank to use the income you actually record each month.',
-    categories: 'Categories',
-    categoriesHint: 'Comma separated. Used by transactions and budgets.',
     savePreferences: 'Save preferences',
 
     conversionTitle: 'Display in another currency',
@@ -1490,6 +1488,29 @@ export const en = {
     convertNoHint: 'No just ticks it off — nothing is added to your ledger.',
     convertYes: 'Yes, record it',
     convertNo: 'No, just tick it off',
+  },
+
+  /* ---- The category manager ----
+     Chips, not a comma-separated line. The errors have to say what to do about
+     it, not just that something is wrong. */
+  categories: {
+    title: 'Categories',
+    subtitle: 'The labels every transaction, budget and report is grouped by',
+    add: 'Add category',
+    newField: 'New category name',
+    newPlaceholder: 'Groceries',
+    renameField: 'Rename {{name}}',
+    rename: 'Rename {{name}}',
+    remove: 'Delete {{name}}',
+    hint_one: '{{count}} category. Renaming one here does not relabel entries already filed under it.',
+    hint_other: '{{count}} categories. Renaming one here does not relabel entries already filed under it.',
+    atLimit: 'You have reached the limit of {{max}} categories.',
+
+    errorEmpty: 'Give the category a name.',
+    errorDuplicate: 'That category already exists.',
+    errorTooLong: 'Keep it under {{max}} characters.',
+    errorTooMany: 'You can have at most {{max}} categories.',
+    errorLast: 'Keep at least one category — every transaction needs somewhere to go.',
   },
 
   liability: {

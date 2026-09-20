@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
+import { CategorySettings } from '../components/CategorySettings';
 import { MobileNavSettings } from '../components/MobileNavSettings';
 import { PaydaySettings } from '../components/PaydaySettings';
 import { ThemeSettings } from '../components/ThemeSettings';
@@ -37,7 +38,6 @@ export function SettingsPage() {
   const [currency, setCurrency] = useState(settings.currency);
   const [locale, setLocale] = useState(settings.locale);
   const [monthlyIncome, setMonthlyIncome] = useState(decimalToInput(settings.monthlyIncome));
-  const [categoryText, setCategoryText] = useState(settings.categories.join(', '));
   const [saved, setSaved] = useState(false);
 
   const [displayCurrency, setDisplayCurrency] = useState(settings.displayCurrency);
@@ -76,7 +76,6 @@ export function SettingsPage() {
     setCurrency(settings.currency);
     setLocale(settings.locale);
     setMonthlyIncome(decimalToInput(settings.monthlyIncome));
-    setCategoryText(settings.categories.join(', '));
     setDisplayCurrency(settings.displayCurrency);
     setFxRate(decimalToInput(settings.fxRate));
   }, [settings]);
@@ -88,7 +87,10 @@ export function SettingsPage() {
       currency: currency.toUpperCase(),
       locale,
       monthlyIncome: parseDecimal(monthlyIncome),
-      categories: categoryText.split(',').map((c) => c.trim()).filter(Boolean),
+      /* Categories are no longer part of this form: the chip editor saves each
+         change as it is made, the same way the mobile-nav and payday editors
+         do. Sending them from here as well would let a stale copy of the list,
+         loaded before an edit, overwrite that edit. */
     });
     setSaved(true);
   }
@@ -182,10 +184,6 @@ export function SettingsPage() {
             hint={t('settings.monthlyIncomeHint')}
           >
             <DecimalInput value={monthlyIncome} onChange={setMonthlyIncome} placeholder="0.00" />
-          </Field>
-
-          <Field label={t('settings.categories')} className="span-2" hint={t('settings.categoriesHint')}>
-            <Input value={categoryText} onChange={(e) => setCategoryText(e.target.value)} />
           </Field>
 
           <div className="span-2 form-actions">
@@ -352,6 +350,17 @@ export function SettingsPage() {
           <p className="text-muted">{t('settings.checkingBackend')}</p>
         )}
       </Card>
+
+      <CategorySettings
+        value={settings.categories}
+        onChange={(next) => {
+          setNavBusy(true);
+          void save({ categories: next })
+            .catch(() => undefined)
+            .finally(() => setNavBusy(false));
+        }}
+        busy={navBusy}
+      />
 
       <MobileNavSettings
         value={resolveMobileNav(settings.mobileNavConfig)}
