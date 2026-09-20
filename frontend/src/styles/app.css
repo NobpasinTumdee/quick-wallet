@@ -2675,6 +2675,194 @@ tr:hover .row-actions,
   padding: 6px 8px;
 }
 
+/* ==========================================================================
+   The balance carousel
+   --------------------------------------------------------------------------
+   The glass card does not move. Only this strip inside it scrolls, one panel
+   at a time, with the snap points doing the positioning — there is no
+   transform, no transition and no JavaScript in the movement itself.
+   ========================================================================== */
+
+.balance-carousel {
+  display: flex;
+  flex-direction: column;
+  /* Vertical only — this gap separates the label, the track and the dots. The
+     track itself must never have one: a gap between slides is added to the
+     scroll distance but not to the slide width, so `100%` stops meaning "one
+     viewport" and every panel lands a little further off than the last. */
+  gap: var(--space-2);
+  min-width: 0;
+  /* The backstop. `clip` rather than `hidden` so the box does not become a
+     scroll container of its own — and so vertical overflow (focus rings on the
+     dots, the descenders on the figure) still shows. */
+  overflow-x: clip;
+}
+
+.balance-track {
+  display: flex;
+  /* The whole mechanism, in four declarations. */
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  /* Keeps a flick at either end from chaining into the page — or, on iOS, into
+     the browser's back gesture. */
+  overscroll-behavior-x: contain;
+  /* No padding, no margin, no gap, deliberately.
+
+     A percentage flex-basis resolves against the *content box*, so 8px of
+     horizontal padding here made every slide 8px narrower than the viewport it
+     is supposed to fill — which is precisely 8px of the next slide left
+     peeking at the right edge. It also skewed the dot maths, since `clientWidth`
+     includes that padding while the slide width does not. The focus ring this
+     padding was once making room for is drawn inside the track instead. */
+
+  /* Hidden, not styled: the dots are the position indicator, and a scrollbar
+     under the headline figure would read as a second one disagreeing. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.balance-track::-webkit-scrollbar {
+  display: none;
+}
+
+.balance-track:focus-visible {
+  outline: 2px solid var(--accent);
+  /* Inside the box: the wrapper clips horizontally now, and an outline drawn
+     beyond the edge would have its left and right sides cut off. */
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Exactly one container wide, which is what makes `scrollLeft / clientWidth`
+   the panel index the dots read back. */
+.balance-panel {
+  /* Exactly one viewport: grow 0, shrink 0, basis 100%. The shrink is the
+     load-bearing part — flex items default to `flex-shrink: 1`, so without it
+     three 100% slides in one row would each be squeezed to a third of the
+     width and nothing would scroll at all. Spelled out below as well, so a
+     later edit to the shorthand cannot quietly drop it. */
+  flex: 0 0 100%;
+  flex-shrink: 0;
+  min-width: 100%;
+  max-width: 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* A flex child's automatic minimum size is its content, so a long label or
+     a very large figure would push the panel wider than the viewport and bleed
+     into the next one — the same sliver by a different route. */
+  min-width: 0;
+}
+
+.balance-context,
+.balance-note {
+  overflow-wrap: anywhere;
+}
+
+.balance-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.balance-note {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* Holds the line height of the figure it stands in for, so the card does not
+   resize when the goals arrive. */
+.balance-value-pending {
+  width: min(58%, 220px);
+  height: calc(var(--text-2xl) * 1.02);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: balance-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes balance-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* ---- Dots ---- */
+
+.balance-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A 24px hit target around a 6px dot: the visible dot is deliberately small,
+   and a tap target that size would fail every guideline going. */
+.balance-dot {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-inline-start: -6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.balance-dot:first-child {
+  margin-inline-start: 0;
+}
+
+.balance-dot > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--text-faint);
+  opacity: 0.45;
+  transition:
+    width var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out);
+}
+
+/* The active dot stretches rather than only brightening, so it is still the
+   obvious one in greyscale and for anyone who cannot separate the two tones. */
+.balance-dot.is-active > span {
+  width: 18px;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.balance-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balance-track {
+    scroll-behavior: auto;
+  }
+
+  .balance-value-pending {
+    animation: none;
+  }
+
+  .balance-dot > span {
+    transition: none;
+  }
+}
+
 .stat-label svg {
   opacity: 0.75;
 }

@@ -2,9 +2,11 @@ import {
   ArrowRight,
   Calculator,
   ChartNoAxesCombined,
+  Globe,
   History,
   Receipt,
   Target,
+  Unlock,
   Wallet,
 } from 'lucide-react';
 import { Suspense, lazy, useMemo, useState } from 'react';
@@ -13,15 +15,17 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '../components/Icon';
 import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
+import { BalanceView, SwipeableBalanceCard } from '../components/SwipeableBalanceCard';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useStockQuotes } from '../hooks/useStockQuotes';
+import { BalanceContextId, balanceContexts, historicalContexts } from '../lib/balanceContexts';
 import { periodRange } from '../lib/cashflow';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
 import { positionKeyOf } from '../lib/positions';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Investment, Transaction, WalletBalance } from '../types';
+import { DashboardSummary, Goal, Investment, Transaction, WalletBalance } from '../types';
 
 
 const IncomeSpendingChart = lazy(() =>
@@ -64,6 +68,11 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
     // than this loses its oldest months — the ones already off the left edge.
     limit: 5000,
   });
+
+  /* The goal envelopes, for the third balance reading. Cached under the same
+     key the Goals screen uses, so arriving there costs no second request — and
+     `useExcelDB` paints from that cache when it is already warm. */
+  const goals = useExcelDB<Goal>('goals');
 
   const positions = (data?.openPositions ?? []) as Investment[];
   const portfolio = useStockQuotes(positions);
@@ -138,6 +147,49 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
      time. The snapshot carries holdings at cost, and the caption says so. */
   const heroValue = showingHistorical ? (data.historical?.netWorth ?? 0) : netWorthLive;
 
+  /* ---- The three readings ----
+     Past months get two: a goal envelope has no history, so subtracting
+     today's earmarks from March's balance would report a figure true of no
+     moment in time. See `historicalContexts`. */
+  const contexts = showingHistorical
+    ? historicalContexts(heroValue, data.historical?.liquidBalance ?? 0)
+    : balanceContexts({
+        netWorth: netWorthLive,
+        liquidBalance: data.liquidBalance,
+        goals: goals.items,
+      });
+
+  const CONTEXT_ICON: Record<BalanceContextId, typeof Globe> = {
+    total: Globe,
+    liquid: Wallet,
+    available: Unlock,
+  };
+  const CONTEXT_LABEL: Record<BalanceContextId, string> = {
+    total: t('dashboard.contextTotal'),
+    liquid: t('dashboard.contextLiquid'),
+    available: t('dashboard.contextAvailable'),
+  };
+
+  const balanceViews: BalanceView[] = contexts.map((context) => ({
+    id: context.id,
+    icon: CONTEXT_ICON[context.id],
+    label: CONTEXT_LABEL[context.id],
+    amount: money(context.value),
+    value: context.value,
+    muted: showingHistorical,
+    /* Only the goals reading waits on a second request. The other two are
+       already on the dashboard payload, so they paint immediately. */
+    pending: context.id === 'available' && goals.initialLoading,
+    note:
+      context.id === 'liquid' && context.deducted !== 0
+        ? t('dashboard.contextLiquidNote', { amount: money(context.deducted, true) })
+        : context.id === 'available'
+          ? context.deducted > 0
+            ? t('dashboard.contextAvailableNote', { amount: money(context.deducted, true) })
+            : t('dashboard.contextAvailableNone')
+          : undefined,
+  }));
+
   /* ---- Cash and card debt ----
      `netWorth` already nets the two: a credit wallet's balance is negative, so
      summing spending wallets subtracts the debt. What was missing was saying so
@@ -200,93 +252,90 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
       <section className="hero">
         <div className="hero-primary">
-          {/* The button replaces the old passive refresh-dot: it spins on a
-              background revalidation too, so it reports the same thing while
-              also being actionable. */}
-          <div className="hero-label-row">
-            <span className="section-label">
-              {showingHistorical
+          <SwipeableBalanceCard
+            label={
+              showingHistorical
                 ? t('dashboard.endOfMonthBalance', { month: formatPeriod(period, locale) })
-                : `${t('dashboard.netWorth')} · ${formatPeriod(period, locale)}`}
-            </span>
-            <div className="cluster" style={{ gap: 4 }}>
-              {canTimeTravel && (
-                /* One button, not a segmented control: there are exactly two
-                   readings and the icon plus the label above already say which
-                   one is showing, so a second persistent control would be
-                   restating it. */
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={cx('hero-timetravel', showingHistorical && 'is-active')}
-                  aria-pressed={showingHistorical}
-                  title={
-                    showingHistorical
-                      ? t('dashboard.showCurrentBalance')
-                      : t('dashboard.showEndOfMonthBalance')
-                  }
-                  aria-label={
-                    showingHistorical
-                      ? t('dashboard.showCurrentBalance')
-                      : t('dashboard.showEndOfMonthBalance')
-                  }
-                  onClick={() =>
-                    setOverride({ period, historical: !showingHistorical })
-                  }
-                >
-                  <Icon icon={showingHistorical ? History : Wallet} size="sm" />
-                </Button>
-              )}
-              <RefreshButton
-                onRefresh={() => Promise.all([refresh(), portfolio.refresh()])}
-                busy={isValidating}
-                label={t('dashboard.refresh')}
-              />
-            </div>
-          </div>
-          <span className={cx('hero-value', showingHistorical && 'is-historical')}>
-            {money(heroValue)}
-          </span>
-
-          {/* The indicator that this is not present-day money. Stated in words
-              under the figure rather than only as an icon, because the one
-              mistake this feature can cause — reading a March balance as your
-              current one — is expensive and silent. */}
-          {showingHistorical && (
-            <span className="hero-timetravel-note">
-              <Icon icon={History} size="sm" />
-              {t('dashboard.asItStood', { date: formatDate(data.asOfDate ?? '', locale) })}
-              {hasPositions && <em>{t('dashboard.holdingsAtCost')}</em>}
-            </span>
-          )}
-          <div className="hero-meta">
-            <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
-              {data.monthNet >= 0
-                ? t('dashboard.monthNetUp', { amount: format(Math.abs(data.monthNet), { compact: true }) })
-                : t('dashboard.monthNetDown', { amount: format(Math.abs(data.monthNet), { compact: true }) })}
-            </Badge>
-            {hasPositions && (
-              <span>
-                {t('dashboard.inPositions', {
-                  count: holdingCount,
-                  amount: money(portfolio.totalValue, true),
-                  provider: portfolio.provider,
-                })}
+                : `${t('dashboard.netWorth')} · ${formatPeriod(period, locale)}`
+            }
+            views={balanceViews}
+            actions={
+              /* Outside the scroller on purpose: these act on the card, not on
+                 the reading being shown, and a refresh button that swiped away
+                 with the figure would be a button you have to chase. */
+              <div className="cluster" style={{ gap: 4 }}>
+                {canTimeTravel && (
+                  /* One button, not a segmented control: there are exactly two
+                     readings and the label above already says which one is
+                     showing, so a second persistent control would restate it. */
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={cx('hero-timetravel', showingHistorical && 'is-active')}
+                    aria-pressed={showingHistorical}
+                    title={
+                      showingHistorical
+                        ? t('dashboard.showCurrentBalance')
+                        : t('dashboard.showEndOfMonthBalance')
+                    }
+                    aria-label={
+                      showingHistorical
+                        ? t('dashboard.showCurrentBalance')
+                        : t('dashboard.showEndOfMonthBalance')
+                    }
+                    onClick={() => setOverride({ period, historical: !showingHistorical })}
+                  >
+                    <Icon icon={showingHistorical ? History : Wallet} size="sm" />
+                  </Button>
+                )}
+                <RefreshButton
+                  onRefresh={() => Promise.all([refresh(), portfolio.refresh(), goals.refresh()])}
+                  busy={isValidating}
+                  label={t('dashboard.refresh')}
+                />
+              </div>
+            }
+          >
+            {/* The indicator that this is not present-day money. Stated in
+                words under the figure rather than only as an icon, because the
+                one mistake this feature can cause — reading a March balance as
+                your current one — is expensive and silent. */}
+            {showingHistorical && (
+              <span className="hero-timetravel-note">
+                <Icon icon={History} size="sm" />
+                {t('dashboard.asItStood', { date: formatDate(data.asOfDate ?? '', locale) })}
+                {hasPositions && <em>{t('dashboard.holdingsAtCost')}</em>}
               </span>
             )}
-            {!hasPositions && (
-              <span>{t('dashboard.walletCount', { count: data.walletCount })}</span>
-            )}
-          </div>
+            <div className="hero-meta">
+              <Badge tone={data.monthNet >= 0 ? 'positive' : 'negative'}>
+                {data.monthNet >= 0
+                  ? t('dashboard.monthNetUp', { amount: format(Math.abs(data.monthNet), { compact: true }) })
+                  : t('dashboard.monthNetDown', { amount: format(Math.abs(data.monthNet), { compact: true }) })}
+              </Badge>
+              {hasPositions && (
+                <span>
+                  {t('dashboard.inPositions', {
+                    count: holdingCount,
+                    amount: money(portfolio.totalValue, true),
+                    provider: portfolio.provider,
+                  })}
+                </span>
+              )}
+              {!hasPositions && (
+                <span>{t('dashboard.walletCount', { count: data.walletCount })}</span>
+              )}
+            </div>
 
-          {/* Sits under the headline figure rather than in the card actions:
-              it opens a different kind of thing — a document you take away —
-              and it is the one control here that runs work rather than
-              refreshing a view. */}
-          <button type="button" className="tax-cta" onClick={() => setTaxOpen(true)}>
-            <Icon icon={Calculator} size="sm" />
-            {t('dashboard.taxCta')}
-          </button>
+            {/* Sits under the headline figure rather than in the card actions:
+                it opens a different kind of thing — a document you take away —
+                and it is the one control here that runs work rather than
+                refreshing a view. */}
+            <button type="button" className="tax-cta" onClick={() => setTaxOpen(true)}>
+              <Icon icon={Calculator} size="sm" />
+              {t('dashboard.taxCta')}
+            </button>
+          </SwipeableBalanceCard>
         </div>
 
         <div className="hero-metrics">

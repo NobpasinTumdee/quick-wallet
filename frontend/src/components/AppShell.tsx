@@ -240,7 +240,10 @@ function warmRoute(route: Route, period: string): void {
  * live in this cache — see `refreshCurrentRoute` below.
  */
 const ROUTE_DATA: Record<Route, string[]> = {
-  dashboard: ['/api/dashboard'],
+  /* Goals ride along: the balance carousel's third reading subtracts what
+     they have earmarked, and prefetching it here means the figure is there on
+     arrival rather than a second later. */
+  dashboard: ['/api/dashboard', '/api/goals'],
   wallets: ['/api/wallets'],
   cards: ['/api/wallets', '/api/transactions'],
   transactions: ['/api/transactions', '/api/wallets'],

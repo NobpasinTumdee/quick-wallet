@@ -118,6 +118,20 @@ export const en = {
 
   dashboard: {
     netWorth: 'Net worth',
+
+    /* ---- The balance carousel ----
+       Three readings of the same money, each the one before it minus a layer.
+       The labels have to say what is *excluded*, because that is the only
+       thing that tells them apart. */
+    contextTotal: 'Total net worth',
+    contextLiquid: 'Excluding investments',
+    contextAvailable: 'Available to spend',
+    contextLiquidNote: 'Cash and cards, with {{amount}} invested left out',
+    contextAvailableNote: 'After {{amount}} earmarked for goals',
+    contextAvailableNone: 'Nothing is earmarked for goals yet',
+    balanceCarousel: 'Balance views',
+    balanceCarouselHint: 'Swipe or use the dots to switch between total, liquid and available balances.',
+    balanceView: 'View {{index}} of {{count}}',
     /* ---- Time travel ----
        The label has to name the month, because the one expensive mistake this
        feature can cause is reading a past balance as today's. */

@@ -127,6 +127,17 @@ export const th: TranslationSchema = {
 
   dashboard: {
     netWorth: 'ความมั่งคั่งสุทธิ',
+
+    /* ---- แถบยอดเงินแบบเลื่อน ---- */
+    contextTotal: 'ความมั่งคั่งสุทธิ',
+    contextLiquid: 'ไม่รวมพอร์ตลงทุน',
+    contextAvailable: 'เงินที่ใช้ได้จริง (หักเป้าหมาย)',
+    contextLiquidNote: 'เงินสดและบัตร ไม่รวมเงินลงทุน {{amount}}',
+    contextAvailableNote: 'หักเงินที่กันไว้สำหรับเป้าหมาย {{amount}} แล้ว',
+    contextAvailableNone: 'ยังไม่ได้กันเงินไว้สำหรับเป้าหมาย',
+    balanceCarousel: 'มุมมองยอดเงิน',
+    balanceCarouselHint: 'ปัดหรือแตะจุดเพื่อสลับระหว่างยอดรวม ยอดที่ไม่รวมการลงทุน และยอดที่ใช้ได้จริง',
+    balanceView: 'มุมมองที่ {{index}} จาก {{count}}',
     endOfMonthBalance: 'ยอดคงเหลือสิ้น{{month}}',
     showEndOfMonthBalance: 'ดูยอดคงเหลือ ณ สิ้นเดือน',
     showCurrentBalance: 'ดูยอดคงเหลือปัจจุบัน',

@@ -57,6 +57,19 @@ export function reservesCash(goal: Goal): boolean {
   return !goal.purchased;
 }
 
+/**
+ * Σ savedAmount across the goals that still reserve cash.
+ *
+ * Shared with the dashboard's balance carousel, which subtracts the same
+ * figure from a different starting point — see `balanceContexts`. One function
+ * so the two screens can never disagree about what "earmarked" means.
+ */
+export function lockedInGoals(goals: Goal[]): number {
+  return round2(
+    goals.filter(reservesCash).reduce((sum, goal) => sum + (Number(goal.savedAmount) || 0), 0),
+  );
+}
+
 export interface Allocation {
   totalCash: number;
   /** Σ savedAmount across goals that have not been bought yet. */
@@ -79,11 +92,7 @@ export interface Allocation {
  */
 export function allocationSummary(wallets: WalletBalance[], goals: Goal[]): Allocation {
   const totalCash = spendableCash(wallets);
-  const locked = round2(
-    goals
-      .filter(reservesCash)
-      .reduce((sum, goal) => sum + (Number(goal.savedAmount) || 0), 0),
-  );
+  const locked = lockedInGoals(goals);
   const available = round2(totalCash - locked);
 
   return {
