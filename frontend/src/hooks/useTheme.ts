@@ -54,6 +54,18 @@ import { CustomTheme, Settings, ThemeName } from '../types';
  * only ways out, and the creator always shows both.
  */
 
+/**
+ * Does this failure mean "the server has never heard of that theme"?
+ *
+ * Matched on the message `oneOf_` produces, because Apps Script answers a
+ * validation failure with a 400 and that sentence — there is no error code to
+ * switch on. Deliberately loose: it only decides whether to add a hint, and a
+ * false negative just falls back to showing the raw message.
+ */
+function isUnknownThemeError(message: string): boolean {
+  return /"theme" must be one of/i.test(message);
+}
+
 /** Which library entry, if any, the open draft is editing. */
 export interface ThemeDraft {
   /** An existing theme's id, or null for one that has never been saved. */
@@ -93,6 +105,16 @@ export interface ThemeEngine {
 
   busy: boolean;
   error: string | null;
+  /**
+   * The save failed because the *server* does not recognise the theme name.
+   *
+   * `settingsSave_` runs every incoming theme through an allowlist, so a
+   * palette that ships in the frontend before Code.gs is re-deployed is
+   * rejected with a 400 and rolled back. That looks exactly like a broken
+   * theme picker — the card lights up, the colours flash, everything reverts —
+   * so it is worth telling apart from an ordinary write failure.
+   */
+  errorNeedsDeploy: boolean;
 
   /* ---- draft lifecycle ---- */
   createDraft: () => void;
@@ -153,6 +175,7 @@ export function useThemeEngine(): ThemeEngine {
   const [draftColors, setDraftColors] = useState<Record<string, string>>(defaultThemeColors);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorNeedsDeploy, setErrorNeedsDeploy] = useState(false);
 
   /* The authoritative draft palette. State above is a lagging copy of this. */
   const colorsRef = useRef<Record<string, string>>(defaultThemeColors());
@@ -350,6 +373,7 @@ export function useThemeEngine(): ThemeEngine {
         endPreview(settingsRef.current);
       }
       setError(null);
+      setErrorNeedsDeploy(false);
       /* The preset's own accent rides along: SettingsContext writes
          settings.accent inline as --accent, which would otherwise leave every
          palette wearing the previous theme's colour.
@@ -358,16 +382,26 @@ export function useThemeEngine(): ThemeEngine {
          base rather than a saved theme, so choosing it also clears the
          materialised palette. Without that it would keep painting whichever
          library theme was last worn while the picker claimed otherwise. */
-      await save({
-        theme,
-        accent: themePreset(theme).accent,
-        activeCustomThemeId: '',
-        /* The typeface travels with the theme, so a built-in preset returns to
-           the system face. A font you want everywhere belongs in a saved theme,
-           which is the thing that can carry it. */
-        fontFamily: '',
-        ...(theme === 'custom' ? { customVars: {} } : null),
-      });
+      /* Caught rather than left to `void`: SettingsContext rolls the optimistic
+         patch back and rethrows, so without this the theme visibly flashes and
+         reverts with no explanation anywhere — which is indistinguishable from
+         the picker being broken. */
+      try {
+        await save({
+          theme,
+          accent: themePreset(theme).accent,
+          activeCustomThemeId: '',
+          /* The typeface travels with the theme, so a built-in preset returns
+             to the default face. A font you want everywhere belongs in a saved
+             theme, which is the thing that can carry it. */
+          fontFamily: '',
+          ...(theme === 'custom' ? { customVars: {} } : null),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Could not apply the theme';
+        setError(message);
+        setErrorNeedsDeploy(isUnknownThemeError(message));
+      }
     },
     [draft, cancelMirror, save],
   );
@@ -420,6 +454,7 @@ export function useThemeEngine(): ThemeEngine {
       dirty,
       busy,
       error,
+      errorNeedsDeploy,
       createDraft,
       editDraft,
       duplicateDraft,
@@ -444,6 +479,7 @@ export function useThemeEngine(): ThemeEngine {
       dirty,
       busy,
       error,
+      errorNeedsDeploy,
       createDraft,
       editDraft,
       duplicateDraft,

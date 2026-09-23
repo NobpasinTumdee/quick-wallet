@@ -664,6 +664,11 @@ export const en = {
   },
 
   theme: {
+    /* The one theme failure that is not the user's doing: the palette ships in
+       the app before the Apps Script that validates its name does. */
+    unknownTheme: 'This theme needs the updated backend',
+    unknownThemeHint:
+      'Your Apps Script has an older list of theme names, so it rejected this one and the previous theme was put back. Open the Apps Script editor, paste in the current google-apps-script/Code.gs, and deploy it — then this theme will stick.',
     /* ---- The picker's names and one-liners ----
        Kept as keys rather than literals in `themes.ts`: choosing a theme is
        choosing a feeling, and the blurb is what carries it. */

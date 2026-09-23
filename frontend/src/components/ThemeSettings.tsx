@@ -157,6 +157,7 @@ export function ThemeSettings() {
     applyCustomTheme,
     deleteCustomTheme,
     setAccent,
+    errorNeedsDeploy,
   } = useTheme();
 
   /* Re-seeds the uncontrolled colour inputs. Bumped when a draft opens (the
@@ -402,7 +403,9 @@ export function ThemeSettings() {
 
         {error && (
           <div style={{ marginTop: 12 }}>
-            <Alert tone="error">{error}</Alert>
+            <Alert tone="error" title={errorNeedsDeploy ? t('theme.unknownTheme') : undefined}>
+              {errorNeedsDeploy ? t('theme.unknownThemeHint') : error}
+            </Alert>
           </div>
         )}
       </Card>

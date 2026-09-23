@@ -666,6 +666,10 @@ export const th: TranslationSchema = {
   },
 
   theme: {
+    /* ธีมใหม่ต้องใช้ Apps Script เวอร์ชันล่าสุด */
+    unknownTheme: 'ธีมนี้ต้องใช้แบ็กเอนด์เวอร์ชันใหม่',
+    unknownThemeHint:
+      'Apps Script ของคุณยังมีรายชื่อธีมชุดเดิม จึงปฏิเสธธีมนี้และย้อนกลับไปใช้ธีมก่อนหน้า เปิด Apps Script วางไฟล์ google-apps-script/Code.gs ล่าสุด แล้วกดดีพลอย ธีมนี้ก็จะใช้ได้',
     /* ---- ชื่อธีมและคำบรรยายสั้น ---- */
 
     nameLight: 'สว่าง',
