@@ -1609,6 +1609,44 @@ export const en = {
     errorLast: 'Keep at least one category — every transaction needs somewhere to go.',
   },
 
+  /* ---- The technical-analysis terminal ----
+     Indicator *names* stay in their trading form (RSI, MACD) in both
+     languages: they are what every chart, broker and tutorial calls them, and
+     translating them would make the app harder to follow, not easier. What is
+     translated is everything around them. */
+  ta: {
+    indicators: 'Indicators',
+    tune: 'Adjust…',
+    needsVolume: 'This provider does not send volume, so VWAP cannot be calculated.',
+
+    sma: 'Moving average',
+    ema: 'Exponential moving average',
+    bollinger: 'Bollinger Bands',
+    vwap: 'VWAP (rolling)',
+    ichimoku: 'Ichimoku Cloud',
+    rsi: 'Relative Strength Index',
+    macd: 'MACD',
+    stochastic: 'Stochastic',
+    atr: 'Average True Range',
+    adx: 'Average Directional Index',
+
+    paramPeriod: 'Period',
+    paramDeviations: 'Deviations',
+    paramConversion: 'Conversion',
+    paramBase: 'Base',
+    paramSpanB: 'Span B',
+    paramFast: 'Fast',
+    paramSlow: 'Slow',
+    paramSignal: 'Signal',
+    paramK: '%K',
+    paramD: '%D',
+
+    rateLimited: 'Rate limit reached (8/min). Please wait a moment.',
+    rateLimitedIn: 'Rate limit reached. Retrying in {{seconds}}s…',
+    waitSeconds: 'Wait {{seconds}}s',
+    tryAgain: 'Try again',
+  },
+
   liability: {
     title: 'Upcoming bills',
     subtitle: 'What is already promised, and when it lands',

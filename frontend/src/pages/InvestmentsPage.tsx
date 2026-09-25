@@ -15,7 +15,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
-import type { ChartReadout } from '../components/StockCandlestickChart';
+import type { ChartReadout } from '../components/TAChartTerminal';
 import { useCandles } from '../hooks/useCandles';
 import { candleProviderName } from '../services/candleApi';
 import { InvestmentForm, InvestmentPayload } from '../components/InvestmentForm';
@@ -54,10 +54,11 @@ import { ValuedHolding, groupValuedHoldings } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, WalletBalance, WatchlistItem } from '../types';
 
-/* lightweight-charts is ~180kB and only this one card uses it, so it loads
-   alongside the positions request rather than blocking every other route. */
-const StockCandlestickChart = lazy(() =>
-  import('../components/StockCandlestickChart').then((m) => ({ default: m.StockCandlestickChart })),
+/* lightweight-charts is ~180kB, and the indicator maths and terminal ride
+   along with it — all of it behind one dynamic import, so the main bundle
+   carries none of it. `bundlecheck.mjs` proves that stays true. */
+const TAChartTerminal = lazy(() =>
+  import('../components/TAChartTerminal').then((m) => ({ default: m.TAChartTerminal })),
 );
 
 /** A holding, priced. Spelled out once so the handlers below can name it. */
@@ -592,7 +593,7 @@ export function InvestmentsPage() {
           </div>
 
           <Suspense fallback={<div className="candle-frame" style={{ height: chartHeight }} />}>
-          <StockCandlestickChart
+          <TAChartTerminal
             candles={chart.candles}
             height={chartHeight}
             loading={chart.loading}

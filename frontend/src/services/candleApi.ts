@@ -39,6 +39,14 @@ export interface Candle {
   high: number;
   low: number;
   close: number;
+  /**
+   * Daily volume, when the provider sends it.
+   *
+   * Optional because the mock provider and some plans do not, and VWAP is the
+   * only thing that reads it — it draws nothing rather than passing an
+   * unweighted average off as a volume-weighted one.
+   */
+  volume?: number;
 }
 
 export type CandleFailure =
@@ -158,6 +166,9 @@ export function candlesFromTwelveData(raw: TwelveDataCandles | null | undefined)
       high: Number(row.high),
       low: Number(row.low),
       close: Number(row.close),
+      /* Present on Twelve Data's daily equity rows; absent on some plans and
+         on indices, which is why it stays optional all the way through. */
+      volume: row.volume === undefined ? undefined : Number(row.volume),
     });
   }
 

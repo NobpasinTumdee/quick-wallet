@@ -3183,7 +3183,7 @@ tr:hover .row-actions,
    Candlestick chart
    --------------------------------------------------------------------------
    The canvas itself is painted by lightweight-charts, which cannot read CSS
-   variables — StockCandlestickChart resolves those in JS and re-applies them
+   variables — TAChartTerminal resolves those in JS and re-applies them
    on a theme swap. Everything *around* the canvas is styled here, so the frame,
    skeleton and overlays follow the theme the ordinary way.
    ========================================================================== */
@@ -12053,4 +12053,140 @@ line.arate-zero {
 
 .pw-confirm .is-invalid:focus-visible {
   outline-color: var(--negative);
+}
+
+/* ==========================================================================
+   The technical-analysis terminal
+   --------------------------------------------------------------------------
+   The canvas paints itself; everything here is the furniture around it. The
+   chart's own background is transparent, so the card's glass shows through
+   and these controls sit on the same surface rather than on a grey rectangle.
+   ========================================================================== */
+
+.ta-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ta-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.ta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Deliberately compact and monospaced-ish: these are ten short tags read as a
+   row, and a tag that reflows as it toggles makes the row jump under the
+   pointer. The border carries the state, so the width never changes. */
+.ta-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ta-chip:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.ta-chip.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.ta-chip.is-unavailable {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ta-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ta-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+}
+
+.ta-settings select {
+  padding: 4px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-2xs);
+}
+
+.ta-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.ta-param {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.ta-param input {
+  width: 64px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.ta-param input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ta-chip {
+    transition: none;
+  }
 }
