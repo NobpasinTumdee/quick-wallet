@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { SubscriptionSplitEditor } from './SubscriptionSplitEditor';
 import { advanceDueDate, todayKey } from '../hooks/useSubscriptions';
+import { SplitDraft, summariseSplits, toPayload } from '../lib/splitMath';
 import { formatDate } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, SubscriptionFrequency, WalletBalance } from '../types';
@@ -26,10 +29,23 @@ export interface SubscriptionPayload {
   frequency: SubscriptionFrequency;
   nextDueDate: string;
   note: string;
+  /** Paying this should also raise a shared bill from `splitDetails`. */
+  isShared: boolean;
+  /** The template. Always sent, so turning sharing off clears it server-side. */
+  splitDetails: { personName: string; amount: number }[];
 }
 
 /** `amount` stays a raw string while typing; see DecimalInput. */
-type FormState = Omit<SubscriptionPayload, 'amount'> & { amount: string };
+type FormState = Omit<SubscriptionPayload, 'amount' | 'splitDetails'> & { amount: string };
+
+/** The stored template as form rows, with the ids the editor keys on. */
+function toDrafts(subscription?: Subscription): SplitDraft[] {
+  return (subscription?.splitDetails ?? []).map((share, index) => ({
+    id: `s-${index}-${share.personName}`,
+    personName: share.personName,
+    amount: share.amount > 0 ? String(share.amount) : '',
+  }));
+}
 
 function initialState(subscription?: Subscription, firstWalletId = ''): FormState {
   return {
@@ -40,6 +56,7 @@ function initialState(subscription?: Subscription, firstWalletId = ''): FormStat
     frequency: subscription?.frequency ?? 'monthly',
     nextDueDate: subscription?.nextDueDate ?? todayKey(),
     note: subscription?.note ?? '',
+    isShared: subscription?.isShared ?? false,
   };
 }
 
@@ -60,9 +77,11 @@ export function SubscriptionForm({
   onClose: () => void;
   onSubmit: (payload: SubscriptionPayload) => void;
 }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
   const [form, setForm] = useState<FormState>(() => initialState(subscription, wallets[0]?.id));
+  const [people, setPeople] = useState<SplitDraft[]>(() => toDrafts(subscription));
   const [touched, setTouched] = useState(false);
 
   /* Deps are `open` and the record id only. `wallets` is filtered fresh on
@@ -71,6 +90,7 @@ export function SubscriptionForm({
   useEffect(() => {
     if (!open) return;
     setForm(initialState(subscription, wallets[0]?.id));
+    setPeople(toDrafts(subscription));
     setTouched(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, subscription?.id]);
@@ -82,7 +102,14 @@ export function SubscriptionForm({
   const nameError = touched && !form.name.trim() ? 'Give it a name' : undefined;
   const walletError = touched && !form.walletId ? 'Pick a wallet' : undefined;
   const amountError = touched && !(amount > 0) ? 'Enter an amount above zero' : undefined;
-  const valid = Boolean(form.name.trim() && form.walletId && amount > 0 && form.nextDueDate);
+  /* The split can be wrong in one way that matters: shares adding up to more
+     than the subscription. Everything else — a blank row, a name with no
+     amount — is simply dropped by `toPayload`, the same as on the bill form. */
+  const splitSummary = summariseSplits(people, amount);
+  const splitBlocked = form.isShared && splitSummary.exceedsTotal;
+  const valid = Boolean(
+    form.name.trim() && form.walletId && amount > 0 && form.nextDueDate && !splitBlocked,
+  );
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -96,6 +123,11 @@ export function SubscriptionForm({
       frequency: form.frequency,
       nextDueDate: form.nextDueDate,
       note: form.note.trim(),
+      isShared: form.isShared,
+      /* Sent even when sharing is off, and empty in that case: the server
+         stores what it is given, so leaving a stale template behind would
+         have it spring back the next time the toggle is flipped on. */
+      splitDetails: form.isShared ? toPayload(people) : [],
     });
   }
 
@@ -175,6 +207,30 @@ export function SubscriptionForm({
             onChange={(e) => set('nextDueDate', e.target.value)}
           />
         </Field>
+
+        {/* ---- Shared subscription ----
+            A switch rather than a checkbox: it turns a whole section on, and
+            the section below is its consequence. */}
+        <div className="span-2 sub-share">
+          <label className="sub-share-toggle">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={form.isShared}
+              aria-describedby="sub-share-hint"
+              onChange={(e) => set('isShared', e.target.checked)}
+            />
+            <span className="sub-share-track" aria-hidden="true" />
+            <span className="sub-share-label">
+              <strong>{t('recurring.shareToggle')}</strong>
+              <small id="sub-share-hint">{t('recurring.shareHint')}</small>
+            </span>
+          </label>
+
+          {form.isShared && (
+            <SubscriptionSplitEditor people={people} onChange={setPeople} total={amount} />
+          )}
+        </div>
 
         <Field label="Note" className="span-2">
           <Textarea

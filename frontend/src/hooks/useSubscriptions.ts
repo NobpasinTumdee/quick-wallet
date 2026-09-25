@@ -27,7 +27,7 @@ import { useCallback } from 'react';
 import { mutateMatching } from '../api/cache';
 import { CollectionState, useExcelDB } from '../hooks/useExcelDB';
 import { advanceDueDate } from '../lib/recurrence';
-import { Subscription, SubscriptionPayment, Transaction, WalletBalance } from '../types';
+import { BillSplit, Subscription, SubscriptionPayment, Transaction, WalletBalance } from '../types';
 
 /* Re-exported so the call sites that reach for it here keep working; the
    implementation moved to `lib/recurrence` when the liability heatmap needed to
@@ -41,8 +41,14 @@ export function todayKey(): string {
 }
 
 export interface SubscriptionsState extends CollectionState<Subscription> {
-  /** Writes the expense and rolls the cycle. Optimistic across four caches. */
-  pay: (subscription: Subscription) => Promise<void>;
+  /**
+   * Writes the expense and rolls the cycle. Optimistic across four caches.
+   *
+   * Answers with the server's own result so the caller can say what happened:
+   * a shared subscription also comes back carrying the bill it raised, or the
+   * reason it could not be raised.
+   */
+  pay: (subscription: Subscription) => Promise<SubscriptionPayment>;
 }
 
 export function useSubscriptions(): SubscriptionsState {
@@ -133,6 +139,20 @@ export function useSubscriptions(): SubscriptionsState {
             (rows ?? []).map((row) => (row.id === draftId ? saved.transaction : row)),
           );
         }
+
+        /* A shared subscription also raised a bill. Pushed into the cache the
+           same way the transaction is, so the Shared Expenses screen has it
+           without a refetch — and, crucially, *not* accompanied by a second
+           wallet patch: the bill points at the expense that was already booked
+           above, so the money left the wallet exactly once. */
+        if (saved?.billSplit) {
+          mutateMatching<BillSplit[]>('/api/bill-splits', (rows) => [
+            saved.billSplit as BillSplit,
+            ...(rows ?? []).filter((row) => row.id !== saved.billSplit?.id),
+          ]);
+        }
+
+        return saved;
       } catch (error) {
         undoAll();
         throw error;

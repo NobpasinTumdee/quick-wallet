@@ -108,6 +108,21 @@ export function BillSplitterForm({
   const [pending, setPending] = useState('');
 
   const [localError, setLocalError] = useState<string | null>(null);
+  /**
+   * The double-submit guard, owned by the form rather than the caller.
+   *
+   * `busy` arrives as a prop, and the parent derives it from the collection's
+   * `mutating` flag — which `useBillSplitter.create` never sets, because it is
+   * a hand-written `api.post` rather than one of the generic mutations. So the
+   * button stayed enabled for the whole round trip and a second click sent a
+   * second bill: two BillSplits rows *and* two expenses for one dinner.
+   *
+   * That hook is fixed too, but the guard belongs here regardless. The form
+   * owns the click, this is the only state that is true for exactly as long as
+   * its own request is in flight, and it cannot be undone by a caller that
+   * forgets to pass `busy`.
+   */
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
 
   /* Reset per opening, not per render: a background wallet refresh must not
@@ -124,6 +139,7 @@ export function BillSplitterForm({
     setPeople([]);
     setPending('');
     setLocalError(null);
+    setIsSubmitting(false);
     setWalletId([...wallets].sort((a, b) => b.balance - a.balance)[0]?.id ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -189,12 +205,19 @@ export function BillSplitterForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    /* First line of defence, and the one that cannot lose a race: two clicks
+       in the same tick both run before React has re-rendered anything, so the
+       disabled attribute alone would not stop the second. Reading the flag at
+       the top of the handler does. */
+    if (isSubmitting) return;
+
     const problem = blocker();
     if (problem) {
       setLocalError(problem);
       return;
     }
     setLocalError(null);
+    setIsSubmitting(true);
     try {
       await onSubmit({
         title: title.trim(),
@@ -206,10 +229,18 @@ export function BillSplitterForm({
       });
     } catch {
       // The parent surfaces the API message via `error`; keep the sheet open.
+    } finally {
+      /* In `finally`, so a failed write re-arms the button — the sheet stays
+         open with the bill still in it, and the user has to be able to try
+         again. On success the sheet closes and this sets state on a component
+         that is about to unmount, which React tolerates. */
+      setIsSubmitting(false);
     }
   }
 
   const ready = blocker() === null;
+  /* Either signal: this form's own request, or a write the parent started. */
+  const working = isSubmitting || Boolean(busy);
 
   return (
     <Modal
@@ -230,11 +261,20 @@ export function BillSplitterForm({
                   ? t('split.yourShareIs', { amount: money(leftover) })
                   : t('split.allAssigned')}
           </span>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={working}>
             {t('common.cancel')}
           </Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={!ready && !busy}>
-            {busy ? t('split.creating') : t('split.createBill')}
+          <Button
+            variant="primary"
+            onClick={submit}
+            loading={working}
+            /* Disabled while working *and* while incomplete. The second clause
+               keeps the old behaviour of letting a blocked form be pressed so
+               it can explain why; the first overrides it, because a request
+               that is already running has nothing left to explain. */
+            disabled={working || !ready}
+          >
+            {working ? t('split.creating') : t('split.createBill')}
           </Button>
         </>
       }

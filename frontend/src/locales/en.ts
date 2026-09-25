@@ -454,6 +454,24 @@ export const en = {
   },
 
   recurring: {
+    /* ---- Shared subscriptions ----
+       A template that becomes a real bill on the day it is paid, which is why
+       the wording is future tense throughout: nobody owes anything yet. */
+    shareToggle: 'Create a shared bill when this is paid',
+    shareHint: 'Each payment raises a bill on the Shared Expenses screen, so you can track who has paid you back. One expense, not two — the bill reuses the payment.',
+    splitDetails: 'Who owes what',
+    splitEvenly: 'Split evenly',
+    addPerson: 'Add person',
+    personName: 'Name',
+    removePerson: 'Remove {{name}}',
+    splitEmpty: 'Nobody added yet. The whole payment stays yours until you add someone.',
+    splitSummary: 'Others owe {{owed}} · your share {{own}}',
+    splitOverBy: 'The shares are {{amount}} more than the subscription. Lower one to continue.',
+    splitDuplicate: '“{{name}}” is on this split twice.',
+
+    /* Said after a payment, when a bill was raised alongside it. */
+    sharedBillCreated: 'Shared bill raised · {{owed}} owed to you',
+    sharedBillFailed: 'Paid, but the shared bill could not be created: {{reason}}',
     subscriptionCount_one: '{{count}} subscription · weekly and yearly bills normalised to a monthly figure',
     subscriptionCount_other: '{{count}} subscriptions · weekly and yearly bills normalised to a monthly figure',
     createWalletFirst: 'Create a wallet first — a subscription needs somewhere to deduct from.',

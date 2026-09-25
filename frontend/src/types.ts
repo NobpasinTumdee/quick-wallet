@@ -191,6 +191,18 @@ export interface BillSplitUnpaidResult {
   removedTransactionId: string;
 }
 
+/**
+ * One line of a shared subscription's template: who owes, and how much.
+ *
+ * Deliberately not a `BillSplitShare` — a template has nobody paying anything
+ * yet, so `isPaid` and `repaymentTxId` would be fields that are always false
+ * and always empty. Those appear when the template becomes a real bill.
+ */
+export interface SubscriptionSplitShare {
+  personName: string;
+  amount: number;
+}
+
 export interface Subscription {
   id: string;
   userId: string;
@@ -203,6 +215,10 @@ export interface Subscription {
   nextDueDate: string;
   note: string;
   createdAt: string;
+  /** Paying this also raises a shared bill from `splitDetails`. */
+  isShared: boolean;
+  /** Who owes what when it is paid. Empty unless `isShared`. */
+  splitDetails: SubscriptionSplitShare[];
 }
 
 /** What subscriptions.pay returns — both halves, so the client can reconcile. */
@@ -210,6 +226,22 @@ export interface SubscriptionPayment {
   ok: boolean;
   subscription: Subscription;
   transaction: Transaction;
+  /**
+   * The shared bill this payment raised, when the subscription carries a split
+   * template. Null for an ordinary subscription.
+   *
+   * It points at `transaction` rather than owning an expense of its own — a
+   * shared payment is one debit, not two. See `billSplitFromSubscription_`.
+   */
+  billSplit: BillSplit | null;
+  /**
+   * Why the bill could not be raised, when the payment itself succeeded.
+   *
+   * Empty in every normal case. A stale or hand-edited template must not turn
+   * a completed payment into an error that implies nothing was recorded, so
+   * the two outcomes are reported separately.
+   */
+  billSplitError: string;
 }
 
 export interface Investment {

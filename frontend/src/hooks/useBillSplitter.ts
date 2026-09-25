@@ -35,7 +35,7 @@
  * makes people overspend.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { mutateMatching, invalidate } from '../api/cache';
 import { api } from '../api/client';
@@ -179,13 +179,33 @@ export function useBillSplitter(): BillSplitterState {
   /* Writes                                                            */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * True while `create` is in flight.
+   *
+   * `create` bypasses the collection's generic mutation helper — see the note
+   * inside it — and so never moved `collection.mutating`. Every consumer
+   * reading `mutating` to disable a control was therefore told the write had
+   * already finished before it began, which is how a double-click produced two
+   * bills and two expenses.
+   */
+  const [creating, setCreating] = useState(false);
+
   const create = useCallback(
     async (input: CreateBillSplitInput) => {
+      setCreating(true);
       /* Not optimistic. The server decides the expense row's id, the bill's id
          and every derived figure on it, and a bill whose totals were guessed
          locally would flicker the moment the real one arrived. It is one round
          trip and the form stays open until it lands. */
-      const result = await api.post<BillSplitResult>('/api/bill-splits', input);
+      let result: BillSplitResult;
+      try {
+        result = await api.post<BillSplitResult>('/api/bill-splits', input);
+      } finally {
+        /* Cleared as soon as the request settles, not after the cache writes
+           below: those are synchronous, and leaving the flag up through them
+           would keep the button disabled for a frame after the sheet closed. */
+        setCreating(false);
+      }
 
       /* Belt and braces. A create that answers with anything but a bill means
          the request was routed somewhere else — which is exactly what used to
@@ -330,7 +350,7 @@ export function useBillSplitter(): BillSplitterState {
     initialLoading: collection.initialLoading || wallets.initialLoading,
     isValidating: collection.isValidating || wallets.isValidating,
     error: collection.error ?? wallets.error,
-    mutating: collection.mutating || wallets.mutating,
+    mutating: collection.mutating || wallets.mutating || creating,
     refresh,
     create,
     markPaid,

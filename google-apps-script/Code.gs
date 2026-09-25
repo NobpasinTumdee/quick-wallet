@@ -193,7 +193,21 @@ var SHEETS = {
          Period column fell into. */
       { key: 'nextDueDate', header: 'Next Due Date', type: 'datekey' },
       { key: 'note', header: 'Note', type: 'string' },
-      { key: 'createdAt', header: 'Created At', type: 'date' }
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      /* -------------------------------------------------------------------
+         SHARED SUBSCRIPTIONS
+         -------------------------------------------------------------------
+         A template, not a bill. `isShared` says a payment should also raise a
+         BillSplits row; `splitDetails` is who owes what on it, as
+         `[{ personName, amount }]`.
+
+         Nobody owes anything until the money has actually left the wallet, so
+         nothing reads these two except `subscriptionsPay_`. Stored on the
+         subscription rather than as a dormant BillSplits row because a bill
+         that exists before its expense would show up in every outstanding
+         total the app has. */
+      { key: 'isShared', header: 'Is Shared', type: 'boolean' },
+      { key: 'splitDetails', header: 'Split Details (JSON)', type: 'jsonlist' }
     ]
   },
   Watchlist: {
@@ -3556,7 +3570,12 @@ function parseSubscription_(userId, body) {
     category: str_(body.category, 'category', { max: 60 }),
     frequency: oneOf_(body.frequency, 'frequency', SUBSCRIPTION_FREQUENCIES, 'monthly'),
     nextDueDate: isoDate_(body.nextDueDate || toDateKey_(new Date()), 'nextDueDate'),
-    note: str_(body.note, 'note', { required: false, max: 300 })
+    note: str_(body.note, 'note', { required: false, max: 300 }),
+    /* The split template travels with the ordinary fields, so editing a
+       subscription can turn sharing on, off, or rewrite who owes what. The
+       shares are only checked for shape here — see `parseSplitTemplate_`. */
+    isShared: bool_(body.isShared, false),
+    splitDetails: parseSplitTemplate_(body.splitDetails)
   };
 }
 
@@ -3582,7 +3601,8 @@ function subscriptionsCreate_(user, body) {
     name: parsed.name, amount: parsed.amount, walletId: parsed.walletId,
     category: parsed.category, frequency: parsed.frequency,
     nextDueDate: parsed.nextDueDate, note: parsed.note,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    isShared: parsed.isShared, splitDetails: parsed.splitDetails
   };
 
   insertRow_('Subscriptions', subscription);
@@ -3655,9 +3675,34 @@ function subscriptionsPay_(user, query, body) {
   var updated = updateRow_('Subscriptions', id, { nextDueDate: nextDue });
   delete updated._row;
 
-  // Both halves, so the client can reconcile its optimistic patch exactly
+  /* The shared bill, if this subscription carries a template. Built from `tx`
+     rather than through `billSplits.create`, which would write a second
+     expense for the same payment — see the note above
+     `billSplitFromSubscription_`.
+
+     Wrapped, because the payment has already happened. A template that cannot
+     produce a valid bill — someone edited the sheet by hand, a name went
+     blank — must not turn a successful payment into a 400 that tells the user
+     nothing was recorded when the money has in fact gone. The failure is
+     reported alongside the payment instead, and the template can be fixed on
+     the subscription. */
+  var billSplit = null;
+  var billSplitError = '';
+  try {
+    billSplit = billSplitFromSubscription_(user, subscription, tx);
+  } catch (err) {
+    billSplitError = (err && err.message) ? String(err.message) : 'The shared bill could not be created';
+  }
+
+  // Every half, so the client can reconcile its optimistic patch exactly
   // rather than guessing what the server decided.
-  return { ok: true, subscription: updated, transaction: tx };
+  return {
+    ok: true,
+    subscription: updated,
+    transaction: tx,
+    billSplit: billSplit,
+    billSplitError: billSplitError
+  };
 }
 
 /* Must stay in step with ThemeName in the frontend types: settingsSave_ runs
@@ -4192,6 +4237,185 @@ function billSplitsGet_(user, query) {
  * delete on the Activity screen. The other order would leave a bill claiming
  * money that never moved, which is invisible and actively misleading.
  */
+/* =========================================================================
+ * Subscriptions that are shared
+ * -------------------------------------------------------------------------
+ * "Netflix Family, and the other three pay me back every month."
+ *
+ * The template lives on the subscription (`isShared` + `splitDetails`) and is
+ * stamped into a real BillSplits row each time the subscription is paid. It is
+ * a template, not a bill: nobody owes anything until the money has actually
+ * left the wallet.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE BILL REUSES THE PAYMENT'S TRANSACTION
+ * -------------------------------------------------------------------------
+ * This is the whole integrity question, and getting it wrong doubles people's
+ * spending.
+ *
+ * `billSplits.create` writes its own expense, because a bill created by hand
+ * is money leaving a wallet that nothing else has recorded. A shared
+ * subscription payment has *already* written that expense — `subscriptionsPay_`
+ * does it a few lines above. Calling the create endpoint as well would book
+ * ฿419 of Netflix twice: the wallet would drop by ฿838, and every budget and
+ * monthly total would follow it.
+ *
+ * So the bill is built here instead, from the transaction that already exists,
+ * and `expenseTxId` points at it. One payment, one expense, one bill. The
+ * BillSplits row is otherwise identical to a hand-made one — the same shape,
+ * the same status rules, the same repayment flow.
+ * ========================================================================= */
+
+/** A template can hold as many people as a bill can. */
+var MAX_SPLIT_TEMPLATE = 50;
+
+/**
+ * The stored template, cleaned.
+ *
+ * Deliberately *not* `parseSplits_`: that one validates a real bill against a
+ * real total and throws when the shares do not fit. A template has no total to
+ * fit yet — the subscription's price can change after it is written — so this
+ * only checks the shape, and the fitting happens at payment time in
+ * `splitTemplateFor_`.
+ */
+function parseSplitTemplate_(value) {
+  var raw = Object.prototype.toString.call(value) === '[object Array]' ? value : [];
+  if (raw.length > MAX_SPLIT_TEMPLATE) {
+    throw bad_('A split can name at most ' + MAX_SPLIT_TEMPLATE + ' people', 'TOO_MANY_SPLITS');
+  }
+
+  var seen = {};
+  var out = [];
+
+  raw.forEach(function (entry) {
+    var personName = str_(entry && entry.personName, 'personName', { required: false, max: 60 });
+    if (!personName) return;
+
+    var key = personName.toLowerCase();
+    if (seen[key]) throw bad_('"' + personName + '" is in this split twice', 'DUPLICATE_PERSON');
+    seen[key] = true;
+
+    var amount = money_(num_(entry && entry.amount, 'amount', { min: 0, fallback: 0 }));
+    if (!(amount > 0)) {
+      throw bad_('Every share must be greater than zero — check ' + personName, 'ZERO_SHARE');
+    }
+
+    out.push({ personName: personName, amount: amount });
+  });
+
+  return out;
+}
+
+/**
+ * The template, fitted to what was actually paid.
+ *
+ * A subscription's price changes — Netflix puts it up, a plan is downgraded —
+ * and the template does not follow it. Two cases, and the asymmetry is
+ * deliberate:
+ *
+ *   price rose    shares stay as written, and the extra falls to the payer.
+ *                 That is what "you three pay ฿100 each" means: your share is
+ *                 the remainder, and it is the remainder that grew.
+ *   price fell     below the sum of the shares, the shares are scaled down
+ *                 proportionally to fit. The alternative is refusing the
+ *                 payment over a stale template, which would block the one
+ *                 write the user actually asked for.
+ *
+ * Returns [] when there is nothing to bill, which is the signal not to make a
+ * bill at all.
+ */
+function splitTemplateFor_(template, total) {
+  var shares = Object.prototype.toString.call(template) === '[object Array]' ? template : [];
+  if (!shares.length || !(total > 0)) return [];
+
+  var sum = 0;
+  shares.forEach(function (s) { sum += Number(s.amount) || 0; });
+  if (!(sum > 0)) return [];
+
+  /* Everyone's shares already fit inside the bill: leave them exactly as the
+     user wrote them. No arithmetic, no drift. */
+  if (money_(sum) <= money_(total) + SPLIT_EPSILON) {
+    return shares.map(function (s) {
+      return { personName: s.personName, amount: money_(s.amount), isPaid: false, repaymentTxId: '' };
+    });
+  }
+
+  /* Scaled to fit, with the rounding error pushed onto the last share so the
+     shares still add up to exactly the bill rather than to a cent under it. */
+  var factor = total / sum;
+  var running = 0;
+  return shares.map(function (s, index) {
+    var last = index === shares.length - 1;
+    var amount = last ? money_(total - running) : money_((Number(s.amount) || 0) * factor);
+    running = money_(running + amount);
+    return { personName: s.personName, amount: amount, isPaid: false, repaymentTxId: '' };
+  });
+}
+
+/**
+ * "Subscription: Netflix (09/2026)".
+ *
+ * The period is in the title because these bills repeat: three months of
+ * Netflix produce three rows, and a list of identical titles is a list nobody
+ * can read. Built from the date the payment was booked on, not today — a
+ * back-dated payment belongs to the month it was for.
+ */
+function subscriptionBillTitle_(name, paidOn) {
+  var parts = String(paidOn || '').split('-');
+  var period = parts.length >= 2 ? parts[1] + '/' + parts[0] : '';
+  return 'Subscription: ' + name + (period ? ' (' + period + ')' : '');
+}
+
+/**
+ * Writes the shared bill for a subscription payment that has already happened.
+ *
+ * `tx` is the expense `subscriptionsPay_` just inserted; this row points at it
+ * rather than writing another. Returns the decorated bill, or null when the
+ * subscription is not shared or its template is empty.
+ */
+function billSplitFromSubscription_(user, subscription, tx) {
+  if (!bool_(subscription.isShared, false)) return null;
+
+  var template = Object.prototype.toString.call(subscription.splitDetails) === '[object Array]'
+    ? subscription.splitDetails
+    : [];
+
+  /* Sharing on with nobody named is a real state, not a mistake: the toggle is
+     set up before the flatmates are, and the form says as much. No bill, and
+     nothing to report. */
+  if (!template.length) return null;
+
+  var splits = splitTemplateFor_(template, Number(tx.amount) || 0);
+
+  /* Named people whose shares all came to nothing is a different matter. The
+     user configured a split and is expecting a bill, so silence would be the
+     wrong answer — this throws, and `subscriptionsPay_` reports it alongside
+     the payment that did succeed. */
+  if (!splits.length) {
+    throw bad_(
+      'The split on "' + subscription.name + '" has no usable shares. Check the amounts on it.',
+      'EMPTY_TEMPLATE'
+    );
+  }
+
+  var bill = {
+    id: uuid_(),
+    userId: user.id,
+    title: subscriptionBillTitle_(subscription.name, tx.date),
+    totalAmount: money_(tx.amount),
+    walletId: tx.walletId,
+    note: subscription.note || '',
+    splitsJSON: splits,
+    status: splitsStatus_(splits),
+    createdAt: new Date().toISOString(),
+    /* The payment's own expense. Not a second one — see the note at the top. */
+    expenseTxId: tx.id
+  };
+
+  insertRow_('BillSplits', bill);
+  return decorateBillSplit_(bill);
+}
+
 function billSplitsCreate_(user, body) {
   var title = str_(body.title, 'title', { max: 120 });
   var totalAmount = num_(body.totalAmount, 'totalAmount', { min: 0 });

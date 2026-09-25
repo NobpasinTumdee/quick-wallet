@@ -11650,3 +11650,191 @@ line.arate-zero {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Shared subscriptions — the toggle and its template editor
+   ========================================================================== */
+
+.sub-share {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.sub-share-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+/* The real checkbox stays in the layout and is simply made invisible: it keeps
+   the focus ring, the label association and every keyboard behaviour a switch
+   is supposed to have, which a div with role="switch" would have to rebuild. */
+.sub-share-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sub-share-track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.sub-share-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.sub-share-toggle input:checked + .sub-share-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sub-share-toggle input:checked + .sub-share-track::after {
+  transform: translateX(16px);
+}
+
+.sub-share-toggle input:focus-visible + .sub-share-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sub-share-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sub-share-label strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}
+
+.sub-share-label small {
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---- The template ---- */
+
+.sub-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.sub-split-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.sub-split-head .section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-split-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Name takes the room, amount is fixed so the column of figures lines up. */
+.sub-split-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-split-row.is-invalid input {
+  border-color: var(--negative);
+}
+
+.sub-split-remove {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.sub-split-remove:hover:not(:disabled),
+.sub-split-remove:focus-visible {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.sub-split-empty,
+.sub-split-summary {
+  margin: 0;
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sub-split-summary {
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-split-summary.is-error {
+  color: var(--negative);
+  font-weight: var(--weight-medium);
+}
+
+@media (max-width: 560px) {
+  .sub-split-row {
+    grid-template-columns: minmax(0, 1fr) 90px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-share-track,
+  .sub-share-track::after {
+    transition: none;
+  }
+}

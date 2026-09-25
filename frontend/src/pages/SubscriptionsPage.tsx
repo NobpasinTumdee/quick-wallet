@@ -126,8 +126,19 @@ export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) 
   async function confirmPayment(subscription: Subscription) {
     setPaying((ids) => [...ids, subscription.id]);
     try {
-      await subscriptions.pay(subscription);
+      const result = await subscriptions.pay(subscription);
       toast.success(t('recurring.paidToast', { name: subscription.name, amount: money(Number(subscription.amount) || 0) }));
+
+      /* Said separately from the payment itself, because they are two
+         different facts: the money went out, and somebody now owes you some of
+         it back. A shared bill that failed is a warning rather than an error —
+         the payment did happen, and the toast has to say so or the user will
+         pay it again. */
+      if (result?.billSplit) {
+        toast.success(t('recurring.sharedBillCreated', { owed: money(result.billSplit.owedTotal) }));
+      } else if (result?.billSplitError) {
+        toast.warning(t('recurring.sharedBillFailed', { reason: result.billSplitError }));
+      }
     } catch {
       // useExcelDB already toasted the failure and the hook rolled the caches back.
     } finally {
