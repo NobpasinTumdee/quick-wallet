@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { TranslationKey } from '../locales';
 
 import { cx } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { DatePreset, EMPTY_FILTERS, TxFilters, activeFilters } from '../lib/txFilters';
 import { TransactionType, WalletBalance } from '../types';
 import { Icon } from './Icon';
@@ -262,7 +263,7 @@ export function TransactionFilters({
                   <option value="">{t('activity.filterAllWallets')}</option>
                   {wallets.map((wallet) => (
                     <option key={wallet.id} value={wallet.id}>
-                      {wallet.icon} {wallet.name}
+                      {walletIconText(wallet.icon)} {wallet.name}
                     </option>
                   ))}
                 </Select>

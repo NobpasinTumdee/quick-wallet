@@ -558,6 +558,11 @@ export const th: TranslationSchema = {
   },
 
   forms: {
+    /* ---- ตัวเลือกไอคอนกระเป๋า ---- */
+    iconSource: 'แหล่งไอคอน',
+    iconStandard: 'ไอคอนมาตรฐาน',
+    iconBanks: 'ธนาคารไทย',
+    iconHint: 'เลือกอิโมจิ หรือโลโก้ธนาคารที่ผูกกับกระเป๋านี้',
     installmentNotePlaceholder: 'iPhone 17 Pro',
     // ---- Wallet ----
     walletModeLabel: 'ประเภทกระเป๋าเงิน',

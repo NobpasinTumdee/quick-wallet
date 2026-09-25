@@ -19,7 +19,8 @@
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.13",
     "recharts": "^3.10.1",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "thai-banks-logo": "^1.0.7"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

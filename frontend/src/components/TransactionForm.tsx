@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { todayKey } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
 import { ReceiptScanner } from './ReceiptScanner';
@@ -214,7 +215,7 @@ export function TransactionForm({
             {sourceOptions.length === 0 && <option value="">{t('forms.noEligibleWallet')}</option>}
             {sourceOptions.map((wallet) => (
               <option key={wallet.id} value={wallet.id}>
-                {wallet.icon} {wallet.name}
+                {walletIconText(wallet.icon)} {wallet.name}
               </option>
             ))}
           </Select>
@@ -226,7 +227,7 @@ export function TransactionForm({
               <option value="">{t('forms.selectPlaceholder')}</option>
               {targetOptions.map((wallet) => (
                 <option key={wallet.id} value={wallet.id}>
-                  {wallet.icon} {wallet.name}
+                  {walletIconText(wallet.icon)} {wallet.name}
                   {wallet.mode === 'investment' ? ' (investment)' : ''}
                 </option>
               ))}

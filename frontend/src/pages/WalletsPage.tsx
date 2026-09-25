@@ -2,6 +2,7 @@ import { Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
 import { Icon } from '../components/Icon';
 import { WalletGridSkeleton } from '../components/Skeletons';
@@ -69,9 +70,7 @@ export function WalletsPage() {
       className={cx('wallet-card', wallet.archived && 'is-archived', isOptimistic(wallet) && 'is-pending')}
     >
       <header className="wallet-card-head">
-        <span className="avatar" style={{ background: `${wallet.color}1f`, color: wallet.color }}>
-          {wallet.icon || '💳'}
-        </span>
+        <WalletIconRenderer icon={wallet.icon} color={wallet.color} className="avatar" />
         <div className="stack stack--tight" style={{ gap: 2 }}>
           <span className="wallet-card-name truncate">{wallet.name}</span>
           <span className="list-item-sub">

@@ -21,6 +21,7 @@ import { CardState, utilizationTone } from '../lib/creditMath';
 import { cx, formatPercent, ordinal } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { Badge } from './ui';
+import { WalletIconRenderer } from './WalletIconRenderer';
 
 export function VirtualCard({
   card,
@@ -55,9 +56,7 @@ export function VirtualCard({
       <div className="vcard-sheen" aria-hidden="true" />
 
       <header className="vcard-head">
-        <span className="vcard-icon" aria-hidden="true">
-          {wallet.icon || '💳'}
-        </span>
+        <WalletIconRenderer icon={wallet.icon} className="vcard-icon" />
         {card.overdue ? (
           <Badge tone="negative">{t('cards.overdueBadge')}</Badge>
         ) : card.dueSoon ? (

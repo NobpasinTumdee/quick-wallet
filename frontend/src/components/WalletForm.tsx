@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ordinal } from '../lib/format';
+import { WALLET_BANKS, bankIconValue, bankLabel, isBankIcon } from '../lib/walletIcons';
 import { TranslationKey } from '../locales';
 import { useSettings } from '../state/SettingsContext';
 import { Wallet, WalletKind, WalletMode, WalletType } from '../types';
@@ -31,6 +32,9 @@ const KINDS: { value: WalletKind; labelKey: TranslationKey; modes: WalletMode[] 
 ];
 
 const ICONS = ['💵', '🏦', '💳', '📱', '📈', '🪙', '🏠', '🎯', '✈️', '🎓'];
+
+/** The two sources an icon can come from. */
+type IconTab = 'emoji' | 'bank';
 const COLORS = ['#3b6fff', '#0f9d6b', '#d98324', '#dc3a56', '#8b5cf6', '#0ea5e9', '#ec4899', '#64748b'];
 
 export interface WalletPayload {
@@ -140,6 +144,8 @@ export function WalletForm({
     initialState(settings.currency, wallet, defaultKind),
   );
   const [localError, setLocalError] = useState<string | null>(null);
+  /** Which half of the picker is showing. Seeded from what is already stored. */
+  const [iconTab, setIconTab] = useState<IconTab>(() => (isBankIcon(wallet?.icon) ? 'bank' : 'emoji'));
 
   /* Reset when the sheet opens for a different wallet — not when the cached
      wallet object is rebuilt by a background refresh mid-edit. */
@@ -149,6 +155,7 @@ export function WalletForm({
   useEffect(() => {
     if (open) {
       setForm(initialState(currencyRef.current, wallet, defaultKind));
+      setIconTab(isBankIcon(wallet?.icon) ? 'bank' : 'emoji');
       setLocalError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,21 +369,62 @@ export function WalletForm({
           />
         </Field>
 
-        <Field label={t('forms.icon')} className="span-2">
-          <div className="swatches">
-            {ICONS.map((icon) => (
-              <button
-                key={icon}
-                type="button"
-                className={`swatch${form.icon === icon ? ' is-active' : ''}`}
-                style={{ background: 'var(--surface-2)' }}
-                onClick={() => patch('icon', icon)}
-                aria-label={t('forms.iconNamed', { icon })}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
+        <Field label={t('forms.icon')} className="span-2" hint={t('forms.iconHint')}>
+          {/* Two sources for one value. The tab follows what is already
+              stored, so opening a wallet that wears a bank logo lands on the
+              bank grid rather than on a set of emoji it does not use. */}
+          <Segmented<IconTab>
+            value={iconTab}
+            ariaLabel={t('forms.iconSource')}
+            onChange={setIconTab}
+            options={[
+              { value: 'emoji', label: t('forms.iconStandard') },
+              { value: 'bank', label: t('forms.iconBanks') },
+            ]}
+          />
+
+          {iconTab === 'emoji' ? (
+            <div className="swatches" style={{ marginTop: 'var(--space-2)' }}>
+              {ICONS.map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  className={`swatch${form.icon === icon ? ' is-active' : ''}`}
+                  style={{ background: 'var(--surface-2)' }}
+                  onClick={() => patch('icon', icon)}
+                  aria-label={t('forms.iconNamed', { icon })}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="bank-grid" role="radiogroup" aria-label={t('forms.iconBanks')}>
+              {WALLET_BANKS.map((bank) => {
+                const value = bankIconValue(bank.symbol);
+                const active = form.icon === value;
+                const label = bankLabel(bank, settings.locale);
+                return (
+                  <button
+                    key={bank.symbol}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`bank-swatch${active ? ' is-active' : ''}`}
+                    /* The brand colour rings the tile rather than filling it:
+                       the logo needs its white field to stay legible, and the
+                       ring is what makes the selected one obvious. */
+                    style={active ? { borderColor: bank.color, boxShadow: `0 0 0 2px ${bank.color}55` } : undefined}
+                    onClick={() => patch('icon', value)}
+                    title={label}
+                  >
+                    <img src={bank.logo} alt="" aria-hidden="true" loading="lazy" draggable={false} />
+                    <span className="bank-swatch-name">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Field>
 
         <Field label={t('forms.colour')} className="span-2">

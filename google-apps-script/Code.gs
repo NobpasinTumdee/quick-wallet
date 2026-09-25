@@ -1889,6 +1889,15 @@ function walletsGet_(user, query) {
   return computeWalletBalances_(user.id).filter(function (w) { return w.id === id; })[0];
 }
 
+/**
+ * How long a wallet's `icon` may be.
+ *
+ * Wide enough for `bank:` plus the longest symbol in the logo set
+ * ("bank:PromptPay"), and narrow enough that the cell stays what it has always
+ * been: a short identifier the client resolves to a picture.
+ */
+var WALLET_ICON_MAX = 24;
+
 function walletsCreate_(user, body) {
   var name = str_(body.name, 'name', { max: 60 });
 
@@ -1918,7 +1927,12 @@ function walletsCreate_(user, body) {
     currency: (str_(body.currency, 'currency', { required: false, max: 8 }) || 'USD').toUpperCase(),
     openingBalance: num_(body.openingBalance, 'openingBalance', {}),
     color: str_(body.color, 'color', { required: false, max: 20 }) || '#4f8cff',
-    icon: str_(body.icon, 'icon', { required: false, max: 8 }) ||
+    /* WALLET_ICON_MAX, not 8. No new column, and the cell still holds one
+       short string — but an icon is now either an emoji or a `bank:SYMBOL`
+       reference, and "bank:PromptPay" is fourteen characters. The old bound
+       rejected every bank logo with a 400. It remains a bounded identifier
+       the client resolves to a picture, never markup or a URL. */
+    icon: str_(body.icon, 'icon', { required: false, max: WALLET_ICON_MAX }) ||
       (mode === 'investment' ? '📈' : '💳'),
     archived: false,
     note: str_(body.note, 'note', { required: false, max: 300 }),
@@ -1950,7 +1964,9 @@ function walletsUpdate_(user, query, body) {
     patch.openingBalance = num_(body.openingBalance, 'openingBalance', {});
   }
   if (body.color !== undefined) patch.color = str_(body.color, 'color', { max: 20 });
-  if (body.icon !== undefined) patch.icon = str_(body.icon, 'icon', { required: false, max: 8 });
+  if (body.icon !== undefined) {
+    patch.icon = str_(body.icon, 'icon', { required: false, max: WALLET_ICON_MAX });
+  }
   if (body.note !== undefined) patch.note = str_(body.note, 'note', { required: false, max: 300 });
   if (body.archived !== undefined) patch.archived = bool_(body.archived);
 

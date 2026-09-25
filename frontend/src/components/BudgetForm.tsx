@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { formatPeriod } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Budget, BudgetMode, BudgetScope, WalletBalance } from '../types';
 import {
@@ -180,7 +181,7 @@ export function BudgetForm({
                 .filter((w) => w.mode === 'expense')
                 .map((wallet) => (
                   <option key={wallet.id} value={wallet.id}>
-                    {wallet.icon} {wallet.name}
+                    {walletIconText(wallet.icon)} {wallet.name}
                   </option>
                 ))}
             </Select>

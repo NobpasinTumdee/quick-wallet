@@ -7,6 +7,7 @@ import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
 import { Icon } from './Icon';
+import { WalletIconRenderer } from './WalletIconRenderer';
 
 /**
  * Hold-and-drag quick add.
@@ -389,9 +390,7 @@ export function QuickTransactionWidget({
                     data-qa-value={wallet.id}
                     onClick={() => choose('wallet', wallet.id)}
                   >
-                    <span className="qa-emoji" aria-hidden="true">
-                      {wallet.icon}
-                    </span>
+                    <WalletIconRenderer icon={wallet.icon} size="sm" className="qa-emoji" />
                     <span className="qa-option-label">{wallet.name}</span>
                   </button>
                 ))}

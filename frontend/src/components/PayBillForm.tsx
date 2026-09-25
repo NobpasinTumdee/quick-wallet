@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 
 import { CardState } from '../lib/creditMath';
 import { formatDate, todayKey } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
 import {
@@ -227,7 +228,7 @@ export function PayBillForm({
             <Select value={fromWalletId} onChange={(e) => setFromWalletId(e.target.value)}>
               {wallets.map((wallet) => (
                 <option key={wallet.id} value={wallet.id}>
-                  {t('forms.walletOption', { icon: wallet.icon, name: wallet.name, amount: money(wallet.balance) })}
+                  {t('forms.walletOption', { icon: walletIconText(wallet.icon), name: wallet.name, amount: money(wallet.balance) })}
                 </option>
               ))}
             </Select>

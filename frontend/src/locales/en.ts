@@ -559,6 +559,13 @@ export const en = {
   },
 
   forms: {
+    /* ---- The wallet icon picker ----
+       One stored field, two sources: an emoji, or a Thai bank logo saved as
+       `bank:SYMBOL`. */
+    iconSource: 'Icon source',
+    iconStandard: 'Standard icons',
+    iconBanks: 'Thai banks',
+    iconHint: 'Pick an emoji, or the logo of the bank this wallet is with.',
     installmentNotePlaceholder: 'iPhone 17 Pro',
     // ---- Wallet ----
     walletModeLabel: 'Wallet mode',

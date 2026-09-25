@@ -16,6 +16,7 @@ import { Icon } from '../components/Icon';
 import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { FinancialInboxWidget } from '../components/FinancialInboxWidget';
+import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { BalanceView, SwipeableBalanceCard } from '../components/SwipeableBalanceCard';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
@@ -231,9 +232,7 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
 
   const walletRow = (wallet: WalletBalance) => (
     <div key={wallet.id} className="list-item">
-      <span className="avatar" style={{ background: `${wallet.color}1f`, color: wallet.color }}>
-        {wallet.icon || '💳'}
-      </span>
+      <WalletIconRenderer icon={wallet.icon} color={wallet.color} className="avatar" />
       <div className="list-item-main">
         <div className="list-item-title truncate">{wallet.name}</div>
         <div className="list-item-sub">

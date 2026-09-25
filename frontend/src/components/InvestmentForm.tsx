@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { formatMoney, formatNumber, todayKey } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { Holding, projectAverageCost } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, InvestmentStatus, WalletBalance } from '../types';
@@ -319,7 +320,7 @@ export function InvestmentForm({
             {wallets.length === 0 && <option value="">No investment wallet yet</option>}
             {wallets.map((wallet) => (
               <option key={wallet.id} value={wallet.id}>
-                {wallet.icon} {wallet.name}
+                {walletIconText(wallet.icon)} {wallet.name}
               </option>
             ))}
           </Select>
