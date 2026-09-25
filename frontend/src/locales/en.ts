@@ -306,7 +306,22 @@ export const en = {
       'The cost per share is about {{factor}}× below the live price — the sign of a {{quote}} figure saved as {{base}}. Open the purchase history and re-enter the offending buy with the {{quote}} toggle.',
   },
 
+  /* The re-authentication dialog. Its own section because it guards whatever
+     it is pointed at, not wallets in particular. */
+  confirm: {
+    password: 'Your password',
+    passwordPlaceholder: 'Enter your password',
+    wrongPassword: 'That password is not right. Nothing was deleted.',
+  },
+
   wallets: {
+    /* ---- Deleting, which asks for the password ---- */
+    deleteTitle: 'Delete {{name}}?',
+    deleteWarning: 'This permanently deletes {{name}}.',
+    deleteWarningBody: 'Deleting a wallet cannot be undone, and nothing in the workbook keeps a copy. Enter your password to confirm it is you.',
+    deleteConfirm: 'Delete wallet',
+    deleteEverything: 'Delete wallet and records',
+    deleteCascadeOption: 'Also delete every transaction, investment and budget attached to this wallet',
     title: 'Wallets',
     accounts: 'Accounts',
     lede: 'Spending wallets track day-to-day money. Investment wallets hold positions and are funded by a transfer.',
@@ -333,7 +348,6 @@ export const en = {
     investingEmpty: 'No investment wallets yet — add one to start tracking positions.',
     deleted: 'Deleted "{{name}}".',
     deletedWithRecords: 'Deleted "{{name}}" and its records.',
-    deleteCascadeConfirm: '{{message}}\n\nDelete "{{name}}" AND all of its records permanently?',
   },
 
   activity: {

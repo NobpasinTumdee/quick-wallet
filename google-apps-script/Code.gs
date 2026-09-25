@@ -563,7 +563,9 @@ function dispatch_(action, method, query, body, token) {
     'wallets.get': function () { return walletsGet_(requireAuth_(token), query); },
     'wallets.create': function () { return walletsCreate_(requireAuth_(token), body); },
     'wallets.update': function () { return walletsUpdate_(requireAuth_(token), query, body); },
-    'wallets.delete': function () { return walletsDelete_(requireAuth_(token), query); },
+    /* Takes the body as well as the query: deleting a wallet re-checks the
+       user's password, and that only ever travels in a POST body. */
+    'wallets.delete': function () { return walletsDelete_(requireAuth_(token), query, body); },
 
     'transactions.list': function () { return transactionsList_(requireAuth_(token), query); },
     'transactions.get': function () { return ownedRow_(requireAuth_(token), 'Transactions', query); },
@@ -2029,7 +2031,49 @@ function walletsUpdate_(user, query, body) {
   return updated;
 }
 
-function walletsDelete_(user, query) {
+/**
+ * Delete a wallet, after the user proves who they are.
+ *
+ * -------------------------------------------------------------------------
+ * WHY THE PASSWORD IS READ FROM THE BODY AND NEVER THE QUERY
+ * -------------------------------------------------------------------------
+ * This is the load-bearing line of the whole feature, so it is worth being
+ * explicit. `doGet` dispatches any action it is handed, which means
+ * `wallets.delete` could — until now — be triggered by a bare URL. Accepting
+ * the password from `query` would therefore have made
+ * `…/exec?action=wallets.delete&id=…&password=hunter2` a working request: a
+ * plaintext password in a URL, which lands in browser history, in referrers,
+ * and in Google's own request logs.
+ *
+ * `body` is empty on every GET, so reading the password from there and nowhere
+ * else has a second effect worth having: a destructive action can no longer be
+ * performed over GET at all. A link cannot delete your wallet.
+ *
+ * -------------------------------------------------------------------------
+ * WHY 403 AND NOT 401
+ * -------------------------------------------------------------------------
+ * The session is valid — `requireAuth_` has already proved that. What failed
+ * is a second, local check. Answering 401 would be wrong on its own terms, and
+ * it would also sign the user out: the API client treats every 401 as an
+ * expired session, drops the token and bounces to the login screen. Getting a
+ * password wrong once must not do that.
+ *
+ * There is no counter here and deliberately so: `verifyPassword_` runs PBKDF2
+ * over the stored iterations, which is slow by construction, and a lockout
+ * counter in a spreadsheet would be a write on every failed attempt — a much
+ * better denial-of-service target than the thing it protects.
+ */
+function walletsDelete_(user, query, body) {
+  var password = str_((body || {}).password, 'password', { required: false });
+  if (!password) {
+    throw apiError_('Confirm your password to delete a wallet', 403, 'PASSWORD_REQUIRED');
+  }
+  /* `requireAuth_` already read the row, hash and all — no second lookup, and
+     no window where the account could change between the two. */
+  if (!verifyPassword_(password, user.passwordHash)) {
+    throw apiError_('That password is not right', 403, 'WRONG_PASSWORD');
+  }
+
   var wallet = ownedWallet_(user.id, str_(query.id, 'id'));
   var cascade = bool_(query.cascade, false);
 

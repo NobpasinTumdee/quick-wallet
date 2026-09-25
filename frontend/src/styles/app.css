@@ -11989,3 +11989,68 @@ line.arate-zero {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   The re-authentication dialog
+   ========================================================================== */
+
+.pw-confirm-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--negative) 34%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--negative-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.pw-confirm-warning > svg {
+  flex: none;
+  color: var(--negative);
+}
+
+.pw-confirm-warning strong {
+  display: block;
+  font-weight: var(--weight-semi);
+}
+
+.pw-confirm-warning p {
+  margin: 4px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* The cascade opt-in only appears once the server has said what is attached,
+   so it is styled to read as a second, heavier decision rather than a detail. */
+.pw-confirm-cascade {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pw-confirm-cascade input {
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--negative);
+  width: 16px;
+  height: 16px;
+}
+
+.pw-confirm .is-invalid {
+  border-color: var(--negative);
+}
+
+.pw-confirm .is-invalid:focus-visible {
+  outline-color: var(--negative);
+}

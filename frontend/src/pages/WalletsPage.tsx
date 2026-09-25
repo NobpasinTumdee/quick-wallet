@@ -2,12 +2,15 @@ import { Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { PasswordConfirmModal } from '../components/PasswordConfirmModal';
 import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
 import { Icon } from '../components/Icon';
 import { WalletGridSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
-import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
+import { ApiError } from '../api/client';
+import { isOptimistic } from '../hooks/useExcelDB';
+import { useWallets } from '../hooks/useWallets';
 import { cx } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
@@ -17,7 +20,7 @@ export function WalletsPage() {
   const money = useMoneyFormatter();
   const [showArchived, setShowArchived] = useState(false);
 
-  const wallets = useExcelDB<WalletBalance>('wallets', { includeArchived: true });
+  const wallets = useWallets();
   const [editing, setEditing] = useState<WalletBalance | undefined>();
   const [formOpen, setFormOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -33,22 +36,76 @@ export function WalletsPage() {
     return Promise.resolve();
   }
 
-  async function remove(wallet: WalletBalance) {
+  /* ---- Deleting, which is the one action that re-authenticates ----
+     The native confirm() this replaced could be dismissed by muscle memory and
+     proved nothing about who was at the keyboard. The password is checked by
+     the server inside the same request that deletes, so this dialog is the
+     prompt, not the protection. */
+  const [deleting, setDeleting] = useState<WalletBalance | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Ticked by the user, once the server has said what else would go. */
+  const [cascade, setCascade] = useState(false);
+  /** The server refused: this wallet still has records attached. */
+  const [needsCascade, setNeedsCascade] = useState(false);
+
+  function askToDelete(wallet: WalletBalance) {
+    setDeleting(wallet);
+    setPasswordError(null);
+    setDeleteError(null);
+    setCascade(false);
+    setNeedsCascade(false);
     setNotice(null);
+  }
+
+  function closeDelete() {
+    setDeleting(null);
+    setPasswordError(null);
+    setDeleteError(null);
+    setCascade(false);
+    setNeedsCascade(false);
+  }
+
+  async function confirmDelete(password: string) {
+    const wallet = deleting;
+    if (!wallet) return;
+
+    setDeleteBusy(true);
+    setPasswordError(null);
+    setDeleteError(null);
     try {
-      await wallets.remove(wallet.id);
-      setNotice(t('wallets.deleted', { name: wallet.name }));
-    } catch (err) {
-      // The backend blocks deleting a wallet with records — offer the cascade.
-      const message = err instanceof Error ? err.message : t('common.somethingWentWrong');
-      const confirmed = window.confirm(
-        t('wallets.deleteCascadeConfirm', { message, name: wallet.name }),
+      await wallets.deleteWallet(wallet.id, password, { cascade });
+      setNotice(
+        cascade
+          ? t('wallets.deletedWithRecords', { name: wallet.name })
+          : t('wallets.deleted', { name: wallet.name }),
       );
-      if (!confirmed) return;
-      await wallets.remove(wallet.id, { cascade: true });
-      setNotice(t('wallets.deletedWithRecords', { name: wallet.name }));
+      closeDelete();
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : '';
+      const message = err instanceof Error ? err.message : t('common.somethingWentWrong');
+
+      if (code === 'WRONG_PASSWORD' || code === 'PASSWORD_REQUIRED') {
+        /* Against the field, so the one thing to fix is the one thing marked.
+           The typed value is left alone — this is usually a typo. */
+        setPasswordError(t('confirm.wrongPassword'));
+      } else if (code === 'WALLET_NOT_EMPTY') {
+        /* The server counted what is attached and refused. Its message carries
+           the numbers, so it is shown verbatim rather than paraphrased, and
+           the cascade switch appears — unticked, because destroying history
+           has to be chosen, never inherited from a previous attempt. */
+        setDeleteError(message);
+        setNeedsCascade(true);
+        setCascade(false);
+      } else {
+        setDeleteError(message);
+      }
+    } finally {
+      setDeleteBusy(false);
     }
   }
+
 
   // Presentational split only — one fetch, two groups.
   const spending = visible.filter((w) => w.mode === 'expense');
@@ -134,7 +191,7 @@ export function WalletsPage() {
           >
             {wallet.archived ? t('common.restore') : t('common.archive')}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void remove(wallet)}>
+          <Button size="sm" variant="ghost" onClick={() => askToDelete(wallet)}>
             {t('common.delete')}
           </Button>
         </div>
@@ -262,6 +319,38 @@ export function WalletsPage() {
           wallets.clearMutationError();
         }}
         onSubmit={save}
+      />
+
+      <PasswordConfirmModal
+        open={deleting !== null}
+        title={t('wallets.deleteTitle', { name: deleting?.name ?? '' })}
+        warning={
+          <>
+            <strong>{t('wallets.deleteWarning', { name: deleting?.name ?? '' })}</strong>
+            <p>{t('wallets.deleteWarningBody')}</p>
+          </>
+        }
+        confirmLabel={cascade ? t('wallets.deleteEverything') : t('wallets.deleteConfirm')}
+        busy={deleteBusy}
+        passwordError={passwordError}
+        error={deleteError}
+        extra={
+          /* Only after the server has said what is attached. Offering it up
+             front would invite someone to tick "and everything in it" before
+             they knew what "everything" was. */
+          needsCascade ? (
+            <label className="pw-confirm-cascade">
+              <input
+                type="checkbox"
+                checked={cascade}
+                onChange={(event) => setCascade(event.target.checked)}
+              />
+              <span>{t('wallets.deleteCascadeOption')}</span>
+            </label>
+          ) : undefined
+        }
+        onConfirm={(password) => void confirmDelete(password)}
+        onClose={closeDelete}
       />
     </>
   );

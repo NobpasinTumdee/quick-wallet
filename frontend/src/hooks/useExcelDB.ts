@@ -250,7 +250,8 @@ export interface CollectionState<T> extends QueryState<T[]> {
   clearMutationError: () => void;
   create: (payload: Partial<T> | Record<string, unknown>) => Promise<T>;
   update: (id: string, payload: Partial<T> | Record<string, unknown>) => Promise<T>;
-  remove: (id: string, params?: QueryParams) => Promise<void>;
+  /** `body` carries anything that must stay out of a URL — see `remove`. */
+  remove: (id: string, params?: QueryParams, body?: unknown) => Promise<void>;
   /** POST to `/{resource}/{id}/{action}` — e.g. "sell position". */
   action: <R = T>(id: string, actionName: string, payload?: unknown) => Promise<R>;
 }
@@ -357,10 +358,12 @@ export function useExcelDB<T extends { id: string }>(
   );
 
   const remove = useCallback(
-    async (id: string, deleteParams?: QueryParams) => {
+    /* `deleteBody` carries anything that must not appear in a URL — today that
+       is the password `wallets.delete` re-checks. Params stay params. */
+    async (id: string, deleteParams?: QueryParams, deleteBody?: unknown) => {
       await optimistic<{ ok: boolean }>(
         (rows) => rows.filter((row) => row.id !== id),
-        () => api.delete<{ ok: boolean }>(`${path}/${id}`, deleteParams),
+        () => api.delete<{ ok: boolean }>(`${path}/${id}`, deleteParams, deleteBody),
         undefined,
         'Could not delete',
       );

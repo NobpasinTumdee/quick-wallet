@@ -336,5 +336,12 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
-  delete: <T>(path: string, params?: QueryParams) => request<T>(path, { method: 'DELETE', params }),
+  /**
+   * `body` exists for one reason: deleting a wallet re-checks the user's
+   * password, and a secret must never travel as a query parameter. Non-GET
+   * requests are serialised into the POST envelope, so anything here stays in
+   * the request body — out of URLs, history and server logs.
+   */
+  delete: <T>(path: string, params?: QueryParams, body?: unknown) =>
+    request<T>(path, { method: 'DELETE', params, body }),
 };
