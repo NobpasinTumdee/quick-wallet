@@ -12190,3 +12190,77 @@ line.arate-zero {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Overdraft warning
+   ========================================================================== */
+
+.overdraft-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.overdraft-warning > svg {
+  flex: none;
+  color: var(--warning);
+}
+
+.overdraft-warning p {
+  margin: 0;
+}
+
+/* The three figures, as a statement rather than a table: label left, number
+   right, and the result separated by a rule so the eye lands on it. */
+.overdraft-sums {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+}
+
+.overdraft-sums > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.overdraft-sums dt {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overdraft-sums dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+
+.overdraft-sums .is-result {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.overdraft-sums .is-result dt,
+.overdraft-sums .is-result dd {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+}

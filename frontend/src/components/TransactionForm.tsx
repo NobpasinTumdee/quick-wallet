@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { todayKey } from '../lib/format';
+import { checkOverdraft } from '../lib/overdraft';
 import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
+import { OverdraftWarningModal } from './OverdraftWarningModal';
 import { ReceiptScanner } from './ReceiptScanner';
 import { ReceiptScan } from '../hooks/useReceiptScanner';
 import {
@@ -104,6 +106,16 @@ export function TransactionForm({
     }));
   }
   const [localError, setLocalError] = useState<string | null>(null);
+  /**
+   * Set when the entry would overdraw its wallet and the user has not yet
+   * said to go ahead.
+   *
+   * The payload is held rather than re-read on confirm: the dialog is modal,
+   * but a receipt scan or a background wallet refresh could still land between
+   * asking and answering, and the user must be asked about the numbers they
+   * were shown — not about whatever the form says a second later.
+   */
+  const [pending, setPending] = useState<TransactionPayload | null>(null);
 
   /* Only on open / a different record — see the note in InvestmentForm. */
   const walletsRef = useRef(wallets);
@@ -125,6 +137,17 @@ export function TransactionForm({
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const amount = parseDecimal(form.amount);
+
+  /* The wallet this entry takes money out of, and whether that leaves it
+     short. An edit hands its own stored row over so the amount already
+     deducted is not counted a second time — see `checkOverdraft`. */
+  const sourceWallet = wallets.find((w) => w.id === form.walletId) ?? null;
+  const overdraft = checkOverdraft({
+    wallet: sourceWallet,
+    type: form.type,
+    amount,
+    previous: transaction ?? null,
+  });
 
   // Only expense-mode wallets can hold income/expense rows; transfers can touch any.
   const sourceOptions = form.type === 'transfer' ? wallets : wallets.filter((w) => w.mode === 'expense');
@@ -163,10 +186,27 @@ export function TransactionForm({
       return;
     }
     setLocalError(null);
+
+    const payload: TransactionPayload = { ...form, amount };
+
+    /* Held back for confirmation rather than blocked: logging a past month, or
+       money a friend fronted, legitimately takes a wallet negative, and an app
+       that records what happened cannot refuse to record it. */
+    if (overdraft.warn) {
+      setPending(payload);
+      return;
+    }
+
+    await send(payload);
+  }
+
+  async function send(payload: TransactionPayload) {
     try {
-      await onSubmit({ ...form, amount });
+      await onSubmit(payload);
+      setPending(null);
     } catch {
-      /* parent shows `error` */
+      /* parent shows `error`; the sheet stays open with the entry intact */
+      setPending(null);
     }
   }
 
@@ -280,6 +320,21 @@ export function TransactionForm({
 
         <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
       </form>
+
+      {/* Over the form, not instead of it: cancelling returns to the entry
+          exactly as it was so the amount or the wallet can be corrected. */}
+      <OverdraftWarningModal
+        open={pending !== null}
+        wallet={sourceWallet}
+        amount={pending?.amount ?? amount}
+        check={overdraft}
+        busy={busy}
+        onConfirm={() => {
+          const payload = pending;
+          if (payload) void send(payload);
+        }}
+        onCancel={() => setPending(null)}
+      />
     </Modal>
   );
 }

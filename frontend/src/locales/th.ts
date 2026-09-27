@@ -571,6 +571,15 @@ export const th: TranslationSchema = {
   },
 
   forms: {
+    /* ---- คำเตือนยอดเงินไม่พอ ---- */
+    overdraftTitle: 'ยอดเงินในกระเป๋าไม่พอ',
+    overdraftBody: 'รายจ่ายนี้สูงกว่ายอดเงินที่มีอยู่ ยอดกระเป๋าเงินของคุณจะติดลบ คุณต้องการทำรายการต่อหรือไม่',
+    overdraftBalance: 'ยอด {{wallet}} ตอนนี้',
+    overdraftAmount: 'รายการนี้',
+    overdraftAfter: 'ยอดคงเหลือหลังทำรายการ',
+    overdraftProceed: 'ยืนยันทำรายการต่อ',
+    overCreditLimitTitle: 'เกินวงเงินบัตร',
+    overCreditLimitBody: 'รายการนี้ทำให้ {{wallet}} เกินวงเงินไป {{amount}} บันทึกได้ตามปกติ แต่ผู้ออกบัตรอาจไม่อนุมัติ',
     /* ---- ตัวเลือกไอคอนกระเป๋า ---- */
     iconSource: 'แหล่งไอคอน',
     iconStandard: 'ไอคอนมาตรฐาน',

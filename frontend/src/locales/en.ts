@@ -573,6 +573,17 @@ export const en = {
   },
 
   forms: {
+    /* ---- Overdraft warning ----
+       Asked, never enforced: logging a past month or money someone fronted
+       legitimately takes a wallet negative. */
+    overdraftTitle: 'Insufficient balance',
+    overdraftBody: 'This expense is greater than the wallet’s current balance. Your wallet balance will become negative. Do you want to continue?',
+    overdraftBalance: '{{wallet}} now',
+    overdraftAmount: 'This entry',
+    overdraftAfter: 'Balance afterwards',
+    overdraftProceed: 'Proceed anyway',
+    overCreditLimitTitle: 'Over the credit limit',
+    overCreditLimitBody: 'This puts {{wallet}} {{amount}} past its credit limit. Recording it is fine — the card issuer may not agree.',
     /* ---- The wallet icon picker ----
        One stored field, two sources: an emoji, or a Thai bank logo saved as
        `bank:SYMBOL`. */
