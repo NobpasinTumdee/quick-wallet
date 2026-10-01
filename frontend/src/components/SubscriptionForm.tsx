@@ -7,6 +7,7 @@ import { SplitDraft, summariseSplits, toPayload } from '../lib/splitMath';
 import { formatDate } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, SubscriptionFrequency, WalletBalance } from '../types';
+import { walletIconText } from '../lib/walletIcons';
 import {
   Alert,
   Button,
@@ -176,7 +177,7 @@ export function SubscriptionForm({
             <option value="">Select a wallet…</option>
             {wallets.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.icon} {w.name}
+                {walletIconText(w.icon)} {w.name}
               </option>
             ))}
           </Select>

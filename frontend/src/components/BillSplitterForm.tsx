@@ -54,6 +54,7 @@ import {
 } from '../lib/splitMath';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { BillSplit, WalletBalance } from '../types';
+import { walletIconText } from '../lib/walletIcons';
 import { Icon } from './Icon';
 import {
   Alert,
@@ -348,7 +349,7 @@ export function BillSplitterForm({
               >
                 {wallets.map((w) => (
                   <option key={w.id} value={w.id}>
-                    {w.icon} {w.name}
+                    {walletIconText(w.icon)} {w.name}
                   </option>
                 ))}
               </Select>
