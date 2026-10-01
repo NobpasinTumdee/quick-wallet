@@ -88,6 +88,14 @@ export interface BillSplitterState {
   refresh: () => Promise<void>;
 
   create: (input: CreateBillSplitInput) => Promise<BillSplitResult>;
+  /**
+   * Corrects a bill that has not started settling.
+   *
+   * The server refuses once anything has been repaid — a share someone has
+   * already paid cannot be rewritten without orphaning the income row that
+   * recorded it — so the UI only offers this while every share is outstanding.
+   */
+  update: (id: string, input: CreateBillSplitInput) => Promise<BillSplitResult>;
   /** Settles one share and books the money back in. Idempotent. */
   markPaid: (bill: BillSplit, index: number) => Promise<BillSplitResult>;
   /** Undoes a repayment, removing the income row it wrote. */
@@ -227,6 +235,39 @@ export function useBillSplitter(): BillSplitterState {
     [addTransaction, patchWallet],
   );
 
+  const update = useCallback(
+    async (id: string, input: CreateBillSplitInput) => {
+      setCreating(true);
+      let result: BillSplitResult;
+      try {
+        result = await api.patch<BillSplitResult>(`/api/bill-splits/${id}`, input);
+      } finally {
+        setCreating(false);
+      }
+
+      if (!result?.billSplit?.id) {
+        throw new Error('The server did not return the updated bill');
+      }
+
+      mutateMatching<BillSplit[]>('/api/bill-splits', (rows) =>
+        (rows ?? []).map((row) => (row.id === id ? result.billSplit : row)),
+      );
+      /* The expense row may have moved wallet, changed amount or both, and the
+         wallet balances follow from it — all of which the server has already
+         recomputed. Refetched rather than patched here: an edit is rare and
+         deliberate, unlike marking a share paid, so one extra round trip buys
+         correctness with nothing a user would notice. */
+      if (result.transaction) {
+        mutateMatching<Transaction[]>('/api/transactions', (rows) =>
+          (rows ?? []).map((row) => (row.id === result.transaction?.id ? result.transaction : row)),
+        );
+      }
+      invalidate(DERIVED);
+      return result;
+    },
+    [],
+  );
+
   const markPaid = useCallback(
     async (bill: BillSplit, index: number) => {
       const share = bill.splits?.[index];
@@ -353,6 +394,7 @@ export function useBillSplitter(): BillSplitterState {
     mutating: collection.mutating || wallets.mutating || creating,
     refresh,
     create,
+    update,
     markPaid,
     markUnpaid,
     remove,

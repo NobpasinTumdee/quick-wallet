@@ -807,6 +807,12 @@ export const th: TranslationSchema = {
   },
 
   split: {
+    /* ---- แก้ไขบิล ---- */
+    editTitle: 'แก้ไข {{title}}',
+    editBill: 'แก้ไขบิลนี้',
+    saveChanges: 'บันทึกการแก้ไข',
+    saving: 'กำลังบันทึก…',
+    savedToast: 'อัปเดต {{title}} แล้ว',
     // ---- Chip-based creation flow ----
     amountPlaceholder: '0',
     titlePlaceholder: 'ค่าอะไร?',

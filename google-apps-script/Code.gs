@@ -4659,34 +4659,138 @@ function billSplitsMarkUnpaid_(user, query, body) {
 }
 
 /** Edits the parts of a bill that are safe to change after the fact. */
+/**
+ * Correct a bill that has not started settling yet.
+ *
+ * -------------------------------------------------------------------------
+ * WHAT MAY BE EDITED, AND WHEN
+ * -------------------------------------------------------------------------
+ * A bill is two rows: the BillSplits record and the expense Transaction it
+ * wrote when it was created. Editing one without the other is how a wallet
+ * balance and a bill stop agreeing forever, so this updates both in the one
+ * locked request — which is also why the total and the wallet, refused by the
+ * previous version of this handler, can now be changed at all.
+ *
+ * It is allowed only while *nothing has been repaid*. Two separate checks,
+ * because they fail for different reasons:
+ *
+ *   settled        every share is paid; the bill is history, and history is
+ *                  not edited.
+ *   any share paid the bill is still open, but somebody has already handed
+ *                  money back and an income Transaction exists recording it.
+ *                  Rewriting that share — or the total it is a fraction of —
+ *                  would leave a repayment of 250 against a share that now
+ *                  claims to be 300, with nothing anywhere saying which is
+ *                  right.
+ *
+ * The second is the one a status check alone would miss: a bill with one of
+ * three shares paid is still 'open'.
+ *
+ * -------------------------------------------------------------------------
+ * WHY `isPaid` IS NEVER TAKEN FROM THE REQUEST
+ * -------------------------------------------------------------------------
+ * `parseSplits_` reads `isPaid` and `repaymentTxId` off each entry, because
+ * `billSplits.create` legitimately carries them. Accepting them here would let
+ * a client mark a share settled without going through `markPaid` — which is
+ * the only thing that writes the income row the money actually arrives in. The
+ * bill would report money recovered that never came back. Every share written
+ * by this handler is therefore forced to unpaid, which is also the only state
+ * an editable bill can be in.
+ */
 function billSplitsUpdate_(user, query, body) {
   var bill = findById_('BillSplits', str_(query.id, 'id'));
   if (!bill || bill.userId !== user.id) {
     throw apiError_('Bill split not found', 404, 'NOT_FOUND');
   }
 
-  var patch = {};
-  if (body.title !== undefined) patch.title = str_(body.title, 'title', { max: 120 });
-  if (body.note !== undefined) patch.note = str_(body.note, 'note', { required: false, max: 300 });
+  var existing = Object.prototype.toString.call(bill.splitsJSON) === '[object Array]'
+    ? bill.splitsJSON
+    : [];
 
-  /* The shares can be rewritten, but the total and the wallet cannot: both are
-     already recorded in an expense Transaction the user may have edited, and
-     silently rewriting one side of that pair is how the wallet balance and the
-     bill stop agreeing. Delete and recreate to change those. */
-  if (body.splits !== undefined) {
-    var splits = parseSplits_(body.splits, Number(bill.totalAmount) || 0);
-    patch.splitsJSON = splits.map(function (s) {
-      return {
-        personName: s.personName, amount: s.amount, isPaid: s.isPaid,
-        repaymentTxId: s.repaymentTxId
-      };
-    });
-    patch.status = splitsStatus_(splits);
+  if (String(bill.status || '').toLowerCase() === 'settled') {
+    throw apiError_('Cannot edit a resolved bill', 409, 'BILL_RESOLVED');
+  }
+
+  var paid = existing.filter(function (share) { return share && share.isPaid; });
+  if (paid.length) {
+    throw apiError_(
+      'Someone has already paid you back on this bill, so it can no longer be edited. ' +
+        'Undo their repayment first, or delete the bill and record it again.',
+      409,
+      'BILL_HAS_REPAYMENTS'
+    );
+  }
+
+  /* ---- what the bill becomes ---- */
+  var title = body.title !== undefined ? str_(body.title, 'title', { max: 120 }) : bill.title;
+  var note = body.note !== undefined
+    ? str_(body.note, 'note', { required: false, max: 300 })
+    : bill.note;
+
+  var totalAmount = body.totalAmount !== undefined
+    ? num_(body.totalAmount, 'totalAmount', { min: 0 })
+    : Number(bill.totalAmount) || 0;
+  if (!(totalAmount > 0)) throw bad_('"totalAmount" must be greater than zero');
+
+  var walletId = body.walletId !== undefined ? str_(body.walletId, 'walletId') : bill.walletId;
+  var wallet = ownedWallet_(user.id, walletId, 'Wallet');
+  if (wallet.mode === 'investment') {
+    throw bad_(
+      'A bill has to be paid from a spending wallet, not an investment one.',
+      'WRONG_WALLET_MODE'
+    );
+  }
+
+  /* Validated against the *new* total, so lowering a bill below the shares it
+     already carries is refused rather than quietly producing a bill whose
+     parts exceed the whole. */
+  var splits = body.splits !== undefined
+    ? parseSplits_(body.splits, totalAmount)
+    : parseSplits_(existing, totalAmount);
+
+  var category = body.category !== undefined
+    ? (str_(body.category, 'category', { required: false, max: 60 }) || 'Shared')
+    : '';
+  var date = body.date !== undefined ? isoDate_(body.date, 'date') : '';
+
+  var patch = {
+    title: title,
+    note: note,
+    totalAmount: money_(totalAmount),
+    walletId: walletId,
+    splitsJSON: splits.map(function (s) {
+      /* Forced unpaid — see the note above. An editable bill has no
+         repayments by definition, so this is also simply the truth. */
+      return { personName: s.personName, amount: s.amount, isPaid: false, repaymentTxId: '' };
+    }),
+    status: 'open'
+  };
+
+  /* ---- the expense that went with it ----
+     Updated in the same call so the ledger never disagrees with the bill. A
+     transaction the user has since deleted from the Activity screen leaves
+     nothing to update, which is not an error: the bill is still theirs to
+     correct. */
+  var transaction = null;
+  if (bill.expenseTxId) {
+    var tx = findById_('Transactions', bill.expenseTxId);
+    if (tx && tx.userId === user.id) {
+      var txPatch = { amount: money_(totalAmount), walletId: walletId };
+      if (category) txPatch.category = category;
+      if (date) txPatch.date = date;
+      /* The note follows the title only while it was still the title — a note
+         the user wrote by hand on the transaction is theirs to keep. */
+      if (!tx.note || tx.note === bill.title) txPatch.note = note || title;
+
+      transaction = updateRow_('Transactions', bill.expenseTxId, txPatch);
+      delete transaction._row;
+    }
   }
 
   var updated = updateRow_('BillSplits', bill.id, patch);
   delete updated._row;
-  return decorateBillSplit_(updated);
+
+  return { ok: true, billSplit: decorateBillSplit_(updated), transaction: transaction };
 }
 
 /**

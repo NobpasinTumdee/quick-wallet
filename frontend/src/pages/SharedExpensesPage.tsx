@@ -13,7 +13,7 @@
  * only thing anyone comes here to do.
  */
 
-import { Check, HandCoins, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, HandCoins, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -48,8 +48,23 @@ export function SharedExpensesPage() {
 
   const { open, settled, totalOutstanding, totalRecovered, peopleOwing, payableFrom } = splitter;
 
+  /** The bill being corrected, or undefined when recording a new one. */
+  const [editing, setEditing] = useState<BillSplit | undefined>();
+
   async function createBill(input: CreateBillSplitInput) {
     setActionError(null);
+    if (editing) {
+      try {
+        await splitter.update(editing.id, input);
+        toast.success(t('split.savedToast', { title: input.title }));
+        setFormOpen(false);
+        setEditing(undefined);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : t('split.recordFailed'));
+        throw err;
+      }
+      return;
+    }
     try {
       const result = await splitter.create(input);
       toast.success(
@@ -222,6 +237,24 @@ export function SharedExpensesPage() {
         {bill.note && <p className="split-card-note">{bill.note}</p>}
 
         <footer className="split-card-foot">
+          {/* Offered only while nothing has come back. Once a share is repaid
+              there is an income row pinned to the amount it was repaid
+              against, and rewriting that share would orphan it — the server
+              refuses, so the button goes rather than failing on press. */}
+          {bill.splits.every((share) => !share.isPaid) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setEditing(bill);
+                setFormOpen(true);
+              }}
+              aria-label={t('split.editBill')}
+            >
+              <Icon icon={Pencil} size="sm" />
+              {t('common.edit')}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -335,10 +368,12 @@ export function SharedExpensesPage() {
       <BillSplitterForm
         open={formOpen}
         wallets={payableFrom}
+        bill={editing}
         busy={splitter.mutating}
         error={actionError}
         onClose={() => {
           setFormOpen(false);
+          setEditing(undefined);
           setActionError(null);
         }}
         onSubmit={createBill}

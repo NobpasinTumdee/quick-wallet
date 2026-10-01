@@ -816,6 +816,14 @@ export const en = {
   },
 
   split: {
+    /* ---- Editing a bill ----
+       Only ever offered while nothing has been repaid: once money has come
+       back there is an income row pinned to the share it came back against. */
+    editTitle: 'Edit {{title}}',
+    editBill: 'Edit this bill',
+    saveChanges: 'Save changes',
+    saving: 'Saving…',
+    savedToast: '{{title}} updated',
     // ---- Chip-based creation flow ----
     amountPlaceholder: '0',
     titlePlaceholder: 'What was it?',

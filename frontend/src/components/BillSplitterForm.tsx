@@ -53,7 +53,7 @@ import {
   toPayload,
 } from '../lib/splitMath';
 import { useMoneyFormatter } from '../state/SettingsContext';
-import { WalletBalance } from '../types';
+import { BillSplit, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import {
   Alert,
@@ -78,6 +78,7 @@ const newPerson = (personName: string): SplitDraft => {
 export function BillSplitterForm({
   open,
   wallets,
+  bill,
   busy,
   error,
   onClose,
@@ -86,6 +87,14 @@ export function BillSplitterForm({
   open: boolean;
   /** Spending wallets only — a bill cannot be paid from a brokerage. */
   wallets: WalletBalance[];
+  /**
+   * The bill being corrected, or undefined to record a new one.
+   *
+   * Only ever a bill with nothing repaid: the server refuses the rest, and the
+   * card hides the pencil for them. The sheet therefore never has to reason
+   * about a half-settled bill — every share it loads is outstanding.
+   */
+  bill?: BillSplit;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -129,20 +138,44 @@ export function BillSplitterForm({
      wipe a half-entered bill. Same rule every other sheet here follows. */
   useEffect(() => {
     if (!open) return;
-    setTotal('');
-    setTitle('');
-    setNote('');
-    setDate(todayKey());
-    setDetailsOpen(false);
-    setMode('equal');
-    setIncludeSelf(true);
-    setPeople([]);
+
+    if (bill) {
+      /* Editing: every field comes from the bill, and the mode is forced to
+         custom. Equal mode would recompute the shares from the total the
+         moment the sheet opened, silently discarding whatever uneven split
+         the user originally agreed. */
+      setTotal(String(bill.totalAmount));
+      setTitle(bill.title);
+      setNote(bill.note ?? '');
+      setDate(todayKey());
+      setDetailsOpen(Boolean(bill.note));
+      setMode('custom');
+      setIncludeSelf(bill.ownShare > 0.005);
+      setPeople(
+        bill.splits.map((share) => ({
+          id: `p-${(seq += 1)}`,
+          personName: share.personName,
+          amount: String(share.amount),
+        })),
+      );
+      setWalletId(bill.walletId);
+    } else {
+      setTotal('');
+      setTitle('');
+      setNote('');
+      setDate(todayKey());
+      setDetailsOpen(false);
+      setMode('equal');
+      setIncludeSelf(true);
+      setPeople([]);
+      setWalletId([...wallets].sort((a, b) => b.balance - a.balance)[0]?.id ?? '');
+    }
+
     setPending('');
     setLocalError(null);
     setIsSubmitting(false);
-    setWalletId([...wallets].sort((a, b) => b.balance - a.balance)[0]?.id ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, bill?.id]);
 
   const totalValue = parseDecimal(total);
   const dupes = useMemo(() => duplicateNames(people), [people]);
@@ -245,7 +278,7 @@ export function BillSplitterForm({
   return (
     <Modal
       open={open}
-      title={t('split.formTitle')}
+      title={bill ? t('split.editTitle', { title: bill.title }) : t('split.formTitle')}
       onClose={onClose}
       width={560}
       footer={
@@ -274,7 +307,9 @@ export function BillSplitterForm({
                that is already running has nothing left to explain. */
             disabled={working || !ready}
           >
-            {working ? t('split.creating') : t('split.createBill')}
+            {working
+              ? t(bill ? 'split.saving' : 'split.creating')
+              : t(bill ? 'split.saveChanges' : 'split.createBill')}
           </Button>
         </>
       }
