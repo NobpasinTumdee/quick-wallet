@@ -96,8 +96,21 @@ export interface BillSplitterState {
    * recorded it — so the UI only offers this while every share is outstanding.
    */
   update: (id: string, input: CreateBillSplitInput) => Promise<BillSplitResult>;
-  /** Settles one share and books the money back in. Idempotent. */
-  markPaid: (bill: BillSplit, index: number) => Promise<BillSplitResult>;
+  /**
+   * Settles one share and books the money back in. Idempotent.
+   *
+   * `receivingWalletId` is where the money actually arrives. Omitted, the
+   * server falls back to the bill's default and then to the wallet that paid —
+   * but the UI always asks, because a card-paid dinner is rarely repaid onto
+   * the card.
+   */
+  markPaid: (
+    bill: BillSplit,
+    index: number,
+    receivingWalletId?: string,
+    /** When the money arrived. Defaults to today, server-side. */
+    date?: string,
+  ) => Promise<BillSplitResult>;
   /** Undoes a repayment, removing the income row it wrote. */
   markUnpaid: (bill: BillSplit, index: number) => Promise<BillSplitUnpaidResult>;
   remove: (bill: BillSplit, keepTransactions?: boolean) => Promise<void>;
@@ -269,7 +282,7 @@ export function useBillSplitter(): BillSplitterState {
   );
 
   const markPaid = useCallback(
-    async (bill: BillSplit, index: number) => {
+    async (bill: BillSplit, index: number, receivingWalletId?: string, date?: string) => {
       const share = bill.splits?.[index];
       if (!share) throw new Error('That person is not on this bill');
 
@@ -295,12 +308,16 @@ export function useBillSplitter(): BillSplitterState {
           status: nextSplits.every((s) => s.isPaid) ? 'settled' : 'open',
         }),
       );
-      rollbacks.push(patchWallet(bill.walletId, share.amount, true));
+      /* The wallet the money lands in, which is the one whose balance must
+         move — not the one that paid. Resolved the same way the server will,
+         so the optimistic patch and the eventual row agree. */
+      const landing = receivingWalletId || bill.defaultRepaymentWalletId || bill.walletId;
+      rollbacks.push(patchWallet(landing, share.amount, true));
 
       try {
         const result = await api.post<BillSplitResult>(
           `/api/bill-splits/${bill.id}/mark-paid`,
-          { index },
+          { index, receivingWalletId, date },
         );
 
         /* The server is the authority on what actually happened — including
@@ -340,7 +357,10 @@ export function useBillSplitter(): BillSplitterState {
         mutateMatching<Transaction[]>('/api/transactions', (rows) =>
           (rows ?? []).filter((row) => row.id !== result.removedTransactionId),
         );
-        patchWallet(bill.walletId, -share.amount, true);
+        /* Out of whatever wallet it actually landed in. The server reports
+           that back precisely because the bill row cannot know it: a
+           repayment may have gone somewhere other than the paying wallet. */
+        patchWallet(result.removedWalletId || bill.walletId, -(result.removedAmount || share.amount), true);
       }
       invalidate(DERIVED);
       return result;

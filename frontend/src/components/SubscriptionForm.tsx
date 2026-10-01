@@ -31,6 +31,8 @@ export interface SubscriptionPayload {
   note: string;
   /** Paying this should also raise a shared bill from `splitDetails`. */
   isShared: boolean;
+  /** Where repayments on that bill land. Empty = the wallet that paid. */
+  splitWalletId: string;
   /** The template. Always sent, so turning sharing off clears it server-side. */
   splitDetails: { personName: string; amount: number }[];
 }
@@ -57,6 +59,7 @@ function initialState(subscription?: Subscription, firstWalletId = ''): FormStat
     nextDueDate: subscription?.nextDueDate ?? todayKey(),
     note: subscription?.note ?? '',
     isShared: subscription?.isShared ?? false,
+    splitWalletId: subscription?.splitWalletId ?? '',
   };
 }
 
@@ -124,6 +127,7 @@ export function SubscriptionForm({
       nextDueDate: form.nextDueDate,
       note: form.note.trim(),
       isShared: form.isShared,
+      splitWalletId: form.isShared ? form.splitWalletId : '',
       /* Sent even when sharing is off, and empty in that case: the server
          stores what it is given, so leaving a stale template behind would
          have it spring back the next time the toggle is flipped on. */
@@ -228,7 +232,14 @@ export function SubscriptionForm({
           </label>
 
           {form.isShared && (
-            <SubscriptionSplitEditor people={people} onChange={setPeople} total={amount} />
+            <SubscriptionSplitEditor
+              people={people}
+              onChange={setPeople}
+              total={amount}
+              wallets={wallets.filter((w) => w.mode === 'expense')}
+              walletId={form.splitWalletId}
+              onWalletId={(id) => set('splitWalletId', id)}
+            />
           )}
         </div>
 

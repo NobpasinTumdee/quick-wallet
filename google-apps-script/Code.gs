@@ -207,7 +207,10 @@ var SHEETS = {
          that exists before its expense would show up in every outstanding
          total the app has. */
       { key: 'isShared', header: 'Is Shared', type: 'boolean' },
-      { key: 'splitDetails', header: 'Split Details (JSON)', type: 'jsonlist' }
+      { key: 'splitDetails', header: 'Split Details (JSON)', type: 'jsonlist' },
+      /* Where the shares come back to, stamped onto each bill this
+         subscription raises. Empty falls back to the paying wallet. */
+      { key: 'splitWalletId', header: 'Split Repayment Wallet ID', type: 'string' }
     ]
   },
   Watchlist: {
@@ -266,7 +269,18 @@ var SHEETS = {
          screen this bill produced, and a repayment has no way to prove it is
          returning money the same wallet actually spent. One string column is a
          cheap price for that. */
-      { key: 'expenseTxId', header: 'Expense Tx ID', type: 'string' }
+      { key: 'expenseTxId', header: 'Expense Tx ID', type: 'string' },
+      /* -------------------------------------------------------------------
+         WHERE REPAYMENTS LAND
+         -------------------------------------------------------------------
+         Money going out and money coming back do not have to use the same
+         account: a dinner paid on a credit card is usually repaid in cash or
+         by transfer, and booking those repayments back onto the card would
+         report a card balance nobody has.
+
+         Optional. Empty means "ask, defaulting to the wallet that paid",
+         which is what every bill created before this column did anyway. */
+      { key: 'defaultRepaymentWalletId', header: 'Repayment Wallet ID', type: 'string' }
     ]
   },
   Goals: {
@@ -3635,7 +3649,12 @@ function parseSubscription_(userId, body) {
        subscription can turn sharing on, off, or rewrite who owes what. The
        shares are only checked for shape here — see `parseSplitTemplate_`. */
     isShared: bool_(body.isShared, false),
-    splitDetails: parseSplitTemplate_(body.splitDetails)
+    splitDetails: parseSplitTemplate_(body.splitDetails),
+    /* Validated on save, not at payment time: a wallet that cannot receive
+       should be refused while the user is still in the form. */
+    splitWalletId: body.splitWalletId
+      ? ownedWallet_(userId, str_(body.splitWalletId, 'splitWalletId'), 'Wallet').id
+      : ''
   };
 }
 
@@ -3662,7 +3681,8 @@ function subscriptionsCreate_(user, body) {
     category: parsed.category, frequency: parsed.frequency,
     nextDueDate: parsed.nextDueDate, note: parsed.note,
     createdAt: new Date().toISOString(),
-    isShared: parsed.isShared, splitDetails: parsed.splitDetails
+    isShared: parsed.isShared, splitDetails: parsed.splitDetails,
+    splitWalletId: parsed.splitWalletId
   };
 
   insertRow_('Subscriptions', subscription);
@@ -4251,6 +4271,7 @@ function decorateBillSplit_(row) {
     status: row.status || splitsStatus_(splits),
     createdAt: row.createdAt,
     expenseTxId: row.expenseTxId,
+    defaultRepaymentWalletId: row.defaultRepaymentWalletId || '',
 
     /* Everyone else's shares added up. */
     owedTotal: money_(owedTotal),
@@ -4469,11 +4490,44 @@ function billSplitFromSubscription_(user, subscription, tx) {
     status: splitsStatus_(splits),
     createdAt: new Date().toISOString(),
     /* The payment's own expense. Not a second one — see the note at the top. */
-    expenseTxId: tx.id
+    expenseTxId: tx.id,
+    /* Stamped from the subscription, so every month's bill already knows where
+       the flatmates' money goes. */
+    defaultRepaymentWalletId: subscription.splitWalletId || ''
   };
 
   insertRow_('BillSplits', bill);
   return decorateBillSplit_(bill);
+}
+
+/**
+ * Which wallet a repayment lands in.
+ *
+ * Resolved in one place because three paths need the same answer and must not
+ * drift: marking a share paid, creating a bill with a default, and stamping
+ * one onto a bill raised by a subscription.
+ *
+ *   the wallet named on this request   the user just chose it
+ *   the bill's default                 chosen when the bill was set up
+ *   the wallet that paid               what this app did before the column
+ *                                      existed, and a sane last resort
+ *
+ * An investment wallet is refused the same way it is for paying: a
+ * reimbursement is cash arriving, not a position being opened.
+ */
+function repaymentWallet_(user, bill, requested) {
+  var walletId = str_(requested, 'receivingWalletId', { required: false, max: 60 })
+    || str_(bill.defaultRepaymentWalletId, 'defaultRepaymentWalletId', { required: false, max: 60 })
+    || bill.walletId;
+
+  var wallet = ownedWallet_(user.id, walletId, 'Wallet');
+  if (wallet.mode === 'investment') {
+    throw bad_(
+      'Repayments go into a spending wallet, not an investment one.',
+      'WRONG_WALLET_MODE'
+    );
+  }
+  return wallet;
 }
 
 function billSplitsCreate_(user, body) {
@@ -4517,6 +4571,17 @@ function billSplitsCreate_(user, body) {
   };
   insertRow_('Transactions', tx);
 
+  /* Validated now rather than at repayment time, so a wallet that cannot
+     receive is rejected while the user is still looking at the form. */
+  var repaymentWalletId = '';
+  if (body.defaultRepaymentWalletId) {
+    var target = ownedWallet_(user.id, str_(body.defaultRepaymentWalletId, 'defaultRepaymentWalletId'), 'Wallet');
+    if (target.mode === 'investment') {
+      throw bad_('Repayments go into a spending wallet, not an investment one.', 'WRONG_WALLET_MODE');
+    }
+    repaymentWalletId = target.id;
+  }
+
   var bill = {
     id: uuid_(),
     userId: user.id,
@@ -4532,7 +4597,8 @@ function billSplitsCreate_(user, body) {
     }),
     status: splitsStatus_(splits),
     createdAt: now,
-    expenseTxId: tx.id
+    expenseTxId: tx.id,
+    defaultRepaymentWalletId: repaymentWalletId
   };
   insertRow_('BillSplits', bill);
 
@@ -4571,14 +4637,15 @@ function billSplitsMarkPaid_(user, query, body) {
   var amount = num_(share.amount, 'amount', { min: 0 });
   if (!(amount > 0)) throw bad_('That share has no amount to collect', 'ZERO_SHARE');
 
-  // Re-checked now rather than trusted from the row: the wallet may have been
-  // archived or deleted since the bill was created.
-  ownedWallet_(user.id, bill.walletId, 'Wallet');
+  /* Where the money actually arrives. Re-checked now rather than trusted from
+     the row: the wallet may have been archived or deleted since the bill was
+     created, and the one named on this request has never been checked at all. */
+  var receiving = repaymentWallet_(user, bill, body && body.receivingWalletId);
 
   var tx = {
     id: uuid_(),
     userId: user.id,
-    walletId: bill.walletId,
+    walletId: receiving.id,
     toWalletId: '',
     /* Income, because the money genuinely arrives in the wallet. The pair nets
        out correctly over the bill's life: the full amount went out as expense,
@@ -4635,11 +4702,21 @@ function billSplitsMarkUnpaid_(user, query, body) {
   if (!share) throw apiError_('That person is not on this bill', 404, 'SPLIT_NOT_FOUND');
 
   var removedTxId = str_(share.repaymentTxId, 'repaymentTxId', { required: false, max: 60 });
+  /* Reported back so the client credits the right balance. A repayment can
+     land in a different wallet from the one that paid the bill, so undoing it
+     has to put the money back where it actually went — which only this row
+     knows. */
+  var removedWalletId = '';
+  var removedAmount = 0;
   if (removedTxId) {
     var tx = findById_('Transactions', removedTxId);
     // Only ever deletes a row this user owns, and only the one the share
     // itself points at — never a transaction found by matching amounts.
-    if (tx && tx.userId === user.id) deleteRow_('Transactions', removedTxId);
+    if (tx && tx.userId === user.id) {
+      removedWalletId = tx.walletId;
+      removedAmount = Number(tx.amount) || 0;
+      deleteRow_('Transactions', removedTxId);
+    }
   }
 
   splits[index] = {
@@ -4655,7 +4732,13 @@ function billSplitsMarkUnpaid_(user, query, body) {
   });
   delete updated._row;
 
-  return { ok: true, billSplit: decorateBillSplit_(updated), removedTransactionId: removedTxId };
+  return {
+    ok: true,
+    billSplit: decorateBillSplit_(updated),
+    removedTransactionId: removedTxId,
+    removedWalletId: removedWalletId,
+    removedAmount: money_(removedAmount)
+  };
 }
 
 /** Edits the parts of a bill that are safe to change after the fact. */

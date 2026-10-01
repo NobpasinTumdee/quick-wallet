@@ -468,6 +468,11 @@ export const en = {
   },
 
   recurring: {
+    /* Where the shares come back to — a property of the arrangement, so it is
+       asked once here rather than on every monthly payment. */
+    repaymentWallet: 'Target receiving wallet',
+    repaymentWalletHint: 'Where the others’ repayments land each month.',
+    repaymentWalletSame: 'Same wallet that pays',
     /* ---- Shared subscriptions ----
        A template that becomes a real bill on the day it is paid, which is why
        the wording is future tense throughout: nobody owes anything yet. */
@@ -816,6 +821,14 @@ export const en = {
   },
 
   split: {
+    /* ---- Where a repayment lands ----
+       Asked rather than assumed: a dinner put on a card is handed back in
+       cash, and booking that onto the card reports a balance nobody has. */
+    repaymentTitle: 'Confirm repayment',
+    repaymentConfirm: 'Confirm payment',
+    receiveInto: 'Receive into wallet',
+    receiveIntoHint: 'Where this repayment actually arrives. It does not have to be the wallet that paid the bill.',
+    repaymentDate: 'Received on',
     /* ---- Editing a bill ----
        Only ever offered while nothing has been repaid: once money has come
        back there is an income row pinned to the share it came back against. */

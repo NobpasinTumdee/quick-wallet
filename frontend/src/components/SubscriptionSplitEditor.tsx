@@ -2,7 +2,7 @@ import { Plus, Users, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Button, DecimalInput, Input } from './ui';
+import { Button, DecimalInput, Field, Input, Select } from './ui';
 import {
   SplitDraft,
   duplicateNames,
@@ -10,7 +10,9 @@ import {
   summariseSplits,
 } from '../lib/splitMath';
 import { cx } from '../lib/format';
+import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter } from '../state/SettingsContext';
+import { WalletBalance } from '../types';
 
 /**
  * Who owes what on a shared subscription.
@@ -40,12 +42,26 @@ export function SubscriptionSplitEditor({
   people,
   onChange,
   total,
+  wallets,
+  walletId,
+  onWalletId,
   disabled,
 }: {
   people: SplitDraft[];
   onChange: (next: SplitDraft[]) => void;
   /** The subscription's amount, which the shares are measured against. */
   total: number;
+  /** Spending wallets — a repayment is cash arriving, not a position. */
+  wallets: WalletBalance[];
+  /**
+   * Where the flatmates' money comes back to.
+   *
+   * Stamped onto every bill this subscription raises, so a shared Netflix
+   * never has to be told twice. Empty means "the wallet that paid", which is
+   * what the app did before this existed.
+   */
+  walletId: string;
+  onWalletId: (id: string) => void;
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
@@ -126,6 +142,24 @@ export function SubscriptionSplitEditor({
           })}
         </ul>
       )}
+
+      {/* Where the repayments land. Asked here rather than every month,
+          because the answer is a property of the arrangement, not of any one
+          payment. */}
+      <Field label={t('recurring.repaymentWallet')} hint={t('recurring.repaymentWalletHint')}>
+        <Select
+          value={walletId}
+          disabled={disabled}
+          onChange={(event) => onWalletId(event.target.value)}
+        >
+          <option value="">{t('recurring.repaymentWalletSame')}</option>
+          {wallets.map((wallet) => (
+            <option key={wallet.id} value={wallet.id}>
+              {walletIconText(wallet.icon)} {wallet.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
       {/* The arithmetic, stated while it can still be changed. */}
       <p className={cx('sub-split-summary', summary.exceedsTotal && 'is-error')}>

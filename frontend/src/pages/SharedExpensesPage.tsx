@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { BillSplitterForm } from '../components/BillSplitterForm';
+import { RepaymentModal } from '../components/RepaymentModal';
 import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
 import {
@@ -81,7 +82,10 @@ export function SharedExpensesPage() {
     }
   }
 
-  async function pay(bill: BillSplit, index: number) {
+  /** The share waiting on a "which wallet?" answer. */
+  const [settling, setSettling] = useState<{ bill: BillSplit; index: number } | null>(null);
+
+  async function pay(bill: BillSplit, index: number, receivingWalletId: string, date: string) {
     const share = bill.splits[index];
     // Keyed per share, not per page: two people on the same bill can be marked
     // off in sequence without the second button going dead while the first
@@ -89,8 +93,9 @@ export function SharedExpensesPage() {
     setBusyShare(`${bill.id}:${index}`);
     setActionError(null);
     try {
-      const result = await splitter.markPaid(bill, index);
-      const wallet = payableFrom.find((w) => w.id === bill.walletId);
+      const result = await splitter.markPaid(bill, index, receivingWalletId, date);
+      setSettling(null);
+      const wallet = payableFrom.find((w) => w.id === receivingWalletId);
       toast.success(
         result.alreadyPaid
           ? t('split.alreadyPaid', { name: share.personName })
@@ -224,7 +229,7 @@ export function SharedExpensesPage() {
                     variant="primary"
                     loading={busy}
                     aria-label={t('split.markPaidFor', { name: share.personName })}
-                    onClick={() => void pay(bill, index)}
+                    onClick={() => setSettling({ bill, index })}
                   >
                     {t('split.markPaid')}
                   </Button>
@@ -364,6 +369,21 @@ export function SharedExpensesPage() {
           <Alert tone="info">{t('split.ledgerExplainer', { total: money(totalRecovered + totalOutstanding) })}</Alert>
         </>
       )}
+
+      <RepaymentModal
+        bill={settling?.bill ?? null}
+        share={settling ? (settling.bill.splits[settling.index] ?? null) : null}
+        wallets={payableFrom}
+        busy={busyShare !== null}
+        error={actionError}
+        onConfirm={(receivingWalletId, date) => {
+          if (settling) void pay(settling.bill, settling.index, receivingWalletId, date);
+        }}
+        onCancel={() => {
+          setSettling(null);
+          setActionError(null);
+        }}
+      />
 
       <BillSplitterForm
         open={formOpen}

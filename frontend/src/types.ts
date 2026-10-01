@@ -163,6 +163,14 @@ export interface BillSplit {
   createdAt: string;
   /** The expense Transaction written when the bill was created. */
   expenseTxId: string;
+  /**
+   * Where repayments land by default, or empty.
+   *
+   * Money going out and money coming back need not use the same account — a
+   * dinner put on a card is usually repaid in cash — so this is asked for
+   * rather than assumed. Empty falls back to `walletId`.
+   */
+  defaultRepaymentWalletId: string;
 
   /* computed server-side */
   /** Everyone else's shares added up. Never more than `totalAmount`. */
@@ -189,6 +197,15 @@ export interface BillSplitUnpaidResult {
   billSplit: BillSplit;
   /** The income row that was removed. Empty when there was nothing to undo. */
   removedTransactionId: string;
+  /**
+   * The wallet that row was in, and what it was worth.
+   *
+   * Undoing a repayment has to take the money out of wherever it actually
+   * landed, which can differ from the wallet that paid the bill — only the
+   * removed transaction knew which.
+   */
+  removedWalletId: string;
+  removedAmount: number;
 }
 
 /**
@@ -219,6 +236,8 @@ export interface Subscription {
   isShared: boolean;
   /** Who owes what when it is paid. Empty unless `isShared`. */
   splitDetails: SubscriptionSplitShare[];
+  /** Where the shares come back to. Stamped onto every bill this raises. */
+  splitWalletId: string;
 }
 
 /** What subscriptions.pay returns — both halves, so the client can reconcile. */
