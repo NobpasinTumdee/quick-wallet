@@ -351,6 +351,10 @@ export const en = {
   },
 
   activity: {
+    /* The list tile. An entry with no note and no category still needs a
+       first line — it is usually a transfer or a quick FAB entry. */
+    untitledEntry: 'Transaction',
+    deleteEntry: 'Delete this {{amount}} entry',
     /** The clock time a row was recorded, shown beneath its date. */
     recordedAt: 'Recorded at {{time}}',
 
@@ -1063,6 +1067,10 @@ export const en = {
   },
 
   goals: {
+    /* Only rendered when the note is genuinely longer than its two lines. */
+    showMore: 'Show more',
+    showLess: 'Show less',
+    savedAmount: 'Saved {{amount}}',
     title: 'Goals',
     subtitle: 'Set money aside without moving it',
 

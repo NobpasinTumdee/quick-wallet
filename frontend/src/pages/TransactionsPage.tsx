@@ -1,4 +1,4 @@
-import { Receipt } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon';
 import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { cx, formatDate, formatPeriod } from '../lib/format';
 import { EMPTY_FILTERS, TxFilters, fetchScope, filterTransactions } from '../lib/txFilters';
 import { RecordedAt } from '../components/RecordedAt';
@@ -72,6 +73,11 @@ export function TransactionsPage({ period }: { period: string }) {
   const money = useMoneyFormatter();
   const walletName = (id: string) => wallets.items.find((w) => w.id === id)?.name ?? '—';
 
+  /* Which of the two layouts to build. A stylesheet switch would leave both
+     in the DOM, and this list can be five thousand rows — see the note in
+     `useMediaQuery`. */
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+
   const visible = useMemo(
     () => filterTransactions(transactions.items, filters),
     [transactions.items, filters],
@@ -114,25 +120,18 @@ export function TransactionsPage({ period }: { period: string }) {
       <Card
         title={t('activity.header', { range: rangeLabel(filters, period, settings.locale, t) })}
         subtitle={t('activity.totals', { income: money(totals.income), expense: money(totals.expense), net: money(totals.net) })}
+        /* Just the refresh. Adding a transaction is what the floating button
+           in the corner is for, on every screen — a second entry point in this
+           panel's header was chrome competing with itself, and it was also the
+           last untranslated string in the page. The empty state keeps its own
+           button, which is an answer to "there is nothing here" rather than a
+           duplicate of the FAB. */
         actions={
-          <>
           <RefreshButton
             onRefresh={() => Promise.all([transactions.refresh(), wallets.refresh()])}
             busy={transactions.isValidating || wallets.isValidating}
             label={t('activity.refresh')}
           />
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              setEditing(undefined);
-              setFormOpen(true);
-            }}
-            disabled={wallets.items.length === 0}
-          >
-            + New transaction
-          </Button>
-          </>
         }
       >
         <TransactionFilters
@@ -186,72 +185,180 @@ export function TransactionsPage({ period }: { period: string }) {
             }
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>{t('common.type')}</th>
-                  <th>{t('common.amount')}</th>
-                  <th>{t('common.date')}</th>
-                  <th>{t('activity.categoryOrRoute')}</th>
-                  <th>{t('common.wallet')}</th>
-                  <th>{t('common.note')}</th>
-                  <th className="num" />
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((tx) => (
-                  // Dimmed until the server confirms it.
-                  <tr key={tx.id} className={cx(isOptimistic(tx) && 'is-pending')}>
-                    <td>
-                      <Badge
-                        tone={tx.type === 'income' ? 'positive' : tx.type === 'expense' ? 'negative' : 'accent'}
-                      >
-                        {tx.type}
-                      </Badge>
-                    </td>
-                    <td
-                      className={cx(
-                        tx.type === 'income' && 'text-positive',
-                        tx.type === 'expense' && 'text-negative',
-                      )}
-                    >
-                      {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
-                      {money(tx.amount)}
-                    </td>
-                    <td>
-                      {formatDate(tx.date, settings.locale)}
-                      <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
-                    </td>
-                    <td>
-                      {tx.type === 'transfer'
-                        ? t('activity.transferRoute', { from: walletName(tx.walletId), to: walletName(tx.toWalletId) })
-                        : tx.category}
-                    </td>
-                    <td className="text-muted">{walletName(tx.walletId)}</td>
-                    <td className="text-muted">{tx.note || '—'}</td>
-                    <td className="num">
-                      <div className="row-actions">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditing(tx);
-                            setFormOpen(true);
-                          }}
-                        >
-                          {t('common.edit')}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => void remove(tx)}>
-                          ✕
-                        </Button>
-                      </div>
-                    </td>
+          /* Two layouts for one list, and only ever one of them built.
+
+             A table is the right shape on a desktop: seven columns of aligned,
+             scannable fields, which is what someone reconciling a month
+             actually wants. It is the wrong shape on a phone, where those same
+             columns become a horizontal scrollbar hiding the note and the
+             category — the two fields that say what a row *was*.
+
+             So the phone gets tiles and the desktop keeps its table, switched
+             at the same 768px the stylesheet uses for every other structural
+             change. */
+          desktop ? (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>{t('common.type')}</th>
+                    <th>{t('common.amount')}</th>
+                    <th>{t('common.date')}</th>
+                    <th>{t('activity.categoryOrRoute')}</th>
+                    <th>{t('common.wallet')}</th>
+                    <th>{t('common.note')}</th>
+                    <th className="num" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visible.map((tx) => (
+                    // Dimmed until the server confirms it.
+                    <tr key={tx.id} className={cx(isOptimistic(tx) && 'is-pending')}>
+                      <td>
+                        <Badge
+                          tone={tx.type === 'income' ? 'positive' : tx.type === 'expense' ? 'negative' : 'accent'}
+                        >
+                          {tx.type}
+                        </Badge>
+                      </td>
+                      <td
+                        className={cx(
+                          tx.type === 'income' && 'text-positive',
+                          tx.type === 'expense' && 'text-negative',
+                        )}
+                      >
+                        {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
+                        {money(tx.amount)}
+                      </td>
+                      <td>
+                        {formatDate(tx.date, settings.locale)}
+                        <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
+                      </td>
+                      <td>
+                        {tx.type === 'transfer'
+                          ? t('activity.transferRoute', {
+                              from: walletName(tx.walletId),
+                              to: walletName(tx.toWalletId),
+                            })
+                          : tx.category}
+                      </td>
+                      <td className="text-muted">{walletName(tx.walletId)}</td>
+                      <td className="text-muted">{tx.note || '—'}</td>
+                      <td className="num">
+                        <div className="row-actions">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditing(tx);
+                              setFormOpen(true);
+                            }}
+                          >
+                            {t('common.edit')}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => void remove(tx)}>
+                            ✕
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+          /* A list, not a table.
+
+             Seven columns on a 375px screen meant horizontal scrolling, and the
+             two fields that say what a row actually *was* — the note and the
+             category — were the ones off the right edge. A tile puts them
+             first and lets the rest be secondary, which is the same order a
+             bank statement app uses because it is the order people read in.
+
+             The row itself is the edit control: tapping an entry to correct it
+             is what the whole list is for, and it leaves room for the amount
+             to stay legible at the right. Delete keeps its own button, because
+             a destructive action reached by the same gesture as the common one
+             is how rows get deleted by accident. */
+          <ul className="tx-list">
+            {visible.map((tx) => {
+              const primary =
+                tx.type === 'transfer'
+                  ? t('activity.transferRoute', {
+                      from: walletName(tx.walletId),
+                      to: walletName(tx.toWalletId),
+                    })
+                  : tx.note || tx.category || t('activity.untitledEntry');
+
+              return (
+                <li key={tx.id} className={cx('tx-tile', isOptimistic(tx) && 'is-pending')}>
+                  <button
+                    type="button"
+                    className="tx-tile-main"
+                    onClick={() => {
+                      setEditing(tx);
+                      setFormOpen(true);
+                    }}
+                  >
+                    {/* Direction, not a category glyph: the app has no icon per
+                        category, and inventing one would be decoration. This
+                        carries the same meaning as the old type badge in a
+                        quarter of the width. */}
+                    <span className={cx('tx-mark', `is-${tx.type}`)} aria-hidden="true">
+                      <Icon
+                        icon={
+                          tx.type === 'income'
+                            ? ArrowDownLeft
+                            : tx.type === 'expense'
+                              ? ArrowUpRight
+                              : ArrowLeftRight
+                        }
+                        size="sm"
+                      />
+                    </span>
+
+                    <span className="tx-body">
+                      <span className="tx-title">{primary}</span>
+                      <span className="tx-meta">
+                        <span>{formatDate(tx.date, settings.locale)}</span>
+                        <span className="tx-meta-sep" aria-hidden="true">·</span>
+                        <span className="truncate">{walletName(tx.walletId)}</span>
+                        {/* Desktop has room for the category the mobile tile
+                            folds into the title. */}
+                        {tx.type !== 'transfer' && tx.category && (
+                          <span className="tx-meta-category">{tx.category}</span>
+                        )}
+                      </span>
+                    </span>
+
+                    <span className="tx-trailing">
+                      <span
+                        className={cx(
+                          'tx-amount',
+                          tx.type === 'income' && 'text-positive',
+                          tx.type === 'expense' && 'text-negative',
+                        )}
+                      >
+                        {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}
+                        {money(tx.amount)}
+                      </span>
+                      <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="tx-remove"
+                    aria-label={t('activity.deleteEntry', { amount: money(tx.amount) })}
+                    onClick={() => void remove(tx)}
+                  >
+                    ✕
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          )
         )}
       </Card>
 

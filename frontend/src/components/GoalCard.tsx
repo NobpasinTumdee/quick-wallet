@@ -1,8 +1,9 @@
 import { BadgeCheck, Minus, Plus, ShoppingBag } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Button } from './ui';
+import { Button, ProgressBar } from './ui';
 import { goalPace, readyToBuy, ringPercent } from '../lib/goalMath';
 import { cx, formatDate } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -61,26 +62,37 @@ export function GoalCard({
         purchased && 'is-purchased',
       )}
     >
+      {/* Name left, target right — the two things a goal is, on one line that
+          survives a 375px screen. The progress ring that used to sit here is
+          gone: a ring *and* a bar are two readings of one number, and the bar
+          is the one that can carry a label. */}
       <header className="goal-head">
-        <GoalRing
-          percent={percent}
-          color={purchased ? 'var(--positive)' : goal.color || 'var(--accent)'}
-          label={`${goal.title} ${Math.round(percent)}%`}
+        <span
+          className="goal-dot"
+          style={{ background: purchased ? 'var(--positive)' : goal.color || 'var(--accent)' }}
+          aria-hidden="true"
         />
-        <div className="goal-identity">
-          <h3>{goal.title}</h3>
-          <span className="goal-amounts">
-            {purchased
-              ? t('goals.paidAmount', { amount: money(goal.targetAmount) })
-              : t('goals.saved', {
-                  saved: money(goal.savedAmount),
-                  target: money(goal.targetAmount),
-                })}
-          </span>
-        </div>
+        <h3 className="goal-title">{goal.title}</h3>
+        <span className="goal-target">{money(goal.targetAmount)}</span>
       </header>
 
-      {goal.note && <p className="goal-note">{goal.note}</p>}
+      <div className="goal-progress">
+        <ProgressBar
+          percent={percent}
+          tone={goal.complete || purchased ? 'ok' : 'warning'}
+          label={`${goal.title} ${Math.round(percent)}%`}
+        />
+        <div className="goal-progress-legend">
+          <span>
+            {purchased
+              ? t('goals.paidAmount', { amount: money(goal.targetAmount) })
+              : t('goals.savedAmount', { amount: money(goal.savedAmount) })}
+          </span>
+          <strong>{Math.round(percent)}%</strong>
+        </div>
+      </div>
+
+      {goal.note && <GoalNote note={goal.note} />}
 
       <div className="goal-meta">
         {purchased ? (
@@ -151,47 +163,68 @@ export function GoalCard({
         )}
 
         <div className="spacer" />
-        <Button size="sm" variant="ghost" onClick={onEdit}>
-          {t('common.edit')}
-        </Button>
-        <Button size="sm" variant="ghost" aria-label={t('common.delete')} onClick={onDelete}>
-          ✕
-        </Button>
+        {/* Edit and delete travel as one unit. When the row wraps — a narrow
+            card, or a longer translation — a lone ✕ on its own line reads as a
+            mistake rather than as the end of a group. */}
+        <div className="goal-actions-end">
+          <Button size="sm" variant="ghost" onClick={onEdit}>
+            {t('common.edit')}
+          </Button>
+          <Button size="sm" variant="ghost" aria-label={t('common.delete')} onClick={onDelete}>
+            ✕
+          </Button>
+        </div>
       </div>
     </article>
   );
 }
 
-/** The progress ring. An SVG arc, sized by the dash offset. */
-export function GoalRing({
-  percent,
-  color,
-  label,
-}: {
-  percent: number;
-  color: string;
-  label: string;
-}) {
-  const RADIUS = 26;
-  const circumference = 2 * Math.PI * RADIUS;
+/**
+ * The goal's note, which is free text and therefore occasionally hostile.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO SEPARATE PROBLEMS
+ * ---------------------------------------------------------------------------
+ * A *long* note makes the card tall, which is untidy. A long note *without
+ * spaces* — a pasted URL, or someone leaning on a key — cannot be broken at
+ * all by the normal rules, so it pushes the card wider than the screen and
+ * takes the whole page's horizontal scrollbar with it.
+ *
+ * They need different fixes and both are needed: `overflow-wrap: anywhere` in
+ * the stylesheet lets an unbroken run be split mid-word, and the clamp here
+ * keeps a long but ordinary note to two lines until it is asked for.
+ *
+ * The toggle only appears when it would do something. A "Show more" under a
+ * one-line note is a control that lies about there being more.
+ */
+function GoalNote({ note }: { note: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  /* Measured rather than guessed: the clamp is two lines, and whether a given
+     note exceeds it depends on the card's width and the reader's font. The
+     element reports its own overflow. */
+  const [overflows, setOverflows] = useState(false);
 
   return (
-    <svg className="goal-ring" viewBox="0 0 64 64" role="img" aria-label={label}>
-      <circle className="goal-ring-track" cx="32" cy="32" r={RADIUS} />
-      <circle
-        className="goal-ring-fill"
-        cx="32"
-        cy="32"
-        r={RADIUS}
-        stroke={color}
-        strokeDasharray={circumference}
-        /* Offset shrinks as the goal fills. Rotated -90° in CSS so it starts at
-           twelve o'clock rather than three. */
-        strokeDashoffset={circumference * (1 - percent / 100)}
-      />
-      <text className="goal-ring-text" x="32" y="32">
-        {Math.round(percent)}%
-      </text>
-    </svg>
+    <div className="goal-note-block">
+      <p
+        className={cx('goal-note', !expanded && 'is-clamped')}
+        ref={(element) => {
+          if (!element) return;
+          /* scrollHeight exceeds clientHeight only while the clamp is actually
+             hiding something, so this is asked while collapsed. */
+          if (!expanded) setOverflows(element.scrollHeight > element.clientHeight + 1);
+        }}
+      >
+        {note}
+      </p>
+
+      {(overflows || expanded) && (
+        <button type="button" className="goal-note-toggle" onClick={() => setExpanded((open) => !open)}>
+          {t(expanded ? 'goals.showLess' : 'goals.showMore')}
+        </button>
+      )}
+    </div>
   );
 }

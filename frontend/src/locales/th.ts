@@ -353,6 +353,9 @@ export const th: TranslationSchema = {
   },
 
   activity: {
+    /* ป้ายรายการในลิสต์ */
+    untitledEntry: 'รายการ',
+    deleteEntry: 'ลบรายการ {{amount}} นี้',
     recordedAt: 'บันทึกเมื่อ {{time}} น.',
 
     clear: 'ล้าง',
@@ -1047,6 +1050,10 @@ export const th: TranslationSchema = {
   },
 
   goals: {
+    /* แสดงเมื่อโน้ตยาวเกินสองบรรทัดเท่านั้น */
+    showMore: 'ดูเพิ่ม',
+    showLess: 'ย่อ',
+    savedAmount: 'เก็บแล้ว {{amount}}',
     title: 'เป้าหมาย',
     subtitle: 'กันเงินไว้ โดยไม่ต้องย้ายเงินจริง',
 

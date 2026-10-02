@@ -5052,7 +5052,10 @@ table.data.data--nested td {
 .goal-head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  /* Tighter than the old ring-and-text header, which this replaced: a dot, a
+     name and a figure read as one line rather than three things. */
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .goal-identity {
@@ -5113,11 +5116,58 @@ table.data.data--nested td {
   font-variant-numeric: tabular-nums;
 }
 
+.goal-note-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
 .goal-note {
   margin: 0;
   font-size: var(--text-xs);
   line-height: 1.5;
   color: var(--text-muted);
+  min-width: 0;
+  /* A pasted URL or an unbroken run of characters has no space to break at,
+     so the normal rules leave it one long line — which widens the card, and
+     with it the page. `anywhere` permits a break mid-run, and unlike
+     `break-all` it still prefers ordinary word boundaries when they exist. */
+  overflow-wrap: anywhere;
+}
+
+/* Two lines until asked. `-webkit-line-clamp` is the only way to clamp by
+   line rather than by height, and is supported everywhere this app runs. */
+.goal-note.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* A link, not a button: it reveals text in place rather than acting on data,
+   and sizing it like the card's real actions would overstate it. */
+.goal-note-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.goal-note-toggle:hover {
+  text-decoration: underline;
+}
+
+.goal-note-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .goal-meta {
@@ -5154,7 +5204,11 @@ table.data.data--nested td {
 .goal-actions {
   display: flex;
   align-items: center;
+  /* Wraps: four buttons and a spacer in one row is what pushed delete off the
+     edge of a 375px card. */
+  flex-wrap: wrap;
   gap: var(--space-2);
+  row-gap: 6px;
   margin-top: auto;
   padding-top: var(--space-2);
   border-top: 1px solid var(--divider);
@@ -5162,6 +5216,18 @@ table.data.data--nested td {
 
 .goal-actions .spacer {
   flex: 1;
+  /* Collapses entirely once the row has wrapped, so it cannot hold a line
+     open on its own. */
+  min-width: 0;
+}
+
+.goal-actions-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Never the thing that breaks: if the row must wrap, it wraps before this
+     pair, not between them. */
+  flex: none;
 }
 
 /* ---- Ready to buy ----
@@ -10644,8 +10710,26 @@ line.arate-zero {
 
 .split-card-figures {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: var(--space-3) var(--space-4);
+  /* Two columns on a phone, with the headline figure spanning both: three
+     across 375px gave each about 90px, narrower than the amounts they hold.
+     `auto-fit` could not help — the minimum was the problem. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+.split-card-figures .metric:first-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 560px) {
+  .split-card-figures {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3) var(--space-4);
+  }
+
+  .split-card-figures .metric:first-child {
+    grid-column: auto;
+  }
 }
 
 .split-progress {
@@ -10673,12 +10757,30 @@ line.arate-zero {
 
 .split-person {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  /* Three columns on a phone — mark, name, amount — with the action dropping
+     to its own line beneath. As a fourth column it was competing with the
+     name for the width a name needs. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   padding: var(--space-2) 0;
   border-top: 1px solid var(--divider);
   transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.split-person > .btn {
+  grid-column: 2 / -1;
+  justify-self: end;
+}
+
+@media (min-width: 480px) {
+  .split-person {
+    grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  }
+
+  .split-person > .btn {
+    grid-column: auto;
+  }
 }
 
 .split-person-mark {
@@ -10705,6 +10807,9 @@ line.arate-zero {
 .split-person-name {
   font-size: var(--text-sm);
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .split-person-amount {
@@ -10726,6 +10831,10 @@ line.arate-zero {
 
 .split-card-foot {
   display: flex;
+  /* Wraps: Edit and Delete together are wider than a 375px card once the
+     labels are translated. */
+  flex-wrap: wrap;
+  gap: 6px;
   justify-content: flex-end;
   margin-top: auto;
   padding-top: var(--space-2);
@@ -12325,3 +12434,322 @@ line.arate-zero {
   color: var(--positive) !important;
   font-variant-numeric: tabular-nums;
 }
+
+/* ==========================================================================
+   Mobile layouts — Activity, Goals, Shared
+   --------------------------------------------------------------------------
+   Written mobile-first: the rules below are what a 375px screen gets, and the
+   media queries only ever *add* room. The previous versions were desktop
+   layouts with a horizontal scrollbar bolted on, which is how the two fields
+   that say what a transaction was — its note and its category — ended up off
+   the right edge of every phone.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Activity — the transaction list
+   -------------------------------------------------------------------------- */
+
+.tx-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tx-tile {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--divider);
+  min-width: 0;
+}
+
+.tx-tile:first-child {
+  border-top: 0;
+}
+
+.tx-tile.is-pending {
+  opacity: 0.55;
+}
+
+/* The row is the edit control. A button rather than a div with a click
+   handler, so it is reachable by keyboard and announced as actionable. */
+.tx-tile-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.tx-tile-main:hover {
+  background: var(--surface-hover);
+}
+
+.tx-tile-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Direction, in a circular glass tile. Fixed size so the text column starts
+   at the same place on every row — a ragged left edge is what makes a list
+   feel unfinished. */
+.tx-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-muted);
+}
+
+.tx-mark.is-income {
+  background: var(--positive-soft);
+  border-color: color-mix(in srgb, var(--positive) 30%, transparent);
+  color: var(--positive);
+}
+
+.tx-mark.is-expense {
+  background: var(--negative-soft);
+  border-color: color-mix(in srgb, var(--negative) 30%, transparent);
+  color: var(--negative);
+}
+
+.tx-mark.is-transfer {
+  background: var(--accent-softer);
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+
+.tx-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* One line, always. A note long enough to wrap would push the amount out of
+   alignment on every row below it. */
+.tx-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.tx-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-meta-sep {
+  flex: none;
+  opacity: 0.6;
+}
+
+/* The category is the first thing to go when the row is narrow: it is also
+   usually the least surprising field, and the note above already implies it. */
+.tx-meta-category {
+  display: none;
+}
+
+.tx-trailing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: none;
+  text-align: end;
+}
+
+.tx-amount {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Present at all times rather than on hover: a phone has no hover, and a
+   delete that only appears to a mouse does not exist on the device most of
+   this list is read on. */
+.tx-remove {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-inline-end: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tx-remove:hover,
+.tx-remove:focus-visible {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.tx-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (min-width: 768px) {
+  /* Room for the category again, as its own muted chip rather than a third
+     thing fighting for the title line. */
+  .tx-meta-category {
+    display: inline;
+    flex: none;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    color: var(--text-faint);
+  }
+
+  .tx-title {
+    font-size: var(--text-base);
+  }
+
+  .tx-amount {
+    font-size: var(--text-md);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Goals — stacked cards
+   -------------------------------------------------------------------------- */
+
+.goal-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.goal-title {
+  flex: 1;
+  min-width: 0;
+  /* Truncated rather than wrapped: the header is one line by design, and an
+     unbroken string must not be able to widen it. */
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-target {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.goal-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-progress-legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-progress-legend strong {
+  color: var(--text);
+}
+
+@media (max-width: 400px) {
+  /* At the narrowest sizes the spacer stops earning its place: the buttons
+     take the full width in two rows instead of being squeezed into one. */
+  .goal-actions .spacer {
+    display: none;
+  }
+
+  .goal-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Shared expenses — cards and participants
+   -------------------------------------------------------------------------- */
+
+.split-card-figures .metric:first-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 560px) {
+  .split-card-figures {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .split-card-figures .metric:first-child {
+    grid-column: auto;
+  }
+}
+
+.split-person > .btn {
+  grid-column: 2 / -1;
+  justify-self: end;
+}
+
+@media (min-width: 480px) {
+  .split-person {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .split-person > .btn {
+    grid-column: auto;
+  }
+}
+
+/* Settled reads as settled without relying on the tick alone. */
+.split-person.is-paid .split-person-amount {
+  color: var(--positive);
+}
+
