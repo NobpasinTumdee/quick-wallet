@@ -10,8 +10,6 @@ import {
   LayoutGrid,
   LogOut,
   ChartNoAxesCombined,
-  PanelLeftClose,
-  PanelLeftOpen,
   Receipt,
   Repeat2,
   Settings,
@@ -83,19 +81,45 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const NAV: NavItem[] = [
+/**
+ * The sidebar in two groups.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY TWO AND NOT ONE
+ * ---------------------------------------------------------------------------
+ * Eleven flat items is a wall: everything is equally prominent, so nothing is.
+ * The split is by how often a screen is *opened*, not by what it is about —
+ * MAIN is the daily loop (where do I stand, what did I spend, who owes me),
+ * and MANAGE is the standing commitments you set up once and revisit when
+ * something changes.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY MANAGE EXISTS AT ALL
+ * ---------------------------------------------------------------------------
+ * Because the tab bar is `display: none` above 1000px. A route missing from
+ * this file is not demoted on a desktop, it is unreachable — no tab bar, no
+ * gesture arc, no directory within reach. Cards, Budgets, Recurring and Debt
+ * each own real money, so they get a quieter group rather than no door.
+ */
+const NAV_MAIN: NavItem[] = [
   { route: 'dashboard', labelKey: NAV_LABEL_KEYS.dashboard, icon: LayoutDashboard },
-  { route: 'wallets', labelKey: NAV_LABEL_KEYS.wallets, icon: Wallet },
-  { route: 'cards', labelKey: NAV_LABEL_KEYS.cards, icon: CreditCard },
   { route: 'transactions', labelKey: NAV_LABEL_KEYS.transactions, icon: Receipt },
+  { route: 'wallets', labelKey: NAV_LABEL_KEYS.wallets, icon: Wallet },
+  { route: 'goals', labelKey: NAV_LABEL_KEYS.goals, icon: PiggyBank },
+  { route: 'splits', labelKey: NAV_LABEL_KEYS.splits, icon: HandCoins },
   { route: 'investments', labelKey: NAV_LABEL_KEYS.investments, icon: TrendingUp },
   { route: 'analytics', labelKey: NAV_LABEL_KEYS.analytics, icon: ChartNoAxesCombined },
-  { route: 'goals', labelKey: NAV_LABEL_KEYS.goals, icon: PiggyBank },
+];
+
+const NAV_MANAGE: NavItem[] = [
+  { route: 'cards', labelKey: NAV_LABEL_KEYS.cards, icon: CreditCard },
   { route: 'budgets', labelKey: NAV_LABEL_KEYS.budgets, icon: Target },
-  { route: 'splits', labelKey: NAV_LABEL_KEYS.splits, icon: HandCoins },
   { route: 'subscriptions', labelKey: NAV_LABEL_KEYS.subscriptions, icon: Repeat2 },
   { route: 'debt', labelKey: NAV_LABEL_KEYS.debt, icon: Landmark },
 ];
+
+/** Every sidebar destination, in order. Route lookups read this. */
+const NAV: NavItem[] = [...NAV_MAIN, ...NAV_MANAGE];
 
 /**
  * Settings lives in the topbar instead of the nav lists — icon only, on every
@@ -166,6 +190,29 @@ const DeepAnalyticsPage = lazy(() => import('../pages/DeepAnalyticsPage'));
  *
  * The desktop sidebar is unaffected: it renders NAV in full and always has.
  */
+
+/** The sidebar's groups, in order. */
+const SECTIONS: { titleKey: TranslationKey; items: NavItem[] }[] = [
+  { titleKey: 'nav.sectionMain', items: NAV_MAIN },
+  { titleKey: 'nav.sectionManage', items: NAV_MANAGE },
+];
+
+/**
+ * Initials for the avatar placeholder.
+ *
+ * First letter of the first two words, so "Nobpasin Tumdee" gives NT. Spread
+ * rather than charAt so a Thai or emoji first character survives — charAt
+ * would return half a surrogate pair. Falls back to a dash, because an empty
+ * circle reads as a broken image rather than as a person.
+ */
+function initialsOf(name: string | undefined): string {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '\u2014';
+  return words
+    .slice(0, 2)
+    .map((word) => [...word][0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 /** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
@@ -388,60 +435,82 @@ export function AppShell() {
   return (
     <div className={cx('shell', railed && 'is-railed')}>
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <Logo size={30} />
-          <span className="sidebar-label">{t('auth.appName')}</span>
+        {/* ---- Profile ----
+            Identity first, because the question a sidebar should answer before
+            any navigation is "whose money am I looking at". */}
+        <div className="sidebar-profile">
+          <span className="sidebar-avatar" aria-hidden="true">{initialsOf(user?.displayName)}</span>
+          <span className="sidebar-identity sidebar-label">
+            <strong>{user?.displayName || t('nav.unknownUser')}</strong>
+            {user?.username && <span>@{user.username}</span>}
+          </span>
+
+          {/* The collapse control lives in the panel's header rather than above
+              the nav: it acts on the panel, and that is where a control which
+              resizes it is looked for. */}
+          <button
+            type="button"
+            className="sidebar-rail-toggle"
+            onClick={toggleRail}
+            aria-expanded={!railed}
+            aria-label={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            title={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+          >
+            <Icon icon={railed ? ChevronRight : ChevronLeft} size="sm" />
+          </button>
         </div>
 
-        {/* Only rendered where the sidebar exists at all — below 1000px the tab
-            bar takes over and there is nothing to collapse. */}
-        <button
-          type="button"
-          className="sidebar-rail-toggle"
-          onClick={toggleRail}
-          aria-expanded={!railed}
-          aria-label={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-          title={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-        >
-          <Icon icon={railed ? PanelLeftOpen : PanelLeftClose} size="sm" />
-          <span className="sidebar-label">{t('nav.collapse')}</span>
-        </button>
-
-        <nav className="sidebar-nav">
-          {NAV.map((item) => (
-            <button
-              key={item.route}
-              type="button"
-              className={cx('sidebar-item', sidebarActive(item.route) && 'is-active')}
-              aria-current={sidebarActive(item.route) ? 'page' : undefined}
-              /* The label is hidden visually in rail mode but stays in the DOM,
-                 so the accessible name never depends on the width. `title`
-                 gives the same thing to a mouse. */
-              title={railed ? t(item.labelKey) : undefined}
-              onMouseEnter={() => warmRoute(item.route, period)}
-              onFocus={() => warmRoute(item.route, period)}
-              onClick={() => go(item.route)}
-            >
-              <Icon icon={item.icon} />
-              <span className="sidebar-label">{t(item.labelKey)}</span>
-            </button>
+        <nav className="sidebar-nav" aria-label={t('nav.mainNavigation')}>
+          {SECTIONS.map((section) => (
+            <div className="sidebar-section" key={section.titleKey}>
+              {/* Hidden in rail mode by the stylesheet rather than removed: a
+                  group label with no visible group is noise, but a screen
+                  reader still wants the heading. */}
+              <h2 className="sidebar-section-title sidebar-label">{t(section.titleKey)}</h2>
+              {section.items.map((item) => (
+                <button
+                  key={item.route}
+                  type="button"
+                  className={cx('sidebar-item', sidebarActive(item.route) && 'is-active')}
+                  aria-current={sidebarActive(item.route) ? 'page' : undefined}
+                  onMouseEnter={() => warmRoute(item.route, period)}
+                  onFocus={() => warmRoute(item.route, period)}
+                  onClick={() => go(item.route)}
+                >
+                  <Icon icon={item.icon} />
+                  <span className="sidebar-label">{t(item.labelKey)}</span>
+                  {/* The rail's tooltip: shown only while collapsed, and hidden
+                      from assistive tech because the label beside it already
+                      says exactly this. */}
+                  <span className="sidebar-tip" aria-hidden="true">{t(item.labelKey)}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
+        {/* ---- Pinned to the bottom ----
+            Settings and Sign out are not destinations in the sense the screens
+            above are: one configures the app, the other leaves it. The space
+            `margin-top: auto` puts between them and the nav is the whole
+            distinction. */}
         <div className="sidebar-foot">
-          <div className="sidebar-label">
-            {t('nav.signedInAs')} <strong>{user?.displayName}</strong>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            title={railed ? t('nav.signOut') : undefined}
-            aria-label={t('nav.signOut')}
+          <button
+            type="button"
+            className={cx('sidebar-item', route === 'settings' && 'is-active')}
+            aria-current={route === 'settings' ? 'page' : undefined}
+            onClick={() => go('settings')}
           >
-            <Icon icon={LogOut} size="sm" />
+            <Icon icon={SETTINGS_ITEM.icon} />
+            <span className="sidebar-label">{t('nav.settings')}</span>
+            <span className="sidebar-tip" aria-hidden="true">{t('nav.settings')}</span>
+          </button>
+
+          <button type="button" className="sidebar-item is-signout" onClick={logout}>
+            <Icon icon={LogOut} />
             <span className="sidebar-label">{t('nav.signOut')}</span>
-          </Button>
+            <span className="sidebar-tip" aria-hidden="true">{t('nav.signOut')}</span>
+          </button>
         </div>
       </aside>
 

@@ -43,6 +43,10 @@ import type { TranslationSchema } from './en';
 
 export const th: TranslationSchema = {
   nav: {
+    /* หัวข้อกลุ่มในแถบด้านข้าง */
+    sectionMain: 'หลัก',
+    sectionManage: 'จัดการ',
+    unknownUser: 'ผู้ใช้',
     splits: 'หารบิล',
     dashboard: 'ภาพรวม',
     wallets: 'กระเป๋าเงิน',

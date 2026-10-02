@@ -31,6 +31,12 @@
 
 export const en = {
   nav: {
+    /* Sidebar group headings. Short and upper-cased by the stylesheet, not
+       here — a dictionary holds words, not their styling. */
+    sectionMain: 'Main',
+    sectionManage: 'Manage',
+    /* Shown when the profile has no display name yet. */
+    unknownUser: 'User',
     splits: 'Shared',
     dashboard: 'Overview',
     wallets: 'Wallets',

@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Receipt } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Plus, Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -120,18 +120,26 @@ export function TransactionsPage({ period }: { period: string }) {
       <Card
         title={t('activity.header', { range: rangeLabel(filters, period, settings.locale, t) })}
         subtitle={t('activity.totals', { income: money(totals.income), expense: money(totals.expense), net: money(totals.net) })}
-        /* Just the refresh. Adding a transaction is what the floating button
-           in the corner is for, on every screen — a second entry point in this
-           panel's header was chrome competing with itself, and it was also the
-           last untranslated string in the page. The empty state keeps its own
-           button, which is an answer to "there is nothing here" rather than a
-           duplicate of the FAB. */
+        /* Two entry points, deliberately. The floating button is always
+           within thumb reach and is how a transaction gets added on a phone;
+           this one sits where someone already is when they have been reading
+           the list and decide to add to it, and is the only one a mouse user
+           finds without hunting the bottom-right corner.
+
+           It is the accent-filled control in the header, so it reads as the
+           page's primary action rather than as another ghost icon. */
         actions={
-          <RefreshButton
-            onRefresh={() => Promise.all([transactions.refresh(), wallets.refresh()])}
-            busy={transactions.isValidating || wallets.isValidating}
-            label={t('activity.refresh')}
-          />
+          <>
+            <Button variant="primary" size="sm" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
+              <Icon icon={Plus} size="sm" />
+              {t('activity.addTransaction')}
+            </Button>
+            <RefreshButton
+              onRefresh={() => Promise.all([transactions.refresh(), wallets.refresh()])}
+              busy={transactions.isValidating || wallets.isValidating}
+              label={t('activity.refresh')}
+            />
+          </>
         }
       >
         <TransactionFilters
