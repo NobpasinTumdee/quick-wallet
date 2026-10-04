@@ -30,6 +30,20 @@
  */
 
 export const en = {
+  /* ---- Recovery screens ----
+     Two different situations, deliberately worded differently. One is routine
+     and the fix is certain; the other is a fault and promising a fix would be
+     a lie. */
+  errors: {
+    newVersionTitle: 'A new version is available',
+    newVersionBody: 'This tab is running an older build. Refresh to pick up the latest version — nothing has been lost.',
+    crashTitle: 'Something went wrong',
+    crashBody: 'This screen hit an unexpected error. Your data is safe; it was not saved from this screen.',
+    refresh: 'Refresh',
+    tryAgain: 'Try again',
+    reloadLoopHint: 'The app already tried refreshing on its own. If this keeps happening, the server may still be deploying.',
+  },
+
   nav: {
     /* Sidebar group headings. Short and upper-cased by the stylesheet, not
        here — a dictionary holds words, not their styling. */

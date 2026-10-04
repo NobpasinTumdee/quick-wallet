@@ -1,5 +1,5 @@
 import { ArrowUpRight, ChartNoAxesCombined, Database } from 'lucide-react';
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
@@ -14,6 +14,7 @@ import { formatPeriod } from '../lib/format';
 import { Route, navigate } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Transaction, WalletBalance } from '../types';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 /**
  * The analytics hub.
@@ -37,16 +38,16 @@ import { DashboardSummary, Transaction, WalletBalance } from '../types';
 
 /* Recharts is ~300kB and three of these cards need it. Split so the route pays
    for it on arrival rather than every other screen paying at boot. */
-const CashFlowSankey = lazy(() =>
+const CashFlowSankey = lazyWithRetry(() =>
   import('../components/CashFlowSankey').then((m) => ({ default: m.CashFlowSankey })),
 );
-const NetWorthProjection = lazy(() =>
+const NetWorthProjection = lazyWithRetry(() =>
   import('../components/NetWorthProjection').then((m) => ({ default: m.NetWorthProjection })),
 );
-const AnalyticsSavingsRate = lazy(() =>
+const AnalyticsSavingsRate = lazyWithRetry(() =>
   import('../components/AnalyticsSavingsRate').then((m) => ({ default: m.AnalyticsSavingsRate })),
 );
-const AnalyticsCategories = lazy(() =>
+const AnalyticsCategories = lazyWithRetry(() =>
   import('../components/AnalyticsCategories').then((m) => ({ default: m.AnalyticsCategories })),
 );
 
@@ -70,7 +71,7 @@ export function AnalyticsPage({
 
   /* The launch point for Deep Analytics, which is now its own route. A plain
      navigation, so this page imports nothing of the explorer: the page itself is
-     `lazy()` in AppShell, and nothing here can pull it into the main bundle.
+     `lazyWithRetry()` in AppShell, and nothing here can pull it into the main bundle.
 
      Rendered in both the full page and the empty state — a user with no
      spending yet may still have debts, goals or investments worth exploring,

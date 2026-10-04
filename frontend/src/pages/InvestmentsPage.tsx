@@ -10,7 +10,7 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -53,11 +53,12 @@ import {
 import { ValuedHolding, groupValuedHoldings } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, WalletBalance, WatchlistItem } from '../types';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 /* lightweight-charts is ~180kB, and the indicator maths and terminal ride
    along with it — all of it behind one dynamic import, so the main bundle
    carries none of it. `bundlecheck.mjs` proves that stays true. */
-const TAChartTerminal = lazy(() =>
+const TAChartTerminal = lazyWithRetry(() =>
   import('../components/TAChartTerminal').then((m) => ({ default: m.TAChartTerminal })),
 );
 

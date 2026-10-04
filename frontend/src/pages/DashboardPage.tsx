@@ -9,7 +9,7 @@ import {
   Unlock,
   Wallet,
 } from 'lucide-react';
-import { Suspense, lazy, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
@@ -28,9 +28,10 @@ import { positionKeyOf } from '../lib/positions';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Goal, Investment, Transaction, WalletBalance } from '../types';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 
-const IncomeSpendingChart = lazy(() =>
+const IncomeSpendingChart = lazyWithRetry(() =>
   import('../components/IncomeSpendingChart').then((m) => ({ default: m.IncomeSpendingChart })),
 );
 
@@ -38,7 +39,7 @@ const IncomeSpendingChart = lazy(() =>
 /* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
    belongs in the Dashboard's chunk when most visits never open it — and this
    is the default route, so its chunk is the one everybody pays for. */
-const TaxCalculatorModal = lazy(() =>
+const TaxCalculatorModal = lazyWithRetry(() =>
   import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
 );
 

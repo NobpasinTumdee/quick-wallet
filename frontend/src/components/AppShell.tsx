@@ -18,7 +18,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -55,6 +55,7 @@ import { GestureNavWidget, Shortcut } from './GestureNavWidget';
 import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 /**
  * ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ const DEEP_ITEM: NavItem = {
  * download the first time someone opens it, and never otherwise.
  * `bundlecheck.mjs` fails the build if a static import ever pulls it back in.
  */
-const DeepAnalyticsPage = lazy(() => import('../pages/DeepAnalyticsPage'));
+const DeepAnalyticsPage = lazyWithRetry(() => import('../pages/DeepAnalyticsPage'));
 
 /**
  * How the routes split on a phone.

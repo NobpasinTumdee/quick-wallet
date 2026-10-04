@@ -13345,3 +13345,104 @@ line.arate-zero {
   min-width: 0;
   resize: vertical;
 }
+
+/* ==========================================================================
+   The recovery screen
+   --------------------------------------------------------------------------
+   Rendered by ErrorBoundary when the tree below it has already unmounted, so
+   it can rely on nothing: no layout shell, no providers, no page padding. It
+   centres itself on a bare viewport and uses only the theme tokens, which are
+   plain custom properties on :root and survive any React failure.
+   ========================================================================== */
+
+.app-error {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-5);
+  background: var(--bg, #15151c);
+}
+
+.app-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  /* Narrower than a phone, so it never needs a breakpoint of its own. */
+  max-width: 420px;
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-lg);
+}
+
+.app-error-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* An update is not a fault, and colouring it like one teaches people to fear
+   a refresh. Accent for "newer version exists", warning only for a real
+   crash. */
+.app-error-mark.is-update {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.app-error-mark.is-fault {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.app-error-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+.app-error-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.app-error-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--warning);
+}
+
+/* The raw message, kept small but selectable: someone reporting this needs
+   something to paste, and `anywhere` because a bundler URL has no spaces and
+   would otherwise widen the card off a phone. */
+.app-error-detail {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
