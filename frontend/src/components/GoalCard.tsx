@@ -83,7 +83,12 @@ export function GoalCard({
           style={{ background: purchased ? 'var(--positive)' : goal.color || 'var(--accent)' }}
           aria-hidden="true"
         />
-        <h3 className="goal-title">{goal.title}</h3>
+        {/* `title` is the only way back to a name the ellipsis ate. It costs
+            nothing, and a truncated label with no way to read it in full is a
+            card that hides its own subject. */}
+        <h3 className="goal-title" title={goal.title}>
+          {goal.title}
+        </h3>
         {/* The tier displaces the target figure rather than joining it: on a
             bought thing the price is history and the verdict is the news, and
             three items on this line is what overflowed 375px before. */}

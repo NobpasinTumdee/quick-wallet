@@ -1646,6 +1646,17 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
 .modal-head h2 {
   font-size: var(--text-md);
   font-weight: var(--weight-semi);
+  /* Four of these headings interpolate a goal's name — "Buy {title}", "Add to
+     {title}" — so this is free text in a flex row beside a close button. Two
+     lines, then an ellipsis: enough to identify the goal, never enough to push
+     the close button off the dialog. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .modal-close {
@@ -5022,7 +5033,12 @@ table.data.data--nested td {
 
 .goal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  /* `min(300px, 100%)`, not a bare 300px: a minimum larger than the container
+     is still honoured, so on a narrow screen the track would be wider than the
+     grid and push the page sideways. This caps the minimum at the space that
+     actually exists. The 640px rule below still collapses it to one column —
+     this guards the gap between the two. */
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: var(--space-4);
   padding: var(--space-5);
 }
@@ -5030,6 +5046,10 @@ table.data.data--nested td {
 .goal-card {
   display: flex;
   flex-direction: column;
+  /* The same automatic-minimum rule as a flex item: without this a grid item
+     cannot be narrower than its content, so one long word inside would widen
+     the track and the page with it. */
+  min-width: 0;
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--border);
@@ -12806,11 +12826,14 @@ line.arate-zero {
 }
 
 .goal-title {
+  /* The three parts of a truncation, and all three are required: `flex: 1` to
+     take the leftover width, `min-width: 0` to be *allowed* to be narrower
+     than the text (a flex item's automatic minimum is its content, which is
+     what makes truncation silently do nothing), and the overflow trio below.
+     `overflow-wrap` is deliberately absent — `nowrap` prevents every break, so
+     it could never fire and only read as a contradictory second intention. */
   flex: 1;
   min-width: 0;
-  /* Truncated rather than wrapped: the header is one line by design, and an
-     unbroken string must not be able to widen it. */
-  overflow-wrap: anywhere;
   margin: 0;
   font-size: var(--text-base);
   font-weight: var(--weight-semi);
@@ -13129,6 +13152,13 @@ line.arate-zero {
   color: var(--text-muted);
   min-width: 0;
   overflow-wrap: anywhere;
+  /* Two lines here too. This names the purchase being reviewed; it is not the
+     place to reproduce a 200-character title in full. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .review-section {
