@@ -1054,6 +1054,28 @@ export const th: TranslationSchema = {
   },
 
   goals: {
+    /* ---- รีวิวหลังซื้อ ---- */
+    reviewTitle: 'คุ้มค่าไหม?',
+    reviewPurchase: 'รีวิวการซื้อ',
+    editReview: 'แก้ไขรีวิว',
+    viewReview: 'ดูรีวิว',
+    hideReview: 'ซ่อนรีวิว',
+    saveReview: 'บันทึกรีวิว',
+    expectation: 'ที่คาดไว้',
+    reality: 'ความจริง',
+    ratingValue: 'ความคุ้มราคา',
+    ratingConvenience: 'ความสะดวกในการใช้',
+    ratingQol: 'คุณภาพชีวิต',
+    starsOf: '{{n}} จาก {{total}} ดาว',
+    tierPrompt: 'จัดอันดับให้หน่อย',
+    tierLabel: 'ระดับ {{tier}}',
+    reviewNote: 'ความเห็นของคุณ',
+    reviewNotePlaceholder: 'ถ้าย้อนเวลาได้ จะซื้ออีกไหม?',
+    verdictMet: 'ได้ตามที่คาดไว้พอดี',
+    verdictBeat: 'ดีกว่าที่คาดไว้ {{points}} ดาว',
+    verdictBelow: 'ต่ำกว่าที่คาดไว้ {{points}} ดาว',
+    notRated: 'ยังไม่ได้ให้คะแนน',
+    reviewOnlyPurchased: 'ต้องซื้อเป้าหมายนี้ก่อนจึงจะรีวิวได้',
     /* แสดงเมื่อโน้ตยาวเกินสองบรรทัดเท่านั้น */
     showMore: 'ดูเพิ่ม',
     showLess: 'ย่อ',

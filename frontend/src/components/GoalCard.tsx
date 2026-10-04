@@ -1,4 +1,4 @@
-import { BadgeCheck, Minus, Plus, ShoppingBag } from 'lucide-react';
+import { BadgeCheck, Minus, Plus, ShoppingBag, Star } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -6,8 +6,9 @@ import { Icon } from './Icon';
 import { Button, ProgressBar } from './ui';
 import { goalPace, readyToBuy, ringPercent } from '../lib/goalMath';
 import { cx, formatDate } from '../lib/format';
+import { TranslationKey } from '../locales';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Goal } from '../types';
+import { GOAL_RATING_KEYS, Goal, GoalRatingKey } from '../types';
 
 /**
  * One sinking fund, as a card.
@@ -35,6 +36,7 @@ export function GoalCard({
   onBuy,
   onEdit,
   onDelete,
+  onReview,
 }: {
   goal: Goal;
   onFund: () => void;
@@ -42,11 +44,20 @@ export function GoalCard({
   onBuy: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Absent on a goal that was never bought — there is nothing to review. */
+  onReview?: () => void;
 }) {
   const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
   const locale = settings.locale;
+
+  /* Collapsed by default. The review is why the goal is interesting a month
+     later, but it is not what the card is *for* — the card is a row in a list
+     of money, and four of them expanded is a page nobody can scan. */
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const realityAverage = averageReality(goal);
 
   const pace = goalPace(goal);
   const percent = ringPercent(goal);
@@ -73,7 +84,19 @@ export function GoalCard({
           aria-hidden="true"
         />
         <h3 className="goal-title">{goal.title}</h3>
-        <span className="goal-target">{money(goal.targetAmount)}</span>
+        {/* The tier displaces the target figure rather than joining it: on a
+            bought thing the price is history and the verdict is the news, and
+            three items on this line is what overflowed 375px before. */}
+        {goal.tier ? (
+          <span
+            className={cx('tier-badge', `is-${goal.tier.toLowerCase()}`)}
+            title={t('goals.tierLabel', { tier: goal.tier })}
+          >
+            {goal.tier}
+          </span>
+        ) : (
+          <span className="goal-target">{money(goal.targetAmount)}</span>
+        )}
       </header>
 
       <div className="goal-progress">
@@ -93,6 +116,44 @@ export function GoalCard({
       </div>
 
       {goal.note && <GoalNote note={goal.note} />}
+
+      {/* ---- The review ----
+          Only ever on a purchased goal, and only once something has been
+          written: an empty "View review" is a promise the card cannot keep. */}
+      {purchased && goal.reviewed && (
+        <div className="goal-review">
+          <button
+            type="button"
+            className="goal-review-toggle"
+            aria-expanded={reviewOpen}
+            onClick={() => setReviewOpen((open) => !open)}
+          >
+            {realityAverage !== null && (
+              <span className="goal-review-score">
+                <Icon icon={Star} size="sm" />
+                {realityAverage.toFixed(1)}
+              </span>
+            )}
+            <span>{t(reviewOpen ? 'goals.hideReview' : 'goals.viewReview')}</span>
+          </button>
+
+          {reviewOpen && (
+            <div className="goal-review-detail">
+              {GOAL_RATING_KEYS.map((key) => (
+                <div className="goal-review-line" key={key}>
+                  <span>{t(RATING_LABEL[key])}</span>
+                  <span className="goal-review-pair">
+                    <StarRow value={goal.ratings.pre[key]} />
+                    <span className="goal-review-arrow" aria-hidden="true">&rarr;</span>
+                    <StarRow value={goal.ratings.post[key]} lit />
+                  </span>
+                </div>
+              ))}
+              {goal.reviewNote && <p className="goal-review-note">{goal.reviewNote}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="goal-meta">
         {purchased ? (
@@ -162,6 +223,15 @@ export function GoalCard({
           </Button>
         )}
 
+        {/* Reviewing is the only thing left to do with a bought goal, so it
+            takes the place the money buttons have on an active one. */}
+        {purchased && onReview && (
+          <Button size="sm" variant={goal.reviewed ? 'ghost' : 'secondary'} onClick={onReview}>
+            <Icon icon={Star} size="sm" />
+            {t(goal.reviewed ? 'goals.editReview' : 'goals.reviewPurchase')}
+          </Button>
+        )}
+
         <div className="spacer" />
         {/* Edit and delete travel as one unit. When the row wraps — a narrow
             card, or a longer translation — a lone ✕ on its own line reads as a
@@ -226,5 +296,38 @@ function GoalNote({ note }: { note: string }) {
         </button>
       )}
     </div>
+  );
+}
+
+const RATING_LABEL: Record<GoalRatingKey, TranslationKey> = {
+  value: 'goals.ratingValue',
+  convenience: 'goals.ratingConvenience',
+  qol: 'goals.ratingQol',
+};
+
+/**
+ * The headline number: how the thing actually turned out, averaged.
+ *
+ * Only the `post` scores, because that is the question the card is answering
+ * at a glance — "is this any good" — and only the categories that were rated,
+ * so a half-filled review is not dragged down by the rows left blank.
+ */
+function averageReality(goal: Goal): number | null {
+  const scored = GOAL_RATING_KEYS.filter((key) => goal.ratings.post[key] > 0);
+  if (scored.length === 0) return null;
+  return scored.reduce((sum, key) => sum + goal.ratings.post[key], 0) / scored.length;
+}
+
+/** Five stars, read-only. Decorative: the figure beside it carries the value. */
+function StarRow({ value, lit }: { value: number; lit?: boolean }) {
+  const { t } = useTranslation();
+  if (value <= 0) return <span className="goal-review-unrated">{t('goals.notRated')}</span>;
+
+  return (
+    <span className={cx('star-row', lit && 'is-reality')} aria-label={t('goals.starsOf', { n: value, total: 5 })}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Icon icon={Star} size="sm" key={n} className={cx('star-row-icon', n <= value && 'is-lit')} />
+      ))}
+    </span>
   );
 }

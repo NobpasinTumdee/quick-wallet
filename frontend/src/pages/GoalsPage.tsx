@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { GoalCard } from '../components/GoalCard';
 import { GoalForm, GoalPayload } from '../components/GoalForm';
 import { GoalPurchaseModal } from '../components/GoalPurchaseModal';
+import { GoalReviewModal } from '../components/GoalReviewModal';
 import { Icon } from '../components/Icon';
 import {
   Alert,
@@ -67,6 +68,12 @@ export function GoalsPage() {
   const [payDate, setPayDate] = useState(todayKey);
   const [buyError, setBuyError] = useState<string | null>(null);
   const [buyBusy, setBuyBusy] = useState(false);
+
+  /* The goal whose review is open, or null. Held as the row rather than its id
+     so the modal seeds from the same object the card rendered — looking it up
+     again would re-seed the form mid-edit on any background refresh. */
+  const [reviewing, setReviewing] = useState<Goal | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   const allocation = allocationSummary(wallets.items, goals.items);
 
@@ -253,11 +260,30 @@ export function GoalsPage() {
                   setFormOpen(true);
                 }}
                 onDelete={() => void remove(goal)}
+                onReview={goal.purchased ? () => setReviewing(goal) : undefined}
               />
             ))}
           </div>
         )}
       </Card>
+
+      <GoalReviewModal
+        open={reviewing !== null}
+        goal={reviewing ?? undefined}
+        busy={reviewBusy}
+        onClose={() => setReviewing(null)}
+        onSubmit={(review) => {
+          if (!reviewing) return;
+          setReviewBusy(true);
+          /* Closed on success only. A review is typed, not picked, and
+             dropping the dialog before the write lands would lose the text
+             with nowhere to recover it from. */
+          goals
+            .reviewGoal(reviewing.id, review)
+            .then(() => setReviewing(null))
+            .finally(() => setReviewBusy(false));
+        }}
+      />
 
       <GoalPurchaseModal
         goal={buying}

@@ -356,6 +356,45 @@ export interface Goal {
   complete: boolean;
   /** `status === 'purchased'`, decided once on the server. */
   purchased: boolean;
+
+  /* ---- The post-purchase review ---- */
+  /** Blank until the goal has been given a tier. */
+  tier: GoalTier | '';
+  /** Decoded server-side from one JSON column — see `parseGoalRatings_`. */
+  ratings: GoalRatings;
+  reviewNote: string;
+  /** True once any part of the review has been filled in. */
+  reviewed: boolean;
+}
+
+/**
+ * The tier ladder, best first.
+ *
+ * Ordered, and the order is load-bearing: the review modal renders the ladder
+ * from this array, so a tier added here appears in the UI without a second
+ * list to keep in step. The matching allowlist lives in `Code.gs`, and
+ * `goalreviewgs.mjs` fails if the two drift apart.
+ */
+export const GOAL_TIERS = ['SSS', 'S', 'A', 'B', 'C', 'D'] as const;
+export type GoalTier = (typeof GOAL_TIERS)[number];
+
+/** The three things a purchase is judged on, in display order. */
+export const GOAL_RATING_KEYS = ['value', 'convenience', 'qol'] as const;
+export type GoalRatingKey = (typeof GOAL_RATING_KEYS)[number];
+
+/** One phase's three scores, each 0-5 where 0 means "not rated". */
+export type GoalRatingSet = Record<GoalRatingKey, number>;
+
+/**
+ * What was expected of the purchase against what it turned out to be.
+ *
+ * Both halves are kept rather than just the difference, because the gap is
+ * only meaningful if you can see which side it came from: a 2-point drop from
+ * 5 to 3 is a disappointment, and the same drop from 3 to 1 is a mistake.
+ */
+export interface GoalRatings {
+  pre: GoalRatingSet;
+  post: GoalRatingSet;
 }
 
 /* ------------------------------------------------------------------ */

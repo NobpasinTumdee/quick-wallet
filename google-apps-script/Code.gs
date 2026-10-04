@@ -322,7 +322,31 @@ var SHEETS = {
       { key: 'purchaseTxId', header: 'Purchase Tx ID', type: 'string' },
       /* `datekey`, not `date`: the same Sheets-parses-it-into-a-Date trap the
          deadline column documents. */
-      { key: 'purchasedAt', header: 'Purchased At', type: 'datekey' }
+      { key: 'purchasedAt', header: 'Purchased At', type: 'datekey' },
+      /* -------------------------------------------------------------------
+         THE REVIEW — WAS IT WORTH IT
+         -------------------------------------------------------------------
+         Appended, like every column added after the first release, because
+         `insertRow_` and `updateRow_` write *positionally*: a column inserted
+         in the middle would shift every value in every existing row one cell
+         to the right. Older rows simply have three blank cells here, which is
+         why every read below tolerates an empty string.
+
+         'SSS' | 'S' | 'A' | 'B' | 'C' | 'D', or blank for not yet rated. */
+      { key: 'tier', header: 'Tier', type: 'string' },
+      /* A JSON blob rather than six numeric columns.
+
+         Six columns would be the usual advice, and it is wrong here: these
+         numbers are never queried, summed or sorted by the sheet — they are
+         read and written as one object, always together, by one screen. Six
+         columns would mean six positional appends to get wrong, six headers
+         to keep aligned, and a seventh the day a fourth category is added.
+         The shape is `{ pre: {...}, post: {...} }`; `parseGoalRatings_` is the
+         only thing that reads it, and it treats anything malformed as zeroes
+         rather than throwing — a corrupt opinion must not make a goal
+         unreadable. */
+      { key: 'ratings', header: 'Ratings', type: 'string' },
+      { key: 'reviewNote', header: 'Review Note', type: 'string' }
     ]
   },
   /**
@@ -2728,6 +2752,94 @@ function goalStatus_(goal) {
     : 'active';
 }
 
+/**
+ * The tier ladder, best first.
+ *
+ * An allowlist rather than free text: this string drives a visual treatment —
+ * 'SSS' gets the legendary card — and an unrecognised value would render as an
+ * unstyled badge with no indication anything went wrong.
+ */
+var GOAL_TIERS = ['SSS', 'S', 'A', 'B', 'C', 'D'];
+
+/** The three things a purchase is judged on. */
+var GOAL_RATING_KEYS = ['value', 'convenience', 'qol'];
+
+/**
+ * Reads the stored ratings blob into a known shape.
+ *
+ * Never throws. The stored cell can be empty (every row written before this
+ * column existed), half-written, or edited by hand in the spreadsheet — and
+ * none of those is a reason for the Goals screen to fail to load. Anything it
+ * cannot make sense of becomes zeroes, which the UI renders as "not rated".
+ */
+function parseGoalRatings_(raw) {
+  var empty = { pre: { value: 0, convenience: 0, qol: 0 }, post: { value: 0, convenience: 0, qol: 0 } };
+  if (!raw) return empty;
+
+  var parsed;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (err) {
+    return empty;
+  }
+  if (!parsed || typeof parsed !== 'object') return empty;
+
+  var out = { pre: {}, post: {} };
+  ['pre', 'post'].forEach(function (phase) {
+    var source = parsed[phase] && typeof parsed[phase] === 'object' ? parsed[phase] : {};
+    GOAL_RATING_KEYS.forEach(function (key) {
+      var n = Math.round(Number(source[key]));
+      /* Clamped, not rejected: a 7 stored by a future version of the client
+         should read as the top of this scale, not blow up the whole row. */
+      out[phase][key] = !isFinite(n) || n < 0 ? 0 : Math.min(5, n);
+    });
+  });
+  return out;
+}
+
+/**
+ * Validates an incoming review and returns it as the three stored cells.
+ *
+ * Unlike `parseGoalRatings_` above this one *does* throw, and the asymmetry is
+ * deliberate: reading tolerates damage so a bad cell cannot take a screen
+ * down, while writing refuses it so the damage does not get in.
+ */
+function parseGoalReview_(body) {
+  var tier = str_(body.tier, 'tier', { required: false, max: 3 }).toUpperCase();
+  if (tier && GOAL_TIERS.indexOf(tier) === -1) {
+    throw bad_('"tier" must be one of ' + GOAL_TIERS.join(', '));
+  }
+
+  var ratings = { pre: {}, post: {} };
+  var source = body.ratings && typeof body.ratings === 'object' ? body.ratings : {};
+  ['pre', 'post'].forEach(function (phase) {
+    var given = source[phase] && typeof source[phase] === 'object' ? source[phase] : {};
+    GOAL_RATING_KEYS.forEach(function (key) {
+      var n = given[key] === '' || given[key] === null || given[key] === undefined
+        ? 0
+        : num_(given[key], 'ratings.' + phase + '.' + key, { min: 0, max: 5 });
+      ratings[phase][key] = Math.round(n);
+    });
+  });
+
+  return {
+    tier: tier,
+    /* Stringified here rather than at the call site so the only place that
+       knows this column is JSON is the pair of functions above. */
+    ratings: JSON.stringify(ratings),
+    reviewNote: str_(body.reviewNote, 'reviewNote', { required: false, max: 1000 })
+  };
+}
+
+/** True once the goal carries any opinion at all. */
+function goalReviewed_(goal) {
+  if (goal.tier) return true;
+  var r = parseGoalRatings_(goal.ratings);
+  return GOAL_RATING_KEYS.some(function (key) {
+    return r.pre[key] > 0 || r.post[key] > 0;
+  }) || !!goal.reviewNote;
+}
+
 function parseGoal_(body) {
   var target = num_(body.targetAmount, 'targetAmount', { min: 0 });
   if (target <= 0) throw bad_('"targetAmount" must be greater than zero');
@@ -2765,7 +2877,15 @@ function decorateGoal_(goal) {
     /* Sent as its own boolean rather than left as a string comparison for
        every caller to repeat — and so a future third status does not silently
        start reading as "not purchased" in half the places. */
-    purchased: status === 'purchased'
+    purchased: status === 'purchased',
+    /* ---- The review ----
+       `ratings` leaves here as an object, not the JSON string it is stored as.
+       The client should never have to know which columns happen to be encoded
+       — that is this function's job, and it is the only place that decodes. */
+    tier: goal.tier || '',
+    ratings: parseGoalRatings_(goal.ratings),
+    reviewNote: goal.reviewNote || '',
+    reviewed: goalReviewed_(goal)
   };
 }
 
@@ -2824,6 +2944,30 @@ function goalsUpdate_(user, query, body) {
   for (var j in body) merged[j] = body[j];
 
   var parsed = parseGoal_(merged);
+
+  /* ---- The review ----
+     Patchable, unlike `savedAmount` and `status`, because an opinion is not a
+     ledger entry: changing your mind about a purchase moves no money and so
+     needs no transaction behind it.
+
+     What it does need is the purchase. A tier list of things never bought is
+     not a tier list, and allowing one would let the Goals screen show a
+     reviewed card with no payment under it — the same class of lie the
+     `status` rule above exists to prevent. Checked against the *stored* row,
+     never the patch, since `status` cannot arrive in one. */
+  var reviewKeys = ['tier', 'ratings', 'reviewNote'];
+  var touchesReview = reviewKeys.some(function (key) {
+    return Object.prototype.hasOwnProperty.call(body, key);
+  });
+  if (touchesReview) {
+    if (goalStatus_(existing) !== 'purchased') {
+      throw apiError_('Only a purchased goal can be reviewed', 409, 'GOAL_NOT_PURCHASED');
+    }
+    var review = parseGoalReview_(merged);
+    parsed.tier = review.tier;
+    parsed.ratings = review.ratings;
+    parsed.reviewNote = review.reviewNote;
+  }
   /* `savedAmount` is deliberately absent from the patch. Editing a goal must
      not be a back door into its balance — that belongs to `goals.fund`, which
      is the only path that reads the stored figure before changing it. The same

@@ -1073,6 +1073,30 @@ export const en = {
   },
 
   goals: {
+    /* ---- Post-purchase review ----
+       The vocabulary is deliberately plain. "Value for money" beats "ROI" on a
+       screen someone opens to decide whether they regret a sofa. */
+    reviewTitle: 'Was it worth it?',
+    reviewPurchase: 'Review purchase',
+    editReview: 'Edit review',
+    viewReview: 'View review',
+    hideReview: 'Hide review',
+    saveReview: 'Save review',
+    expectation: 'Expected',
+    reality: 'Reality',
+    ratingValue: 'Value for money',
+    ratingConvenience: 'Convenience',
+    ratingQol: 'Quality of life',
+    starsOf: '{{n}} of {{total}} stars',
+    tierPrompt: 'Give it a tier',
+    tierLabel: 'Tier {{tier}}',
+    reviewNote: 'Your verdict',
+    reviewNotePlaceholder: 'Would you buy it again?',
+    verdictMet: 'Reality matched what you expected.',
+    verdictBeat: 'Better than expected by {{points}} stars.',
+    verdictBelow: 'Fell short by {{points}} stars.',
+    notRated: 'Not rated yet',
+    reviewOnlyPurchased: 'A goal can only be reviewed once it has been bought.',
     /* Only rendered when the note is genuinely longer than its two lines. */
     showMore: 'Show more',
     showLess: 'Show less',

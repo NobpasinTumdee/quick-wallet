@@ -3,7 +3,14 @@ import { useCallback } from 'react';
 import { mutateMatching, refreshPrefixes } from '../api/cache';
 import { api } from '../api/client';
 import { CollectionState, useExcelDB } from './useExcelDB';
-import { Goal, GoalPurchaseResult, Transaction, WalletBalance } from '../types';
+import { Goal, GoalPurchaseResult, GoalRatings, GoalTier, Transaction, WalletBalance } from '../types';
+
+/** What the review modal sends. Partial: the note alone is a valid review. */
+export interface GoalReview {
+  tier: GoalTier | '';
+  ratings: GoalRatings;
+  reviewNote: string;
+}
 
 /**
  * Sinking funds.
@@ -12,6 +19,16 @@ import { Goal, GoalPurchaseResult, Transaction, WalletBalance } from '../types';
  * plain update: funding, and buying the thing.
  */
 export interface GoalsState extends CollectionState<Goal> {
+  /**
+   * Saves a post-purchase review.
+   *
+   * A plain `update`, not an action of its own: unlike `purchase` and `fund`
+   * this writes no transaction and touches no balance, so there is nothing for
+   * the server to do atomically and nothing for the cache to reconcile beyond
+   * the row itself. The server still refuses it on a goal that was never
+   * bought — see `goalsUpdate_`.
+   */
+  reviewGoal: (id: string, review: GoalReview) => Promise<void>;
   /**
    * Moves `amount` into or out of a goal. Negative withdraws.
    *
@@ -138,5 +155,15 @@ export function useGoals(): GoalsState {
     [items],
   );
 
-  return { ...collection, fund, purchase };
+  /* No optimistic patch and no hand-written request: `update` already sends
+     the PATCH, merges the server's row into every cached copy and rolls back
+     on failure. The review is just three more fields on that row. */
+  const reviewGoal = useCallback(
+    async (id: string, review: GoalReview) => {
+      await collection.update(id, review as Partial<Goal>);
+    },
+    [collection],
+  );
+
+  return { ...collection, fund, purchase, reviewGoal };
 }

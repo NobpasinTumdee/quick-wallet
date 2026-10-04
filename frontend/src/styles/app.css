@@ -9237,7 +9237,7 @@ line.arate-zero {
   .sidebar-section-title {
     margin: 0 0 4px;
     padding-inline: 12px;
-    font-size: var(--text-3xs, 0.625rem);
+    font-size: var(--text-3xs);
     font-weight: var(--weight-semi);
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -12899,3 +12899,419 @@ line.arate-zero {
   color: var(--positive);
 }
 
+/* ==========================================================================
+   Post-purchase review — tiers, stars, verdict
+   --------------------------------------------------------------------------
+   Mobile-first like the rest of the Goals card: every rule below holds at
+   375px, and the only media query *adds* room. The grids all use
+   `minmax(0, …)` tracks, because a grid child's automatic minimum size is its
+   content — the single most common cause of a card wider than the phone.
+   ========================================================================== */
+
+/* ---- The tier badge on the card ---- */
+.tier-badge {
+  flex: none;
+  min-width: 34px;
+  padding: 2px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* The ladder. Only the top two glow: if everything glows, nothing is special,
+   and the whole point of a tier is that the good ones are visibly rarer. */
+.tier-badge.is-d,
+.tier-chip.is-d.is-picked {
+  background: var(--surface-3);
+  color: var(--text-faint);
+}
+
+.tier-badge.is-c,
+.tier-chip.is-c.is-picked {
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-muted);
+}
+
+.tier-badge.is-b,
+.tier-chip.is-b.is-picked {
+  background: var(--accent-softer);
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+
+.tier-badge.is-a,
+.tier-chip.is-a.is-picked {
+  background: var(--positive-soft);
+  border-color: color-mix(in srgb, var(--positive) 35%, transparent);
+  color: var(--positive);
+}
+
+/* S — a purple aura. One shadow, no animation: this is the second-best thing
+   on the ladder and it should read as rare, not as urgent. */
+.tier-badge.is-s,
+.tier-chip.is-s.is-picked {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* SSS — legendary. A gold gradient border drawn with two backgrounds clipped
+   to the padding box and the border box, which is the only way to put a
+   gradient on a border without a wrapper element. The sheen sweeps rather than
+   pulses: a pulsing badge in a list of money reads as an error state. */
+.tier-badge.is-sss,
+.tier-chip.is-sss.is-picked {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    linear-gradient(110deg, #b8860b, #ffd700, #fff4c2, #ffd700, #b8860b) border-box;
+  background-size: 100% 100%, 220% 100%;
+  color: #ffd700;
+  text-shadow: 0 0 8px color-mix(in srgb, #ffd700 60%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, #ffd700 30%, transparent);
+  animation: tier-sheen 3s linear infinite;
+}
+
+@keyframes tier-sheen {
+  to {
+    background-position: 0 0, 220% 0;
+  }
+}
+
+/* A sweeping gold border is decoration. Anyone who has asked for less motion
+   keeps the gold and loses the sweep. */
+@media (prefers-reduced-motion: reduce) {
+  .tier-badge.is-sss,
+  .tier-chip.is-sss.is-picked {
+    animation: none;
+  }
+}
+
+/* ---- The review strip on the card ---- */
+.goal-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.goal-review-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-2xs);
+  cursor: pointer;
+}
+
+.goal-review-toggle:hover {
+  color: var(--text);
+}
+
+.goal-review-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.goal-review-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  color: var(--warning, #f5a524);
+}
+
+.goal-review-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  min-width: 0;
+}
+
+/* Label over scores at phone width — side by side leaves the label about 90px
+   and the stars clipped. The media query puts them back on one line. */
+.goal-review-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.goal-review-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.goal-review-arrow {
+  color: var(--text-faint);
+}
+
+.goal-review-note {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text);
+  min-width: 0;
+  /* Free text, so the same rule the goal note needs: an unbroken run has no
+     space to break at and would widen the card and the page with it. */
+  overflow-wrap: anywhere;
+}
+
+.goal-review-unrated {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+@media (min-width: 420px) {
+  .goal-review-line {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+/* ---- Read-only star rows ---- */
+.star-row {
+  display: inline-flex;
+  gap: 1px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.star-row-icon {
+  opacity: 0.3;
+}
+
+.star-row-icon.is-lit {
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.star-row.is-reality .star-row-icon.is-lit {
+  color: var(--warning, #f5a524);
+}
+
+/* ---- The modal ---- */
+.review-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.review-subject {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.review-legend {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text-muted);
+}
+
+/* Two star groups are 300px before any label, which does not fit beside one
+   on a 375px screen. Squeezing the label track to make room is what broke it:
+   a `minmax(0, 1fr)` column collapses to nothing, and `overflow-wrap: anywhere`
+   then breaks "Quality of life" one letter per line.
+
+   So on a phone the label takes its own row above the two groups, which keeps
+   expectation and reality side by side — the comparison is the whole point and
+   must never be split. The three-column form returns when there is room. */
+.review-grid-head,
+.review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px var(--space-2);
+  min-width: 0;
+}
+
+.review-row-label {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  min-width: 0;
+  /* A category name is fixed text today, but it is translated, and a long
+     compound in another language must break rather than widen the row. */
+  overflow-wrap: anywhere;
+}
+
+/* The head's leading cell only exists to sit above the label column, which at
+   this width is not a column. */
+.review-grid-head > span:first-child {
+  display: none;
+}
+
+@media (min-width: 520px) {
+  .review-grid-head,
+  .review-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .review-row-label {
+    grid-column: auto;
+  }
+
+  .review-grid-head > span:first-child {
+    display: block;
+  }
+}
+
+.review-grid-head {
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.review-verdict {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.review-verdict.is-up {
+  color: var(--positive);
+}
+
+.review-verdict.is-down {
+  color: var(--negative);
+}
+
+/* ---- Star inputs ----
+   34px targets: under the 44px ideal, but five of them plus a label has to fit
+   343px, and they sit in a modal rather than a scrolling list where a mis-tap
+   is costly. Re-tapping the lit star clears it, so a mistake is one tap to fix. */
+.stars {
+  display: inline-flex;
+  gap: 1px;
+  flex: none;
+}
+
+.star {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.star:hover {
+  opacity: 0.7;
+  transform: scale(1.12);
+}
+
+.star.is-lit {
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.stars.is-reality .star.is-lit {
+  color: var(--warning, #f5a524);
+}
+
+.star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ---- The tier picker ----
+   Wraps rather than scrolls: six chips at 375px is two rows, and a horizontal
+   scroller would hide the best tiers off the right edge. */
+.tier-picker {
+  /* A grid, not a wrapping flex row: six chips wrapped 5-then-1 left the last
+     tier stretched across the full width, which read as a different kind of
+     control rather than the bottom of the same ladder. */
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+@media (min-width: 520px) {
+  .tier-picker {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.tier-chip {
+  min-width: 0;
+  padding: 10px 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+
+.tier-chip:hover {
+  transform: translateY(-2px);
+  color: var(--text);
+}
+
+.tier-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.review-note-input {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
