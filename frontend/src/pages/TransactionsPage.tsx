@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Plus, Receipt } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Download, Plus, Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -15,6 +15,9 @@ import { EMPTY_FILTERS, TxFilters, fetchScope, filterTransactions } from '../lib
 import { RecordedAt } from '../components/RecordedAt';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, WalletBalance } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
+import { downloadCsv, toCsv } from '../lib/csv';
 
 /**
  * Shown beside the title, so the header describes what is actually on screen.
@@ -109,8 +112,32 @@ export function TransactionsPage({ period }: { period: string }) {
     return Promise.resolve();
   }
 
+  const confirmDelete = useConfirm<Transaction>();
+
+  function exportCsv() {
+    /* Raw values, not formatted ones: a spreadsheet wants a number it can sum
+       and an ISO date it can sort. `money()` would write "THB 1,234.00" into
+       every amount cell and make the column text. */
+    const rows = visible.map((tx) => [
+      tx.date,
+      tx.type,
+      tx.category,
+      walletName(tx.walletId),
+      tx.note,
+      tx.amount,
+    ]);
+    const header = [
+      t('common.date'),
+      t('common.type'),
+      t('common.category'),
+      t('common.wallet'),
+      t('common.note'),
+      t('common.amount'),
+    ];
+    downloadCsv(`quick-wallet-export-${period}.csv`, toCsv(header, rows));
+  }
+
   async function remove(tx: Transaction) {
-    if (!window.confirm(t('activity.deleteConfirm', { type: tx.type, amount: money(tx.amount) }))) return;
     // Disappears instantly; reappears with a toast if the server refuses.
     await transactions.remove(tx.id).catch(() => undefined);
   }
@@ -130,6 +157,19 @@ export function TransactionsPage({ period }: { period: string }) {
            page's primary action rather than as another ghost icon. */
         actions={
           <>
+            {/* Exports exactly what the filters have narrowed to, not the whole
+                ledger: the list on screen is the answer someone just built, and
+                an export that ignored it would be a different question. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={visible.length === 0}
+              onClick={() => exportCsv()}
+            >
+              <Icon icon={Download} size="sm" />
+              {t('activity.exportCsv')}
+            </Button>
+
             <Button variant="primary" size="sm" onClick={() => { setEditing(undefined); setFormOpen(true); }}>
               <Icon icon={Plus} size="sm" />
               {t('activity.addTransaction')}
@@ -264,7 +304,7 @@ export function TransactionsPage({ period }: { period: string }) {
                           >
                             {t('common.edit')}
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => void remove(tx)}>
+                          <Button size="sm" variant="ghost" onClick={() => confirmDelete.ask(tx)}>
                             ✕
                           </Button>
                         </div>
@@ -358,7 +398,7 @@ export function TransactionsPage({ period }: { period: string }) {
                     type="button"
                     className="tx-remove"
                     aria-label={t('activity.deleteEntry', { amount: money(tx.amount) })}
-                    onClick={() => void remove(tx)}
+                    onClick={() => confirmDelete.ask(tx)}
                   >
                     ✕
                   </button>
@@ -383,6 +423,21 @@ export function TransactionsPage({ period }: { period: string }) {
         }}
         onSubmit={save}
       />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        busy={confirmDelete.busy}
+        title={t('activity.deleteTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmDelete.subject ? money(confirmDelete.subject.amount) : null}</strong>
+            {t('activity.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('activity.deleteAction')}
+        onConfirm={() => void confirmDelete.run(remove)}
+        onClose={confirmDelete.cancel}
+      />
+
     </>
   );
 }

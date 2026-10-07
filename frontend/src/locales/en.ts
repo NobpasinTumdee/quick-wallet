@@ -220,6 +220,16 @@ export const en = {
   },
 
   invest: {
+    /* Removing a lot rewrites the average cost of everything left. */
+    deleteLotTitle: 'Delete purchase',
+    deleteLotWarning:
+      'This removes the purchase and recalculates the average cost and profit of the remaining shares in this position.',
+    deleteLotAction: 'Delete purchase',
+    /* Nothing recorded is lost, so this one is deliberately low-drama. */
+    removeWatchTitle: 'Stop watching?',
+    removeWatchWarning:
+      'This only removes it from your watchlist. Nothing you own or have recorded is affected.',
+    removeWatchAction: 'Remove',
     priceCurrency: 'Price currency',
     /* ---- Mobile tiles, detail sheet and quick look ---- */
     fees: 'Fees',
@@ -386,6 +396,13 @@ export const en = {
   },
 
   activity: {
+    /* Exports the filtered list, not the whole ledger. */
+    exportCsv: 'Export CSV',
+    /* The only delete that moves a wallet balance on its own. */
+    deleteTitle: 'Delete transaction',
+    deleteWarning:
+      'This removes the entry and adjusts the wallet balance to match. It cannot be undone.',
+    deleteAction: 'Delete transaction',
     /* The list tile. An entry with no note and no category still needs a
        first line — it is usually a transfer or a quick FAB entry. */
     untitledEntry: 'Transaction',
@@ -507,6 +524,11 @@ export const en = {
   },
 
   recurring: {
+    /* Stops the reminders; the history stays. */
+    deleteTitle: 'Delete recurring payment',
+    deleteWarning:
+      'This stops the reminders for it. Payments you have already recorded stay on your Activity and no balance changes.',
+    deleteAction: 'Delete recurring',
     /* Where the shares come back to — a property of the arrangement, so it is
        asked once here rather than on every monthly payment. */
     repaymentWallet: 'Target receiving wallet',
@@ -572,6 +594,12 @@ export const en = {
   },
 
   budgets: {
+    /* A budget is a limit, not money. Deleting it changes no balance — the
+       spending it was tracking stays exactly where it is. */
+    deleteTitle: 'Delete budget',
+    deleteWarning:
+      'This removes the limit only. The spending it was tracking stays on your Activity, and no balance changes.',
+    deleteAction: 'Delete budget',
     lede: 'Percentage budgets track a share of your income; fixed budgets track a flat amount.',
     budgetedThisMonth: 'Budgeted this month',
     spentBadge: '{{amount}} spent',
@@ -860,6 +888,12 @@ export const en = {
   },
 
   split: {
+    /* The one on this list that moves money: the original expense and any
+       repayments recorded against it go too. */
+    deleteTitle: 'Delete shared bill',
+    deleteWarning:
+      'This removes the bill, every share on it, and the expense it recorded. Any repayments already collected are reversed from the wallet that received them.',
+    deleteAction: 'Delete bill',
     /* ---- Where a repayment lands ----
        Asked rather than assumed: a dinner put on a card is handed back in
        cash, and booking that onto the card reports a balance nobody has. */
@@ -1307,6 +1341,12 @@ export const en = {
    * able to line the two up word for word.
    */
   debt: {
+    /* Payments already made are transactions in their own right and survive
+       the debt record being removed — people fear the opposite. */
+    deleteTitle: 'Delete debt',
+    deleteWarning:
+      'This removes the debt and its payoff progress. Payments you already recorded stay on your Activity and your wallet balances are unchanged.',
+    deleteAction: 'Delete debt',
     title: 'Debt',
     heading: 'Debt management',
     lede: 'Loans and borrowed money. Paying one records a real expense and moves the money out of a wallet.',
@@ -1447,6 +1487,18 @@ export const en = {
    * a transaction list and a label and belongs to no particular screen.
    */
   pie: {
+    /* ---- Range selector ---- */
+    rangeLabel: 'Timeframe',
+    allTime: 'All time',
+    rangeAll: 'All time',
+    /* Raised before the fetch starts, not after — a warning that arrives once
+       the request is already in flight is just an apology. */
+    allTimeTitle: 'Load all-time data?',
+    allTimeBody:
+      'Fetching every transaction you have ever recorded may take a while on a slow connection. Do you want to proceed?',
+    allTimeConfirm: 'Load data',
+    /* The exclusion chips. */
+    showAll: 'Show all categories',
     title: 'Expense breakdown',
     subtitle: 'What share of spending each category takes',
     empty: 'Nothing spent in this range',

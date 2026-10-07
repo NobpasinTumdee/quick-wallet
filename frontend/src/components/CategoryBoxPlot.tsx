@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useElementWidth } from '../hooks/useElementWidth';
+
 import { BoxPlotData, CategoryBox, JitterPoint, buildBoxPlot, niceScale } from '../lib/boxPlotMath';
 import { cx, formatDate } from '../lib/format';
 import { MoneyFormatter } from '../state/SettingsContext';
@@ -38,7 +40,13 @@ const PLOT_HEIGHT = 260;
 const AXIS_WIDTH = 56;
 const TOP_PAD = 12;
 const BOTTOM_PAD = 44;
-const BAND_WIDTH = 92;
+/* The narrowest a column may get before the chart starts scrolling instead
+   of squeezing. Below this the category label is unreadable and the dots of
+   neighbouring columns start to merge. */
+const MIN_BAND_WIDTH = 92;
+/* And the widest. Without a ceiling, two categories on a 1500px screen get
+   750px each and the plot reads as two lonely stripes in a field of white. */
+const MAX_BAND_WIDTH = 160;
 const BOX_WIDTH = 42;
 /** How far a jittered point may stray from the category's centre line. */
 const JITTER_SPREAD = 30;
@@ -56,6 +64,9 @@ export function CategoryBoxPlot({
   rangeLabel: string;
 }) {
   const { t } = useTranslation();
+  /* Declared before any early return: an empty dataset bails out below, and a
+     hook called conditionally would change order between renders. */
+  const [scrollRef, containerWidth] = useElementWidth<HTMLDivElement>();
   const [hovered, setHovered] = useState<{ box: CategoryBox; point: JitterPoint | null } | null>(
     null,
   );
@@ -72,7 +83,23 @@ export function CategoryBoxPlot({
     );
   }
 
-  const width = AXIS_WIDTH + data.categories.length * BAND_WIDTH;
+  /* ---- Laying out, rather than scaling ----
+     The SVG used to carry a viewBox and no width, so the browser stretched
+     the entire coordinate system to the container — and with few categories
+     that blew the axis labels up to 40px and made one box fill the screen.
+
+     Now the band width is computed from the space actually available and the
+     SVG is rendered at 1 unit per CSS pixel, so `font-size: 12px` means 12px
+     whether there are two columns or ten. */
+  const available = Math.max(240, containerWidth) - AXIS_WIDTH;
+  const bandWidth = Math.min(
+    MAX_BAND_WIDTH,
+    Math.max(MIN_BAND_WIDTH, available / Math.max(1, data.categories.length)),
+  );
+  const width = AXIS_WIDTH + data.categories.length * bandWidth;
+  /* The box keeps its share of the band rather than a fixed 42px, so a wide
+     column is a wide box instead of a thin one adrift in space. */
+  const boxWidth = Math.min(BOX_WIDTH, bandWidth * 0.46);
   const plotTop = TOP_PAD;
   const plotBottom = PLOT_HEIGHT - BOTTOM_PAD;
   const plotHeight = plotBottom - plotTop;
@@ -80,14 +107,20 @@ export function CategoryBoxPlot({
   /** Amount → y, with 0 at the bottom. */
   const y = (amount: number) => plotBottom - (amount / scale.max) * plotHeight;
   /** Category index → the centre of its band. */
-  const bandCentre = (index: number) => AXIS_WIDTH + index * BAND_WIDTH + BAND_WIDTH / 2;
+  const bandCentre = (index: number) => AXIS_WIDTH + index * bandWidth + bandWidth / 2;
 
   return (
     <div className="boxplot">
-      <div className="boxplot-scroll">
+      <div className="boxplot-scroll" ref={scrollRef}>
         <svg
           className="boxplot-svg"
           viewBox={`0 0 ${width} ${PLOT_HEIGHT}`}
+          /* Explicit width, so one SVG unit is one CSS pixel and nothing is
+             scaled. When the columns need more room than the container has,
+             this exceeds it and `.boxplot-scroll` scrolls — which is the
+             honest outcome, rather than shrinking the labels to fit. */
+          width={width}
+          height={PLOT_HEIGHT}
           style={{ minWidth: width }}
           role="img"
           aria-label={t('boxplot.ariaLabel', { count: data.categories.length })}
@@ -124,9 +157,9 @@ export function CategoryBoxPlot({
                     in its column rather than only on the 42px rectangle. */}
                 <rect
                   className="boxplot-hit"
-                  x={cx0 - BAND_WIDTH / 2}
+                  x={cx0 - bandWidth / 2}
                   y={plotTop}
-                  width={BAND_WIDTH}
+                  width={bandWidth}
                   height={plotHeight}
                   onMouseEnter={() => setHovered({ box, point: null })}
                 />
@@ -150,15 +183,15 @@ export function CategoryBoxPlot({
                     stop, narrow enough not to compete with the quartiles. */}
                 <line
                   className="boxplot-cap"
-                  x1={cx0 - BOX_WIDTH / 4}
-                  x2={cx0 + BOX_WIDTH / 4}
+                  x1={cx0 - boxWidth / 4}
+                  x2={cx0 + boxWidth / 4}
                   y1={y(box.upperWhisker)}
                   y2={y(box.upperWhisker)}
                 />
                 <line
                   className="boxplot-cap"
-                  x1={cx0 - BOX_WIDTH / 4}
-                  x2={cx0 + BOX_WIDTH / 4}
+                  x1={cx0 - boxWidth / 4}
+                  x2={cx0 + boxWidth / 4}
                   y1={y(box.lowerWhisker)}
                   y2={y(box.lowerWhisker)}
                 />
@@ -168,9 +201,9 @@ export function CategoryBoxPlot({
                     identical still draws a line rather than nothing at all. */}
                 <rect
                   className="boxplot-box"
-                  x={cx0 - BOX_WIDTH / 2}
+                  x={cx0 - boxWidth / 2}
                   y={boxTop}
-                  width={BOX_WIDTH}
+                  width={boxWidth}
                   height={Math.max(1, boxBottom - boxTop)}
                   rx={3}
                 />
@@ -178,8 +211,8 @@ export function CategoryBoxPlot({
                 {/* ---- Median ---- */}
                 <line
                   className="boxplot-median"
-                  x1={cx0 - BOX_WIDTH / 2}
-                  x2={cx0 + BOX_WIDTH / 2}
+                  x1={cx0 - boxWidth / 2}
+                  x2={cx0 + boxWidth / 2}
                   y1={y(box.median)}
                   y2={y(box.median)}
                 />

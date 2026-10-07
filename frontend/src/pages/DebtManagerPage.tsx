@@ -13,6 +13,8 @@ import { cx } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { Debt } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
 
 /**
  * Debt management.
@@ -57,8 +59,9 @@ export function DebtManagerPage() {
     pending.catch(() => undefined);
   }
 
+  const confirmDelete = useConfirm<Debt>();
+
   async function remove(debt: Debt) {
-    if (!window.confirm(t('debt.deleteConfirm', { title: debt.title }))) return;
     await debts.remove(debt.id).catch(() => undefined);
   }
 
@@ -180,7 +183,7 @@ export function DebtManagerPage() {
               money={money}
               onPay={() => { setPayError(null); setPaying(debt); }}
               onEdit={() => { setEditing(debt); setFormOpen(true); }}
-              onDelete={() => remove(debt)}
+              onDelete={() => confirmDelete.ask(debt)}
             />
           ))}
         </div>
@@ -205,6 +208,21 @@ export function DebtManagerPage() {
         onClose={() => { setPaying(null); setPayError(null); }}
         onSubmit={pay}
       />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        busy={confirmDelete.busy}
+        title={t('debt.deleteTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmDelete.subject?.title}</strong>
+            {t('debt.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('debt.deleteAction')}
+        onConfirm={() => void confirmDelete.run(remove)}
+        onClose={confirmDelete.cancel}
+      />
+
     </>
   );
 }

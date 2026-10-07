@@ -13,6 +13,8 @@ import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
 
 export function BudgetsPage({ period }: { period: string }) {
   const { t } = useTranslation();
@@ -134,8 +136,9 @@ export function BudgetsPage({ period }: { period: string }) {
     return Promise.resolve();
   }
 
+  const confirmDelete = useConfirm<BudgetProgress>();
+
   async function remove(budget: BudgetProgress) {
-    if (!window.confirm(t('budgets.deleteConfirm', { label: budget.targetLabel }))) return;
     await runOptimistic(
       (current) =>
         current
@@ -346,7 +349,7 @@ export function BudgetsPage({ period }: { period: string }) {
                       >
                         {t('common.edit')}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => void remove(budget)}>
+                      <Button size="sm" variant="ghost" onClick={() => confirmDelete.ask(budget)}>
                         ✕
                       </Button>
                     </span>
@@ -374,6 +377,21 @@ export function BudgetsPage({ period }: { period: string }) {
         }}
         onSubmit={save}
       />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        busy={confirmDelete.busy}
+        title={t('budgets.deleteTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmDelete.subject?.targetLabel}</strong>
+            {t('budgets.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('budgets.deleteAction')}
+        onConfirm={() => void confirmDelete.run(remove)}
+        onClose={confirmDelete.cancel}
+      />
+
     </>
   );
 }

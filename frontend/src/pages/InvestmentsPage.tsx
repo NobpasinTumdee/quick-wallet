@@ -60,6 +60,8 @@ import { MoneyFormatter, useMoneyFormatter, useSettings } from '../state/Setting
 import { quoteFormatter } from '../lib/quoteFormatter';
 import { Investment, WalletBalance, WatchlistItem } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
 
 /* lightweight-charts is ~180kB, and the indicator maths and terminal ride
    along with it — all of it behind one dynamic import, so the main bundle
@@ -367,13 +369,14 @@ export function InvestmentsPage() {
     }
   }
 
+  /* Two separate confirmations on this page, and they are not interchangeable:
+     one removes a purchase and rewrites a cost basis, the other stops watching
+     a symbol and touches nothing. Sharing one dialog would mean sharing one
+     warning, and the mild wording would end up on the destructive action. */
+  const confirmLot = useConfirm<Investment>();
+  const confirmWatch = useConfirm<WatchlistItem>();
+
   async function removeLot(lot: Investment) {
-    const label = t('invest.lotLabel', {
-      symbol: lot.symbol,
-      quantity: formatNumber(lot.quantity, 8, settings.locale),
-      date: formatDate(lot.buyDate, settings.locale),
-    });
-    if (!window.confirm(t('invest.deletePurchaseConfirm', { label }))) return;
     await investments.remove(lot.id);
   }
 
@@ -460,7 +463,6 @@ export function InvestmentsPage() {
   }
 
   async function removeWatch(item: WatchlistItem) {
-    if (!window.confirm(t('invest.removeFromWatchlistConfirm', { symbol: item.symbol }))) return;
     await watchlist.remove(item.id);
   }
 
@@ -1145,7 +1147,7 @@ export function InvestmentsPage() {
                                             size="sm"
                                             variant="ghost"
                                             aria-label={t('invest.deletePurchase')}
-                                            onClick={() => void removeLot(lot)}
+                                            onClick={() => confirmLot.ask(lot)}
                                           >
                                             ✕
                                           </Button>
@@ -1218,7 +1220,7 @@ export function InvestmentsPage() {
                           size="sm"
                           variant="ghost"
                           aria-label={t('invest.deletePurchase')}
-                          onClick={() => void removeLot(lot)}
+                          onClick={() => confirmLot.ask(lot)}
                         >
                           ✕
                         </Button>
@@ -1436,7 +1438,7 @@ export function InvestmentsPage() {
                                     size="sm"
                                     variant="ghost"
                                     aria-label={t('invest.removeFromWatchlist', { symbol: item.symbol })}
-                                    onClick={() => void removeWatch(item)}
+                                    onClick={() => confirmWatch.ask(item)}
                                   >
                                     ✕
                                   </Button>
@@ -1624,6 +1626,47 @@ export function InvestmentsPage() {
           setQuickOpen(false);
           quickQuote.reset();
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmLot.open}
+        busy={confirmLot.busy}
+        title={t('invest.deleteLotTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">
+              {confirmLot.subject
+                ? t('invest.lotLabel', {
+                    symbol: confirmLot.subject.symbol,
+                    quantity: formatNumber(confirmLot.subject.quantity, 8, settings.locale),
+                    date: formatDate(confirmLot.subject.buyDate, settings.locale),
+                  })
+                : null}
+            </strong>
+            {t('invest.deleteLotWarning')}
+          </>
+        }
+        confirmLabel={t('invest.deleteLotAction')}
+        onConfirm={() => void confirmLot.run(removeLot)}
+        onClose={confirmLot.cancel}
+      />
+
+      <ConfirmDialog
+        open={confirmWatch.open}
+        busy={confirmWatch.busy}
+        /* Not destructive in the money sense — nothing recorded is lost — so
+           it asks in the app's voice rather than shouting in red. */
+        tone="primary"
+        title={t('invest.removeWatchTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmWatch.subject?.symbol}</strong>
+            {t('invest.removeWatchWarning')}
+          </>
+        }
+        confirmLabel={t('invest.removeWatchAction')}
+        onConfirm={() => void confirmWatch.run(removeWatch)}
+        onClose={confirmWatch.cancel}
       />
 
     </>

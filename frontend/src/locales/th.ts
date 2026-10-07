@@ -218,6 +218,13 @@ export const th: TranslationSchema = {
   },
 
   invest: {
+    deleteLotTitle: 'ลบรายการซื้อ',
+    deleteLotWarning:
+      'ลบรายการซื้อนี้ และคำนวณต้นทุนเฉลี่ยกับกำไรขาดทุนของหุ้นที่เหลือใหม่',
+    deleteLotAction: 'ลบรายการซื้อ',
+    removeWatchTitle: 'เลิกติดตาม?',
+    removeWatchWarning: 'ลบออกจากรายการติดตามเท่านั้น ไม่กระทบสิ่งที่คุณถือหรือบันทึกไว้',
+    removeWatchAction: 'ลบออก',
     priceCurrency: 'สกุลเงินที่แสดง',
     /* ---- การ์ดมือถือ รายละเอียด และดูราคาเร็ว ---- */
     fees: 'ค่าธรรมเนียม',
@@ -383,6 +390,10 @@ export const th: TranslationSchema = {
   },
 
   activity: {
+    exportCsv: 'ส่งออก CSV',
+    deleteTitle: 'ลบรายการ',
+    deleteWarning: 'ลบรายการนี้และปรับยอดเงินในบัญชีให้ตรงกัน ไม่สามารถย้อนกลับได้',
+    deleteAction: 'ลบรายการ',
     /* ป้ายรายการในลิสต์ */
     untitledEntry: 'รายการ',
     deleteEntry: 'ลบรายการ {{amount}} นี้',
@@ -502,6 +513,10 @@ export const th: TranslationSchema = {
   },
 
   recurring: {
+    deleteTitle: 'ลบรายการประจำ',
+    deleteWarning:
+      'หยุดการแจ้งเตือนของรายการนี้ การจ่ายที่บันทึกไว้แล้วยังอยู่ในหน้ากิจกรรม และยอดเงินไม่เปลี่ยนแปลง',
+    deleteAction: 'ลบรายการประจำ',
     /* บัญชีรับเงินคืน */
     repaymentWallet: 'บัญชีรับเงินคืน',
     repaymentWalletHint: 'เงินที่คนอื่นคืนในแต่ละเดือนจะเข้าบัญชีนี้',
@@ -563,6 +578,10 @@ export const th: TranslationSchema = {
   },
 
   budgets: {
+    deleteTitle: 'ลบงบประมาณ',
+    deleteWarning:
+      'ลบเฉพาะวงเงินที่ตั้งไว้ รายการใช้จ่ายยังอยู่ในหน้ากิจกรรม และยอดเงินไม่เปลี่ยนแปลง',
+    deleteAction: 'ลบงบประมาณ',
     lede: 'งบประมาณแบบเปอร์เซ็นต์คิดตามสัดส่วนของรายรับ ส่วนงบประมาณแบบคงที่กำหนดเป็นจำนวนเงินตายตัว',
     budgetedThisMonth: 'งบประมาณเดือนนี้',
     spentBadge: 'ใช้ไป {{amount}}',
@@ -844,6 +863,10 @@ export const th: TranslationSchema = {
   },
 
   split: {
+    deleteTitle: 'ลบบิลที่หารกัน',
+    deleteWarning:
+      'ลบบิล รายการหารทั้งหมด และรายจ่ายที่บันทึกไว้ เงินที่เก็บคืนมาแล้วจะถูกย้อนออกจากบัญชีที่รับเงินนั้น',
+    deleteAction: 'ลบบิล',
     /* ---- บัญชีที่รับเงินคืน ---- */
     repaymentTitle: 'ยืนยันการรับเงิน',
     repaymentConfirm: 'ยืนยันการรับเงิน',
@@ -1243,6 +1266,10 @@ export const th: TranslationSchema = {
   },
 
   debt: {
+    deleteTitle: 'ลบหนี้',
+    deleteWarning:
+      'ลบรายการหนี้และความคืบหน้าการผ่อน การชำระที่บันทึกไว้แล้วยังอยู่ในหน้ากิจกรรม และยอดเงินในบัญชีไม่เปลี่ยนแปลง',
+    deleteAction: 'ลบหนี้',
     title: 'หนี้สิน',
     heading: 'จัดการหนี้สิน',
     lede: 'เงินกู้และเงินที่ยืมมา การชำระจะบันทึกเป็นรายจ่ายจริงและตัดเงินออกจากกระเป๋าเงิน',
@@ -1357,6 +1384,15 @@ export const th: TranslationSchema = {
   },
 
   pie: {
+    /* ---- ตัวเลือกช่วงเวลา ---- */
+    rangeLabel: 'ช่วงเวลา',
+    allTime: 'ทุกเดือน',
+    rangeAll: 'ทุกเดือน',
+    allTimeTitle: 'โหลดข้อมูลทั้งหมด?',
+    allTimeBody:
+      'การดึงข้อมูลย้อนหลังทั้งหมดอาจใช้เวลาสักครู่ หากอินเทอร์เน็ตช้า คุณต้องการดำเนินการต่อหรือไม่?',
+    allTimeConfirm: 'โหลดข้อมูล',
+    showAll: 'แสดงทุกหมวดหมู่',
     title: 'สัดส่วนรายจ่าย',
     subtitle: 'แต่ละหมวดคิดเป็นสัดส่วนเท่าไรของรายจ่ายทั้งหมด',
     empty: 'ไม่มีรายจ่ายในช่วงนี้',

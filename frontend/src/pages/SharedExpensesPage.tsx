@@ -35,6 +35,8 @@ import { cx, formatDate } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BillSplit } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
 
 export function SharedExpensesPage() {
   const { t } = useTranslation();
@@ -125,8 +127,9 @@ export function SharedExpensesPage() {
     }
   }
 
+  const confirmDelete = useConfirm<BillSplit>();
+
   async function remove(bill: BillSplit) {
-    if (!window.confirm(t('split.deleteConfirm', { title: bill.title }))) return;
     setActionError(null);
     try {
       await splitter.remove(bill);
@@ -263,7 +266,7 @@ export function SharedExpensesPage() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => void remove(bill)}
+            onClick={() => confirmDelete.ask(bill)}
             aria-label={t('split.deleteBill')}
           >
             <Icon icon={Trash2} size="sm" />
@@ -398,6 +401,21 @@ export function SharedExpensesPage() {
         }}
         onSubmit={createBill}
       />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        busy={confirmDelete.busy}
+        title={t('split.deleteTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmDelete.subject?.title}</strong>
+            {t('split.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('split.deleteAction')}
+        onConfirm={() => void confirmDelete.run(remove)}
+        onClose={confirmDelete.cancel}
+      />
+
     </>
   );
 }

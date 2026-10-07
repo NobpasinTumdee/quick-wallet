@@ -28,6 +28,8 @@ import { Route } from '../lib/router';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, WalletBalance } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useConfirm } from '../hooks/useConfirm';
 
 type Bucket = 'due' | 'soon' | 'later';
 
@@ -156,8 +158,9 @@ export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) 
     pending.catch(() => undefined);
   }
 
+  const confirmDelete = useConfirm<Subscription>();
+
   async function remove(subscription: Subscription) {
-    if (!window.confirm(t('recurring.deleteConfirm', { name: subscription.name }))) return;
     await subscriptions.remove(subscription.id).catch(() => undefined);
   }
 
@@ -345,7 +348,7 @@ export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) 
                             >
                               {t('common.edit')}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => void remove(subscription)}>
+                            <Button size="sm" variant="ghost" onClick={() => confirmDelete.ask(subscription)}>
                               ✕
                             </Button>
                           </div>
@@ -373,6 +376,21 @@ export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) 
         }}
         onSubmit={save}
       />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        busy={confirmDelete.busy}
+        title={t('recurring.deleteTitle')}
+        body={
+          <>
+            <strong className="confirm-subject">{confirmDelete.subject?.name}</strong>
+            {t('recurring.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('recurring.deleteAction')}
+        onConfirm={() => void confirmDelete.run(remove)}
+        onClose={confirmDelete.cancel}
+      />
+
     </>
   );
 }
