@@ -3938,7 +3938,12 @@ var THEMES = [
   'midnight', 'dracula', 'nord', 'solarized', 'amethyst',
   /* Minimal & cute. */
   'matcha', 'oatmilk', 'sakura', 'lavender', 'daylight',
-  'cocoa', 'moonlight', 'pine', 'slate', 'twilight'
+  'cocoa', 'moonlight', 'pine', 'slate', 'twilight',
+  /* Brand palettes. An id missing here is rejected with a 400 and the
+     client silently rolls the selection back — which is exactly what
+     happened the last time themes were added without touching this. */
+  'bangkok-bank', 'kasikornbank', 'krungthai', 'scb', 'krungsri', 'ttb', 'uob', 'cimb-thai', 'gsb', 'baac', 'kkp', 'tisco', 'ghb', 'lh-bank', 'standard-chartered', 'icbc', 'thai-credit',
+  'spotify', 'youtube', 'facebook', 'microsoft-teams'
 ];
 
 /* Must stay in step with FONTS in frontend/src/lib/fonts.ts. An id not listed

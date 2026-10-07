@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { FONTS, FontOption, fontOption } from '../lib/fonts';
 import { cx } from '../lib/format';
-import { THEME_PRESETS, THEME_VARS, customSwatches, themePreset } from '../lib/themes';
+import { THEME_GROUPS, THEME_VARS, customSwatches, themePreset } from '../lib/themes';
 import { useTheme } from '../state/ThemeContext';
 import { CustomTheme } from '../types';
 import { Icon } from './Icon';
@@ -322,16 +322,21 @@ export function ThemeSettings() {
             )}
           </fieldset>
 
-          {/* Grouped by scheme so a light theme is never a surprise. */}
-          {(['light', 'dark'] as const).map((scheme) => (
-            <fieldset key={scheme} className="theme-group">
+          {/* ---- Grouped ----
+              Forty-four swatches in one grid is a wall, not a choice. The
+              originals keep their light/dark split, because with those the
+              scheme *is* the decision. The brand palettes do not: they are all
+              light, and what distinguishes them is whose bank it is. So each
+              group is cut the way its own members actually differ. */}
+          {THEME_GROUPS.map((group) => (
+            <fieldset key={group.id} className="theme-group">
               <legend className="section-label">
-                {t(scheme === 'light' ? 'theme.schemeLight' : 'theme.schemeDark')}
+                {t(group.titleKey)}
                 {' · '}
-                {THEME_PRESETS.filter((preset) => preset.scheme === scheme).length}
+                {group.presets.length}
               </legend>
               <div className="theme-row">
-                {THEME_PRESETS.filter((preset) => preset.scheme === scheme).map((preset) => {
+                {group.presets.map((preset) => {
                   const active = activeKey === `preset:${preset.value}`;
                   const label = t(preset.labelKey);
                   const blurb = t(preset.blurbKey);

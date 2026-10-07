@@ -47,7 +47,32 @@ export type ThemeName =
   | 'moonlight'
   | 'pine'
   | 'slate'
-  | 'twilight';
+  | 'twilight'
+  /* ---- Brand palettes ----
+     Seventeen Thai banks and four global products. Each one also needs an
+     entry in THEME_PRESETS, a block in theme.css and a line in the Code.gs
+     allowlist — `themecontrast.mjs` fails if any of the four drift apart. */
+  | 'bangkok-bank'
+  | 'kasikornbank'
+  | 'krungthai'
+  | 'scb'
+  | 'krungsri'
+  | 'ttb'
+  | 'uob'
+  | 'cimb-thai'
+  | 'gsb'
+  | 'baac'
+  | 'kkp'
+  | 'tisco'
+  | 'ghb'
+  | 'lh-bank'
+  | 'standard-chartered'
+  | 'icbc'
+  | 'thai-credit'
+  | 'spotify'
+  | 'youtube'
+  | 'facebook'
+  | 'microsoft-teams';
 
 export interface PublicUser {
   id: string;

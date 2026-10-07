@@ -873,3 +873,613 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* =========================================================
+   BRAND THEMES — Thai banks and global tech
+   ---------------------------------------------------------
+   Supplied as brand palettes and adjusted in exactly one
+   respect: `--accent` is read as *text* all over this UI —
+   the active sidebar item, a tier chip, the "show all" link
+   — so it has to clear 3:1 against the surface, and white
+   on it has to clear 4.5:1 for buttons.
+
+   Eight brand accents did not. Most moved imperceptibly
+   (CIMB #ed1c24 -> #e61b23). Two could not: Krungsri's
+   yellow was 1.62:1 and Spotify's green 2.59:1, which is
+   unreadable rather than merely tight.
+
+   So the accent is the darkest member of the brand's own
+   hue that stays legible, and the untouched brand colour
+   lives in `--brand` for the picker swatch and any
+   decorative use. A swatch is a 16px square and may be any
+   colour; text may not.
+
+   `themecontrast.mjs` holds all of these to the same floors
+   as the original themes.
+   ========================================================= */
+
+/* Bangkok Bank — #0064FF */
+:root[data-theme='bangkok-bank'] {
+  --bg: #f3f7ff;
+  --bg-deep: #e8f0ff;
+  --surface: #ffffff;
+  --surface-2: #edf4ff;
+  --surface-3: #dfeaff;
+  --border: #d8e5f8;
+  --border-strong: #a9c5ef;
+
+  --text: #13233f;
+  --text-secondary: #314767;
+  --text-muted: #5e7699;
+  --text-faint: #8195b2;
+
+  --accent: #0064ff;
+  --accent-contrast: #ffffff;
+  --brand: #0064ff;
+  --positive: #0a8f5b;
+  --negative: #d93025;
+  --warning: #b77900;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* KBank — brand #00A950, darkened for text */
+:root[data-theme='kasikornbank'] {
+  --bg: #f1faf5;
+  --bg-deep: #e1f3e9;
+  --surface: #ffffff;
+  --surface-2: #e9f8ef;
+  --surface-3: #d4efdf;
+  --border: #cee5d7;
+  --border-strong: #99c9ab;
+
+  --text: #163126;
+  --text-secondary: #315243;
+  --text-muted: #5d7668;
+  --text-faint: #82988c;
+
+  --accent: #008740;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #00a950;
+  --positive: #008f4c;
+  --negative: #d83b2d;
+  --warning: #a56b00;
+
+  --ambient-opacity: 0.44;
+
+  color-scheme: light;
+}
+
+/* Krungthai */
+:root[data-theme='krungthai'] {
+  --bg: #f2f7fc;
+  --bg-deep: #e3eef8;
+  --surface: #ffffff;
+  --surface-2: #eaf3fb;
+  --surface-3: #d7e7f5;
+  --border: #d0dfed;
+  --border-strong: #98b7d2;
+
+  --text: #102a43;
+  --text-secondary: #2f4f6b;
+  --text-muted: #607d96;
+  --text-faint: #8096a9;
+
+  --accent: #005bac;
+  --accent-contrast: #ffffff;
+  --brand: #005bac;
+  --positive: #087a55;
+  --negative: #cf3426;
+  --warning: #a66a00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* SCB */
+:root[data-theme='scb'] {
+  --bg: #f7f3fb;
+  --bg-deep: #ebe2f5;
+  --surface: #ffffff;
+  --surface-2: #f2ebf8;
+  --surface-3: #e4d7ef;
+  --border: #ded0eb;
+  --border-strong: #bda5d0;
+
+  --text: #2b1b3c;
+  --text-secondary: #48305b;
+  --text-muted: #6e587f;
+  --text-faint: #957fa4;
+
+  --accent: #4e2a84;
+  --accent-contrast: #ffffff;
+  --brand: #4e2a84;
+  --positive: #087b55;
+  --negative: #c9342a;
+  --warning: #a46c00;
+
+  --ambient-opacity: 0.44;
+
+  color-scheme: light;
+}
+
+/* Krungsri — brand #FFC20E, darkened for text */
+:root[data-theme='krungsri'] {
+  --bg: #fffbef;
+  --bg-deep: #fff3c9;
+  --surface: #ffffff;
+  --surface-2: #fff8df;
+  --surface-3: #ffefb2;
+  --border: #f0dfae;
+  --border-strong: #d8bc60;
+
+  --text: #302b1d;
+  --text-secondary: #51482f;
+  --text-muted: #716746;
+  --text-faint: #978961;
+
+  --accent: #916f08;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #ffc20e;
+  --positive: #087b55;
+  --negative: #c93627;
+  --warning: #9b6500;
+
+  --ambient-opacity: 0.40;
+
+  color-scheme: light;
+}
+
+/* ttb */
+:root[data-theme='ttb'] {
+  --bg: #f2f8fc;
+  --bg-deep: #e2f0f8;
+  --surface: #ffffff;
+  --surface-2: #eaf5fa;
+  --surface-3: #d5eaf3;
+  --border: #cfe1eb;
+  --border-strong: #99c0d2;
+
+  --text: #123047;
+  --text-secondary: #335268;
+  --text-muted: #617c90;
+  --text-faint: #8296a4;
+
+  --accent: #0072bc;
+  --accent-contrast: #ffffff;
+  --brand: #0072bc;
+  --positive: #07865c;
+  --negative: #cf382b;
+  --warning: #a66c00;
+
+  --ambient-opacity: 0.43;
+
+  --ttb-orange: #f58220;
+  --ttb-navy: #003b5c;
+
+  color-scheme: light;
+}
+
+/* UOB */
+:root[data-theme='uob'] {
+  --bg: #f2f6ff;
+  --bg-deep: #e0e9fb;
+  --surface: #ffffff;
+  --surface-2: #e9effc;
+  --surface-3: #d9e4fa;
+  --border: #cfdbf0;
+  --border-strong: #96acd0;
+
+  --text: #14274a;
+  --text-secondary: #32496f;
+  --text-muted: #60759a;
+  --text-faint: #8294b1;
+
+  --accent: #003da5;
+  --accent-contrast: #ffffff;
+  --brand: #003da5;
+  --positive: #0b8158;
+  --negative: #cf3327;
+  --warning: #a66d00;
+
+  --ambient-opacity: 0.44;
+
+  --uob-gold: #ffb81c;
+
+  color-scheme: light;
+}
+
+/* CIMB THAI */
+:root[data-theme='cimb-thai'] {
+  --bg: #fff5f5;
+  --bg-deep: #fce4e5;
+  --surface: #ffffff;
+  --surface-2: #fff0f1;
+  --surface-3: #fbdcde;
+  --border: #efd0d2;
+  --border-strong: #dca1a5;
+
+  --text: #351b20;
+  --text-secondary: #59343a;
+  --text-muted: #76585d;
+  --text-faint: #a18084;
+
+  --accent: #e61b23;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #ed1c24;
+  --positive: #087c56;
+  --negative: #b92027;
+  --warning: #a36a00;
+
+  --ambient-opacity: 0.40;
+
+  color-scheme: light;
+}
+
+/* GSB */
+:root[data-theme='gsb'] {
+  --bg: #fff5fa;
+  --bg-deep: #fde5f0;
+  --surface: #ffffff;
+  --surface-2: #fff0f6;
+  --surface-3: #fbdce9;
+  --border: #efd0df;
+  --border-strong: #dca4bd;
+
+  --text: #381d2b;
+  --text-secondary: #593849;
+  --text-muted: #78596b;
+  --text-faint: #a07f90;
+
+  --accent: #e01d5f;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #e91e63;
+  --positive: #087d57;
+  --negative: #c62e39;
+  --warning: #a66b00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* BAAC */
+:root[data-theme='baac'] {
+  --bg: #f2f9f3;
+  --bg-deep: #e1f1e3;
+  --surface: #ffffff;
+  --surface-2: #eaf6eb;
+  --surface-3: #d8ecd9;
+  --border: #cde1cf;
+  --border-strong: #9bbfa0;
+
+  --text: #173520;
+  --text-secondary: #35563d;
+  --text-muted: #607966;
+  --text-faint: #849888;
+
+  --accent: #198754;
+  --accent-contrast: #ffffff;
+  --brand: #198754;
+  --positive: #08754e;
+  --negative: #c9362b;
+  --warning: #a76c00;
+
+  --ambient-opacity: 0.43;
+
+  color-scheme: light;
+}
+
+/* KKP */
+:root[data-theme='kkp'] {
+  --bg: #f6f4fa;
+  --bg-deep: #eae5f3;
+  --surface: #ffffff;
+  --surface-2: #f0ecf7;
+  --surface-3: #e2dbef;
+  --border: #ddd3eb;
+  --border-strong: #b7a7cc;
+
+  --text: #271f35;
+  --text-secondary: #443855;
+  --text-muted: #665776;
+  --text-faint: #91809e;
+
+  --accent: #5b3f8c;
+  --accent-contrast: #ffffff;
+  --brand: #5b3f8c;
+  --positive: #087e57;
+  --negative: #c9352b;
+  --warning: #a66b00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* TISCO */
+:root[data-theme='tisco'] {
+  --bg: #f3f7fb;
+  --bg-deep: #e4edf5;
+  --surface: #ffffff;
+  --surface-2: #ebf2f8;
+  --surface-3: #d9e6f0;
+  --border: #cedde9;
+  --border-strong: #98b1c5;
+
+  --text: #172a3b;
+  --text-secondary: #345069;
+  --text-muted: #627b91;
+  --text-faint: #8396a6;
+
+  --accent: #005a9c;
+  --accent-contrast: #ffffff;
+  --brand: #005a9c;
+  --positive: #087d57;
+  --negative: #c9352c;
+  --warning: #a66a00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* GHB */
+:root[data-theme='ghb'] {
+  --bg: #f2f8fc;
+  --bg-deep: #e1eff7;
+  --surface: #ffffff;
+  --surface-2: #eaf4fa;
+  --surface-3: #d8eaf4;
+  --border: #ccdfeb;
+  --border-strong: #9abace;
+
+  --text: #183047;
+  --text-secondary: #35536a;
+  --text-muted: #637f94;
+  --text-faint: #8296a4;
+
+  --accent: #0072b1;
+  --accent-contrast: #ffffff;
+  --brand: #0072b1;
+  --positive: #087d57;
+  --negative: #ca362b;
+  --warning: #a46a00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* LH Bank */
+:root[data-theme='lh-bank'] {
+  --bg: #f8f4fb;
+  --bg-deep: #ece4f4;
+  --surface: #ffffff;
+  --surface-2: #f2ebf8;
+  --surface-3: #e4d7ee;
+  --border: #ddd0e8;
+  --border-strong: #bba4cf;
+
+  --text: #2f1d3c;
+  --text-secondary: #51365f;
+  --text-muted: #725d7e;
+  --text-faint: #9984a5;
+
+  --accent: #6a3d91;
+  --accent-contrast: #ffffff;
+  --brand: #6a3d91;
+  --positive: #087d57;
+  --negative: #c93429;
+  --warning: #a66c00;
+
+  --ambient-opacity: 0.42;
+
+  color-scheme: light;
+}
+
+/* Standard Chartered */
+:root[data-theme='standard-chartered'] {
+  --bg: #f3f8fc;
+  --bg-deep: #e2eef6;
+  --surface: #ffffff;
+  --surface-2: #eaf4fa;
+  --surface-3: #d9eaf3;
+  --border: #cedeeb;
+  --border-strong: #9cbacd;
+
+  --text: #173046;
+  --text-secondary: #34536a;
+  --text-muted: #617b91;
+  --text-faint: #8496a4;
+
+  --accent: #0072ce;
+  --accent-contrast: #ffffff;
+  --brand: #0072ce;
+  --positive: #087b55;
+  --negative: #ce3428;
+  --warning: #a66a00;
+
+  --ambient-opacity: 0.42;
+
+  --sc-green: #00a651;
+
+  color-scheme: light;
+}
+
+/* ICBC */
+:root[data-theme='icbc'] {
+  --bg: #fff5f5;
+  --bg-deep: #fbe3e4;
+  --surface: #ffffff;
+  --surface-2: #fff0f0;
+  --surface-3: #f9dddd;
+  --border: #eed0d0;
+  --border-strong: #d9a0a0;
+
+  --text: #35191d;
+  --text-secondary: #573337;
+  --text-muted: #76565b;
+  --text-faint: #9f8084;
+
+  --accent: #c41230;
+  --accent-contrast: #ffffff;
+  --brand: #c41230;
+  --positive: #087c56;
+  --negative: #ae2630;
+  --warning: #a66b00;
+
+  --ambient-opacity: 0.40;
+
+  color-scheme: light;
+}
+
+/* Thai Credit — brand #E75B28, darkened for text */
+:root[data-theme='thai-credit'] {
+  --bg: #fff7f3;
+  --bg-deep: #fce9df;
+  --surface: #ffffff;
+  --surface-2: #fff0e8;
+  --surface-3: #f9dfd0;
+  --border: #eed2c4;
+  --border-strong: #dba994;
+
+  --text: #38251d;
+  --text-secondary: #5a4034;
+  --text-muted: #795e50;
+  --text-faint: #a08374;
+
+  --accent: #c74e22;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #e75b28;
+  --positive: #087d57;
+  --negative: #c83229;
+  --warning: #a66a00;
+
+  --ambient-opacity: 0.40;
+
+  color-scheme: light;
+}
+
+/* Spotify — brand #1DB954, darkened for text */
+:root[data-theme='spotify'] {
+  --bg: #f2f8f3;
+  --bg-deep: #e1f0e4;
+  --surface: #ffffff;
+  --surface-2: #eaf6ed;
+  --surface-3: #d7ebdc;
+  --border: #cfe1d3;
+  --border-strong: #9fc2a7;
+
+  --text: #17231b;
+  --text-secondary: #33483a;
+  --text-muted: #607467;
+  --text-faint: #85978d;
+
+  --accent: #15873d;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #1db954;
+  --positive: #159947;
+  --negative: #d6332f;
+  --warning: #a66c00;
+
+  --ambient-opacity: 0.44;
+
+  color-scheme: light;
+}
+
+/* YouTube — brand #FF0000, darkened for text */
+:root[data-theme='youtube'] {
+  --bg: #fff5f5;
+  --bg-deep: #ffe4e4;
+  --surface: #ffffff;
+  --surface-2: #fff0f0;
+  --surface-3: #ffdddd;
+  --border: #f0cece;
+  --border-strong: #dfa0a0;
+
+  --text: #1f1717;
+  --text-secondary: #493434;
+  --text-muted: #6e5555;
+  --text-faint: #9a7e7e;
+
+  --accent: #eb0000;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #ff0000;
+  --positive: #168447;
+  --negative: #cf2424;
+  --warning: #a66c00;
+
+  --ambient-opacity: 0.40;
+
+  color-scheme: light;
+}
+
+/* Facebook — brand #1877F2, darkened for text */
+:root[data-theme='facebook'] {
+  --bg: #f2f6fc;
+  --bg-deep: #e3ebf8;
+  --surface: #ffffff;
+  --surface-2: #edf3fb;
+  --surface-3: #dce8f9;
+  --border: #d3dfef;
+  --border-strong: #9eb8dc;
+
+  --text: #1c1e21;
+  --text-secondary: #3f4448;
+  --text-muted: #687078;
+  --text-faint: #8c949c;
+
+  --accent: #1771e6;
+  --accent-contrast: #ffffff;
+  /* The brand's own colour, untouched. Decorative only. */
+  --brand: #1877f2;
+  --positive: #3ca726;
+  --negative: #e53935;
+  --warning: #a66c00;
+
+  --ambient-opacity: 0.44;
+
+  color-scheme: light;
+}
+
+/* Microsoft Teams */
+:root[data-theme='microsoft-teams'] {
+  --bg: #f7f7f8;
+  --bg-deep: #ececef;
+  --surface: #ffffff;
+  --surface-2: #f3f2f1;
+  --surface-3: #e5e4e2;
+  --border: #dedddc;
+  --border-strong: #c4c2bf;
+
+  --text: #252423;
+  --text-secondary: #484644;
+  --text-muted: #605e5c;
+  --text-faint: #8a8886;
+
+  --accent: #6264a7;
+  --accent-contrast: #ffffff;
+  --brand: #6264a7;
+  --positive: #237b4b;
+  --negative: #c4314b;
+  --warning: #a66a00;
+
+  --ambient-opacity: 0.36;
+
+  --teams-blue: #464eb8;
+  --teams-light: #7b83eb;
+  --teams-dark: #505ac9;
+
+  color-scheme: light;
+}

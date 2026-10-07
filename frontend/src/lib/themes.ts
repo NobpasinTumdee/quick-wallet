@@ -16,29 +16,40 @@
  */
 
 import {
+  Building2,
   CloudMoon,
   Coffee,
   Cookie,
+  Flame,
   Flower,
   Flower2,
   Gem,
-  Leaf,
-  Mountain,
   Ghost,
+  Globe,
+  House,
+  Landmark,
+  Leaf,
   Moon,
   MoonStar,
+  Mountain,
+  Music,
   Palette,
+  PiggyBank,
+  Play,
   Snowflake,
   Sparkles,
+  Sprout,
   Stars,
   Sun,
   SunMedium,
   Sunset,
-  Trees,
+  ThumbsUp,
   TreePine,
+  Trees,
+  Users,
   Waves,
   Zap,
-  type LucideIcon,
+  type LucideIcon
 } from 'lucide-react';
 
 import { ThemeName } from '../types';
@@ -57,6 +68,15 @@ export interface ThemePreset {
   labelKey: TranslationKey;
   blurbKey: TranslationKey;
   scheme: 'light' | 'dark';
+  /**
+   * Which section of the picker this belongs in.
+   *
+   * Added when the catalogue passed forty: a single grid of forty-four
+   * swatches is not a choice, it is a wall. `classic` is the original set,
+   * which is why it is the default rather than something every existing entry
+   * had to be annotated with.
+   */
+  category?: 'classic' | 'thai' | 'tech';
   icon: LucideIcon;
   /** Mirrors --accent for this theme. */
   accent: string;
@@ -281,6 +301,216 @@ export const THEME_PRESETS = [
     accent: '#3fd0aa',
     swatches: ['#071413', '#0f2523', '#3fd0aa', '#e8f6f2'],
   },
+  {
+    value: 'bangkok-bank',
+    labelKey: 'theme.nameBangkokBank',
+    blurbKey: 'theme.blurbBangkokBank',
+    scheme: 'light',
+    category: 'thai',
+    icon: Landmark,
+    accent: '#0064ff',
+    swatches: ['#f3f7ff', '#ffffff', '#0064ff', '#13233f'],
+  },
+  {
+    value: 'kasikornbank',
+    labelKey: 'theme.nameKasikornbank',
+    blurbKey: 'theme.blurbKasikornbank',
+    scheme: 'light',
+    category: 'thai',
+    icon: Leaf,
+    accent: '#008740',
+    swatches: ['#f1faf5', '#ffffff', '#008740', '#163126'],
+  },
+  {
+    value: 'krungthai',
+    labelKey: 'theme.nameKrungthai',
+    blurbKey: 'theme.blurbKrungthai',
+    scheme: 'light',
+    category: 'thai',
+    icon: Landmark,
+    accent: '#005bac',
+    swatches: ['#f2f7fc', '#ffffff', '#005bac', '#102a43'],
+  },
+  {
+    value: 'scb',
+    labelKey: 'theme.nameScb',
+    blurbKey: 'theme.blurbScb',
+    scheme: 'light',
+    category: 'thai',
+    icon: Gem,
+    accent: '#4e2a84',
+    swatches: ['#f7f3fb', '#ffffff', '#4e2a84', '#2b1b3c'],
+  },
+  {
+    value: 'krungsri',
+    labelKey: 'theme.nameKrungsri',
+    blurbKey: 'theme.blurbKrungsri',
+    scheme: 'light',
+    category: 'thai',
+    icon: Sun,
+    accent: '#916f08',
+    swatches: ['#fffbef', '#ffffff', '#916f08', '#302b1d'],
+  },
+  {
+    value: 'ttb',
+    labelKey: 'theme.nameTtb',
+    blurbKey: 'theme.blurbTtb',
+    scheme: 'light',
+    category: 'thai',
+    icon: Waves,
+    accent: '#0072bc',
+    swatches: ['#f2f8fc', '#ffffff', '#0072bc', '#123047'],
+  },
+  {
+    value: 'uob',
+    labelKey: 'theme.nameUob',
+    blurbKey: 'theme.blurbUob',
+    scheme: 'light',
+    category: 'thai',
+    icon: Gem,
+    accent: '#003da5',
+    swatches: ['#f2f6ff', '#ffffff', '#003da5', '#14274a'],
+  },
+  {
+    value: 'cimb-thai',
+    labelKey: 'theme.nameCimbThai',
+    blurbKey: 'theme.blurbCimbThai',
+    scheme: 'light',
+    category: 'thai',
+    icon: Flame,
+    accent: '#e61b23',
+    swatches: ['#fff5f5', '#ffffff', '#e61b23', '#351b20'],
+  },
+  {
+    value: 'gsb',
+    labelKey: 'theme.nameGsb',
+    blurbKey: 'theme.blurbGsb',
+    scheme: 'light',
+    category: 'thai',
+    icon: PiggyBank,
+    accent: '#e01d5f',
+    swatches: ['#fff5fa', '#ffffff', '#e01d5f', '#381d2b'],
+  },
+  {
+    value: 'baac',
+    labelKey: 'theme.nameBaac',
+    blurbKey: 'theme.blurbBaac',
+    scheme: 'light',
+    category: 'thai',
+    icon: Sprout,
+    accent: '#198754',
+    swatches: ['#f2f9f3', '#ffffff', '#198754', '#173520'],
+  },
+  {
+    value: 'kkp',
+    labelKey: 'theme.nameKkp',
+    blurbKey: 'theme.blurbKkp',
+    scheme: 'light',
+    category: 'thai',
+    icon: Gem,
+    accent: '#5b3f8c',
+    swatches: ['#f6f4fa', '#ffffff', '#5b3f8c', '#271f35'],
+  },
+  {
+    value: 'tisco',
+    labelKey: 'theme.nameTisco',
+    blurbKey: 'theme.blurbTisco',
+    scheme: 'light',
+    category: 'thai',
+    icon: Building2,
+    accent: '#005a9c',
+    swatches: ['#f3f7fb', '#ffffff', '#005a9c', '#172a3b'],
+  },
+  {
+    value: 'ghb',
+    labelKey: 'theme.nameGhb',
+    blurbKey: 'theme.blurbGhb',
+    scheme: 'light',
+    category: 'thai',
+    icon: House,
+    accent: '#0072b1',
+    swatches: ['#f2f8fc', '#ffffff', '#0072b1', '#183047'],
+  },
+  {
+    value: 'lh-bank',
+    labelKey: 'theme.nameLhBank',
+    blurbKey: 'theme.blurbLhBank',
+    scheme: 'light',
+    category: 'thai',
+    icon: House,
+    accent: '#6a3d91',
+    swatches: ['#f8f4fb', '#ffffff', '#6a3d91', '#2f1d3c'],
+  },
+  {
+    value: 'standard-chartered',
+    labelKey: 'theme.nameStandardChartered',
+    blurbKey: 'theme.blurbStandardChartered',
+    scheme: 'light',
+    category: 'thai',
+    icon: Globe,
+    accent: '#0072ce',
+    swatches: ['#f3f8fc', '#ffffff', '#0072ce', '#173046'],
+  },
+  {
+    value: 'icbc',
+    labelKey: 'theme.nameIcbc',
+    blurbKey: 'theme.blurbIcbc',
+    scheme: 'light',
+    category: 'thai',
+    icon: Landmark,
+    accent: '#c41230',
+    swatches: ['#fff5f5', '#ffffff', '#c41230', '#35191d'],
+  },
+  {
+    value: 'thai-credit',
+    labelKey: 'theme.nameThaiCredit',
+    blurbKey: 'theme.blurbThaiCredit',
+    scheme: 'light',
+    category: 'thai',
+    icon: Flame,
+    accent: '#c74e22',
+    swatches: ['#fff7f3', '#ffffff', '#c74e22', '#38251d'],
+  },
+  {
+    value: 'spotify',
+    labelKey: 'theme.nameSpotify',
+    blurbKey: 'theme.blurbSpotify',
+    scheme: 'light',
+    category: 'tech',
+    icon: Music,
+    accent: '#15873d',
+    swatches: ['#f2f8f3', '#ffffff', '#15873d', '#17231b'],
+  },
+  {
+    value: 'youtube',
+    labelKey: 'theme.nameYoutube',
+    blurbKey: 'theme.blurbYoutube',
+    scheme: 'light',
+    category: 'tech',
+    icon: Play,
+    accent: '#eb0000',
+    swatches: ['#fff5f5', '#ffffff', '#eb0000', '#1f1717'],
+  },
+  {
+    value: 'facebook',
+    labelKey: 'theme.nameFacebook',
+    blurbKey: 'theme.blurbFacebook',
+    scheme: 'light',
+    category: 'tech',
+    icon: ThumbsUp,
+    accent: '#1771e6',
+    swatches: ['#f2f6fc', '#ffffff', '#1771e6', '#1c1e21'],
+  },
+  {
+    value: 'microsoft-teams',
+    labelKey: 'theme.nameMicrosoftTeams',
+    blurbKey: 'theme.blurbMicrosoftTeams',
+    scheme: 'light',
+    category: 'tech',
+    icon: Users,
+    accent: '#6264a7',
+    swatches: ['#f7f7f8', '#ffffff', '#6264a7', '#252423'],
+  },
 ] as const satisfies readonly ThemePreset[];
 
 /**
@@ -291,6 +521,46 @@ type AssertNever<T extends never> = T;
 export type __EveryThemeHasAPreset = AssertNever<
   Exclude<ThemeName, (typeof THEME_PRESETS)[number]['value']>
 >;
+
+/**
+ * The picker's sections, in the order they are shown.
+ *
+ * Each group is cut the way its own members actually differ. For the original
+ * themes that is light versus dark — with those, the scheme *is* the decision,
+ * and a dark theme appearing in a list of pale ones is a nasty surprise. The
+ * brand palettes are all light, so splitting them that way would produce one
+ * full section and one empty one; what distinguishes them is whose brand it
+ * is, so they are grouped by that instead.
+ */
+/* Widened to the interface once: `as const satisfies` keeps the literal types
+   on THEME_PRESETS, which is what makes `ThemeName` exhaustive — but it also
+   means an entry without `category` has no such property to read. */
+const ALL_PRESETS: readonly ThemePreset[] = THEME_PRESETS;
+
+export const THEME_GROUPS = [
+  {
+    id: 'classic-light',
+    titleKey: 'theme.schemeLight' as TranslationKey,
+    presets: ALL_PRESETS.filter((p) => (p.category ?? 'classic') === 'classic' && p.scheme === 'light'),
+  },
+  {
+    id: 'classic-dark',
+    titleKey: 'theme.schemeDark' as TranslationKey,
+    presets: ALL_PRESETS.filter((p) => (p.category ?? 'classic') === 'classic' && p.scheme === 'dark'),
+  },
+  {
+    id: 'thai',
+    titleKey: 'theme.groupThai' as TranslationKey,
+    presets: ALL_PRESETS.filter((p) => p.category === 'thai'),
+  },
+  {
+    id: 'tech',
+    titleKey: 'theme.groupTech' as TranslationKey,
+    presets: ALL_PRESETS.filter((p) => p.category === 'tech'),
+  },
+/* Built once at module load: the catalogue is static, and recomputing four
+   filters on every render of the Settings page buys nothing. */
+].filter((group) => group.presets.length > 0);
 
 export function themePreset(value: ThemeName): ThemePreset {
   return THEME_PRESETS.find((preset) => preset.value === value) ?? THEME_PRESETS[0];
