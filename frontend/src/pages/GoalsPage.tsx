@@ -6,6 +6,7 @@ import { GoalCard } from '../components/GoalCard';
 import { GoalForm, GoalPayload } from '../components/GoalForm';
 import { GoalPurchaseModal } from '../components/GoalPurchaseModal';
 import { GoalReviewModal } from '../components/GoalReviewModal';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import {
   Alert,
@@ -127,9 +128,23 @@ export function GoalsPage() {
     closeForm();
   }
 
-  async function remove(goal: Goal) {
-    if (!window.confirm(t('goals.deleteConfirm', { title: goal.title }))) return;
-    await goals.remove(goal.id);
+  /* The goal awaiting confirmation, or null. The row rather than a boolean,
+     because the dialog has to name what it is about to delete and a flag
+     cannot say which one. */
+  const [deleting, setDeleting] = useState<Goal | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      await goals.remove(deleting.id);
+      setDeleting(null);
+    } finally {
+      /* Cleared even on failure, so a server error leaves the dialog open with
+         its button usable rather than spinning forever. */
+      setDeleteBusy(false);
+    }
   }
 
   function openFund(goal: Goal, direction: FundTarget['direction']) {
@@ -259,13 +274,30 @@ export function GoalsPage() {
                   setEditing(goal);
                   setFormOpen(true);
                 }}
-                onDelete={() => void remove(goal)}
+                onDelete={() => setDeleting(goal)}
                 onReview={goal.purchased ? () => setReviewing(goal) : undefined}
               />
             ))}
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title={t('goals.deleteTitle')}
+        /* The goal's own name above the generic warning: the warning explains
+           the consequence, this says which row it applies to. */
+        body={
+          <>
+            <strong className="confirm-subject">{deleting?.title}</strong>
+            {t('goals.deleteWarning')}
+          </>
+        }
+        confirmLabel={t('goals.deleteConfirmAction')}
+        busy={deleteBusy}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => setDeleting(null)}
+      />
 
       <GoalReviewModal
         open={reviewing !== null}

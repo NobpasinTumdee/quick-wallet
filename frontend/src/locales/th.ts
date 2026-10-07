@@ -218,6 +218,21 @@ export const th: TranslationSchema = {
   },
 
   invest: {
+    priceCurrency: 'สกุลเงินที่แสดง',
+    /* ---- การ์ดมือถือ รายละเอียด และดูราคาเร็ว ---- */
+    fees: 'ค่าธรรมเนียม',
+    lots: 'จำนวนครั้งที่ซื้อ',
+    buyRange: 'ช่วงราคาที่ซื้อ',
+    simulatedNote: 'ราคานี้เป็นราคาจำลอง เพิ่ม API key ในหน้าตั้งค่าเพื่อดูราคาจริง',
+    quickViewTitle: 'ดูราคาเร็ว',
+    quickSearchPlaceholder: 'ค้นหาสัญลักษณ์หุ้นเพื่อดูราคา…',
+    quickSearchLabel: 'ค้นหาสัญลักษณ์หุ้น',
+    quickViewEphemeral: 'ข้อมูลนี้ไม่ถูกบันทึก กด "เพิ่มในรายการติดตาม" หากต้องการเก็บไว้',
+    addToWatchlist: 'เพิ่มในรายการติดตาม',
+    alreadyWatched: 'อยู่ในรายการติดตามแล้ว',
+    prevClose: 'ราคาปิดก่อนหน้า',
+    perShare: '{{amount}} ต่อหุ้น',
+    openDetails: 'เปิดรายละเอียดของ {{symbol}}',
     noOpenPositions: 'ยังไม่มีหลักทรัพย์ที่ถือครอง',
     nothingSoldYet: 'ยังไม่มีรายการที่ขาย',
     lotLabel: '{{symbol}} — {{quantity}} หน่วย ซื้อเมื่อ {{date}}',
@@ -1065,6 +1080,11 @@ export const th: TranslationSchema = {
   },
 
   goals: {
+    /* ---- ยืนยันการลบ ---- */
+    deleteTitle: 'ลบเป้าหมาย',
+    deleteWarning:
+      'ต้องการลบเป้าหมายนี้ใช่ไหม? การลบไม่สามารถย้อนกลับได้ และเงินที่กันไว้จะกลับไปเป็นยอดที่ใช้ได้',
+    deleteConfirmAction: 'ลบเป้าหมาย',
     /* ---- รีวิวหลังซื้อ ---- */
     reviewTitle: 'คุ้มค่าไหม?',
     reviewPurchase: 'รีวิวการซื้อ',

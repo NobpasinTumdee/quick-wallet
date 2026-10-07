@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { Button, ProgressBar } from './ui';
 import { goalPace, readyToBuy, ringPercent } from '../lib/goalMath';
 import { cx, formatDate } from '../lib/format';
+import { goalReview } from '../lib/goalReview';
 import { TranslationKey } from '../locales';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { GOAL_RATING_KEYS, Goal, GoalRatingKey } from '../types';
@@ -57,7 +58,10 @@ export function GoalCard({
      of money, and four of them expanded is a page nobody can scan. */
   const [reviewOpen, setReviewOpen] = useState(false);
 
-  const realityAverage = averageReality(goal);
+  /* Every review field through one normaliser: an optimistic row has none of
+     them, and reading them raw is what put the error boundary on screen when
+     a goal was added. */
+  const review = goalReview(goal);
 
   const pace = goalPace(goal);
   const percent = ringPercent(goal);
@@ -92,12 +96,12 @@ export function GoalCard({
         {/* The tier displaces the target figure rather than joining it: on a
             bought thing the price is history and the verdict is the news, and
             three items on this line is what overflowed 375px before. */}
-        {goal.tier ? (
+        {review.tier ? (
           <span
-            className={cx('tier-badge', `is-${goal.tier.toLowerCase()}`)}
-            title={t('goals.tierLabel', { tier: goal.tier })}
+            className={cx('tier-badge', `is-${review.tier.toLowerCase()}`)}
+            title={t('goals.tierLabel', { tier: review.tier })}
           >
-            {goal.tier}
+            {review.tier}
           </span>
         ) : (
           <span className="goal-target">{money(goal.targetAmount)}</span>
@@ -125,7 +129,7 @@ export function GoalCard({
       {/* ---- The review ----
           Only ever on a purchased goal, and only once something has been
           written: an empty "View review" is a promise the card cannot keep. */}
-      {purchased && goal.reviewed && (
+      {purchased && review.reviewed && (
         <div className="goal-review">
           <button
             type="button"
@@ -133,10 +137,10 @@ export function GoalCard({
             aria-expanded={reviewOpen}
             onClick={() => setReviewOpen((open) => !open)}
           >
-            {realityAverage !== null && (
+            {review.realityAverage !== null && (
               <span className="goal-review-score">
                 <Icon icon={Star} size="sm" />
-                {realityAverage.toFixed(1)}
+                {review.realityAverage.toFixed(1)}
               </span>
             )}
             <span>{t(reviewOpen ? 'goals.hideReview' : 'goals.viewReview')}</span>
@@ -148,13 +152,13 @@ export function GoalCard({
                 <div className="goal-review-line" key={key}>
                   <span>{t(RATING_LABEL[key])}</span>
                   <span className="goal-review-pair">
-                    <StarRow value={goal.ratings.pre[key]} />
+                    <StarRow value={review.ratings.pre[key]} />
                     <span className="goal-review-arrow" aria-hidden="true">&rarr;</span>
-                    <StarRow value={goal.ratings.post[key]} lit />
+                    <StarRow value={review.ratings.post[key]} lit />
                   </span>
                 </div>
               ))}
-              {goal.reviewNote && <p className="goal-review-note">{goal.reviewNote}</p>}
+              {review.reviewNote && <p className="goal-review-note">{review.reviewNote}</p>}
             </div>
           )}
         </div>
@@ -231,9 +235,9 @@ export function GoalCard({
         {/* Reviewing is the only thing left to do with a bought goal, so it
             takes the place the money buttons have on an active one. */}
         {purchased && onReview && (
-          <Button size="sm" variant={goal.reviewed ? 'ghost' : 'secondary'} onClick={onReview}>
+          <Button size="sm" variant={review.reviewed ? 'ghost' : 'secondary'} onClick={onReview}>
             <Icon icon={Star} size="sm" />
-            {t(goal.reviewed ? 'goals.editReview' : 'goals.reviewPurchase')}
+            {t(review.reviewed ? 'goals.editReview' : 'goals.reviewPurchase')}
           </Button>
         )}
 
@@ -309,19 +313,6 @@ const RATING_LABEL: Record<GoalRatingKey, TranslationKey> = {
   convenience: 'goals.ratingConvenience',
   qol: 'goals.ratingQol',
 };
-
-/**
- * The headline number: how the thing actually turned out, averaged.
- *
- * Only the `post` scores, because that is the question the card is answering
- * at a glance — "is this any good" — and only the categories that were rated,
- * so a half-filled review is not dragged down by the rows left blank.
- */
-function averageReality(goal: Goal): number | null {
-  const scored = GOAL_RATING_KEYS.filter((key) => goal.ratings.post[key] > 0);
-  if (scored.length === 0) return null;
-  return scored.reduce((sum, key) => sum + goal.ratings.post[key], 0) / scored.length;
-}
 
 /** Five stars, read-only. Decorative: the figure beside it carries the value. */
 function StarRow({ value, lit }: { value: number; lit?: boolean }) {

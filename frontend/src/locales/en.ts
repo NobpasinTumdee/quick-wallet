@@ -220,6 +220,21 @@ export const en = {
   },
 
   invest: {
+    priceCurrency: 'Price currency',
+    /* ---- Mobile tiles, detail sheet and quick look ---- */
+    fees: 'Fees',
+    lots: 'Purchases',
+    buyRange: 'Paid between',
+    simulatedNote: 'This price is simulated — add a market data API key in Settings for live quotes.',
+    quickViewTitle: 'Quick view',
+    quickSearchPlaceholder: 'Search a ticker to quick-view…',
+    quickSearchLabel: 'Look up a ticker',
+    quickViewEphemeral: 'Nothing here is saved. Use Add to watchlist to keep it.',
+    addToWatchlist: 'Add to watchlist',
+    alreadyWatched: 'Already on your watchlist',
+    prevClose: 'Prev close',
+    perShare: '{{amount}} / share',
+    openDetails: 'Open details for {{symbol}}',
     noOpenPositions: 'No open positions',
     nothingSoldYet: 'Nothing sold yet',
     lotLabel: '{{symbol}} — {{quantity}} bought {{date}}',
@@ -1087,6 +1102,14 @@ export const en = {
   },
 
   goals: {
+    /* ---- Delete confirmation ----
+       The warning says what actually happens, not just "cannot be undone": a
+       goal is an envelope, so deleting it moves no money — it un-earmarks it.
+       People hesitate over delete because they fear losing the cash. */
+    deleteTitle: 'Delete goal',
+    deleteWarning:
+      'Are you sure you want to delete this goal? This cannot be undone, and the earmarked money will be returned to your available balance.',
+    deleteConfirmAction: 'Delete goal',
     /* ---- Post-purchase review ----
        The vocabulary is deliberately plain. "Value for money" beats "ROI" on a
        screen someone opens to decide whether they regret a sofa. */

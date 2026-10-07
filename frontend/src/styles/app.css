@@ -1606,6 +1606,17 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
    9  Modal
    ========================================================================== */
 
+/* ---- The backdrop, in two layers ----
+   The flicker came from asking one element to do two incompatible things: it
+   carried `backdrop-filter` *and* animated its own opacity. Fading an element
+   that blurs what is behind it forces the compositor to re-sample and
+   re-rasterise the blur on every frame, and the opacity change creates a fresh
+   compositing context mid-animation — so the blur is torn down and rebuilt
+   while it is being drawn.
+
+   Splitting them fixes it. This element now does layout only: no paint, no
+   filter, nothing to animate. The scrim moved to `::before`, which fades on
+   its own and never moves. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1613,17 +1624,36 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+}
+
+.modal-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
   backdrop-filter: blur(6px) saturate(120%);
   -webkit-backdrop-filter: blur(6px) saturate(120%);
   animation: fade var(--dur-base) var(--ease-out);
+  /* Safe to declare permanently *because this element is short-lived*: the
+     modal is unmounted on close, so the promoted layer is released with it.
+     A `will-change` on something that stays in the DOM pins a layer for the
+     life of the page, which is the usual reason this property backfires. */
+  will-change: opacity;
 }
 
 .modal {
+  /* Above the scrim: `::before` is absolutely positioned and would otherwise
+     paint over this static child. */
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-height: 92vh;
   display: flex;
   flex-direction: column;
+  /* Its own compositor layer, so sliding it up does not drag the blurred
+     scrim into the same repaint. Paired with `will-change` below — the two
+     together are what keep the sheet smooth over a live backdrop-filter. */
+  will-change: transform, opacity;
   background: var(--glass-bg-strong);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -8992,6 +9022,15 @@ line.arate-zero {
   }
 }
 
+/* Anyone who has asked for less motion keeps the glass and loses the fade. */
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop::before,
+  .modal {
+    animation: none;
+    will-change: auto;
+  }
+}
+
 @keyframes fade {
   from {
     opacity: 0;
@@ -10837,13 +10876,23 @@ line.arate-zero {
 
 .split-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* `minmax(0, 1fr)`, not a bare `1fr`. They look equivalent and are not: a
+     bare `1fr` is `minmax(auto, 1fr)`, and `auto` as a track minimum resolves
+     to min-content — which for the nowrap title inside is the entire string.
+     The track grew to fit a long bill name and took the page with it, so the
+     `.truncate` on the title could never fire: nothing was ever narrower than
+     the text. The two-column rule below already had this; the phone's did not. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
 .split-card {
   display: flex;
   flex-direction: column;
+  /* The card is a grid item, and a grid item's automatic minimum is also its
+     content. Without this the track above can be told to shrink and the card
+     still refuses to. */
+  min-width: 0;
   gap: var(--space-4);
   padding: var(--space-5);
   border: 1px solid var(--glass-border);
@@ -13444,5 +13493,437 @@ line.arate-zero {
   font-size: var(--text-2xs);
   line-height: 1.5;
   color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   Invest — mobile tiles, quick search, detail sheet
+   --------------------------------------------------------------------------
+   Written for 375px first. Every flex and grid child that holds text declares
+   `min-width: 0`, because its automatic minimum is otherwise its content —
+   one long ticker or a six-figure value and the row pushes the page sideways.
+   ========================================================================== */
+
+/* ---- Quick search ---- */
+.quick-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Mobile-first: the phone's gutter is the base, and the wider screen adds
+     to it below. The reverse — a base of space-5 undone by a max-width query —
+     is how a stylesheet drifts into being desktop-first by accident. */
+  margin: 0 var(--space-4) var(--space-4);
+  padding: 4px 4px 4px var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  min-width: 0;
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+
+.quick-search:focus-within {
+  border-color: var(--accent-ring);
+  box-shadow: var(--ring);
+}
+
+.quick-search-icon {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.quick-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.quick-search-input:focus {
+  outline: none;
+}
+
+/* The browser's own clear button is a second, differently-styled control in a
+   bar that already has one. */
+.quick-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+@media (min-width: 641px) {
+  .quick-search {
+    margin-inline: var(--space-5);
+  }
+}
+
+/* ---- Holding tiles ---- */
+.holding-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.holding-tile {
+  border-top: 1px solid var(--divider);
+  min-width: 0;
+}
+
+.holding-tile:first-child {
+  border-top: 0;
+}
+
+/* The whole tile is the control. A row that opens a sheet should not make you
+   find a chevron first. */
+.holding-tile-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.holding-tile-main:hover {
+  background: var(--surface-hover);
+}
+
+.holding-tile-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.holding-tile-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.holding-tile-id strong {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semi);
+  letter-spacing: var(--tracking-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holding-tile-sub {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right-aligned and never shrinking: the figures are the reason the row
+   exists, and a truncated number is worse than no number. */
+.holding-tile-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: none;
+  text-align: end;
+}
+
+.holding-tile-price {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.holding-tile-pnl {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.holding-tile-pnl.is-up {
+  color: var(--positive);
+}
+
+.holding-tile-pnl.is-down {
+  color: var(--negative);
+}
+
+/* The percentage carries the colour; the cash figure beside it is the same
+   fact in different units and does not need shouting twice. */
+.holding-tile-pnl span {
+  opacity: 0.75;
+}
+
+.holding-tile-each {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- Detail sheet ---- */
+.holding-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.holding-sheet-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.holding-sheet-price {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.holding-sheet-delta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+}
+
+.holding-sheet-delta small {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-regular);
+  opacity: 0.8;
+}
+
+.holding-sheet-delta.is-up {
+  color: var(--positive);
+}
+
+.holding-sheet-delta.is-down {
+  color: var(--negative);
+}
+
+/* Two columns at 375px: one is a wasteful column of short numbers, three
+   squeezes the labels into the letter-per-line failure. */
+.holding-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.holding-stat {
+  min-width: 0;
+}
+
+.holding-stat dt {
+  font-size: var(--text-3xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.holding-stat dd {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.holding-stat dd small {
+  display: block;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.holding-sheet-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--warning);
+}
+
+.holding-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (min-width: 480px) {
+  .holding-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---- Quick view ---- */
+.quick-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.quick-view-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.quick-view-price {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.quick-view-delta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semi);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.quick-view-delta small {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.quick-view-delta.is-up {
+  color: var(--positive);
+}
+
+.quick-view-delta.is-down {
+  color: var(--negative);
+}
+
+.quick-view-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* ---- Price-currency toggle ----
+   A segmented control, not a switch: a switch has an implied "off", and
+   neither currency is off — they are two ways of reading the same holding. */
+.fx-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.fx-toggle-option {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.fx-toggle-option:hover {
+  color: var(--text);
+}
+
+.fx-toggle-option.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.fx-toggle-option:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ---- Confirmation dialog ----
+   Replaces window.confirm, which could not say which of its two grey buttons
+   was the dangerous one. Here the icon, the wording and the button colour all
+   agree, and the safe action is the one the keyboard lands on first. */
+.confirm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.confirm-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+}
+
+.confirm-mark.is-danger {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.confirm-mark.is-primary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.confirm-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+  min-width: 0;
+  /* A goal title is free text and can be one unbroken string. */
+  overflow-wrap: anywhere;
+}
+
+/* The subject sits above the warning so the eye reads "what" before "why". */
+.confirm-subject {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-weight: var(--weight-semi);
   overflow-wrap: anywhere;
 }

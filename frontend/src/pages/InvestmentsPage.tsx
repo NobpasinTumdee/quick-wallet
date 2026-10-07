@@ -8,6 +8,7 @@ import {
   Plus,
   Receipt,
   Target,
+  Search,
   TrendingUp,
 } from 'lucide-react';
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -17,6 +18,10 @@ import { useTranslation } from 'react-i18next';
 import { Icon } from '../components/Icon';
 import type { ChartReadout } from '../components/TAChartTerminal';
 import { useCandles } from '../hooks/useCandles';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useQuickQuote } from '../hooks/useQuickQuote';
+import { HoldingDetailSheet } from '../components/HoldingDetailSheet';
+import { StockQuickView } from '../components/StockQuickView';
 import { candleProviderName } from '../services/candleApi';
 import { InvestmentForm, InvestmentPayload } from '../components/InvestmentForm';
 import { WatchlistForm, WatchlistPayload } from '../components/WatchlistForm';
@@ -51,7 +56,8 @@ import {
   todayKey,
 } from '../lib/format';
 import { ValuedHolding, groupValuedHoldings } from '../lib/positions';
-import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
+import { MoneyFormatter, useMoneyFormatter, useSettings } from '../state/SettingsContext';
+import { quoteFormatter } from '../lib/quoteFormatter';
 import { Investment, WalletBalance, WatchlistItem } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 
@@ -123,7 +129,9 @@ export function InvestmentsPage() {
      holdings hook — so a symbol that is both owned and watched costs exactly
      one request. See hooks/useSymbolQuotes.ts. */
   const watchQuotes = useSymbolQuotes(watchlist.symbols);
-  const money = useMoneyFormatter();
+  /* The books' own currency. Everything on screen goes through `money` below,
+     which is this one or a converted wrapper depending on the toggle. */
+  const baseMoney = useMoneyFormatter();
 
   const investmentWallets = wallets.items.filter((w) => w.mode === 'investment' && !w.archived);
 
@@ -196,6 +204,20 @@ export function InvestmentsPage() {
     );
   }, [chartableKey, firstHoldingSymbol]);
 
+  /* The table is right for a desktop and wrong for a phone; the tiles are the
+     reverse. Only one is ever built — see `useMediaQuery`. */
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+
+  /* The holding whose detail sheet is open, by key rather than by object: the
+     list is rebuilt on every quote refresh, so holding the object would pin a
+     stale copy with yesterday's price in it. */
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+
+  /* The ephemeral ticker lookup. Writes nothing — see `useQuickQuote`. */
+  const quickQuote = useQuickQuote();
+  const [quickTerm, setQuickTerm] = useState('');
+  const [quickOpen, setQuickOpen] = useState(false);
+
   const chart = useCandles(chartSymbol, 12);
   /** True when the charted symbol is watched but not owned. */
   const chartedIsWatched = Boolean(
@@ -213,6 +235,30 @@ export function InvestmentsPage() {
     Object.keys(portfolio.fx.rates).find((c) => c !== portfolio.baseCurrency) ?? 'USD';
   const brokerRate =
     brokerCurrency === portfolio.baseCurrency ? 0 : (portfolio.fx.rateFor(brokerCurrency) || 0);
+
+  /* ---- Price currency ----
+     Which currency the screen quotes in. 'base' is the workbook's (THB here);
+     'quote' is the broker's (USD), so the figures can be checked against the
+     brokerage app without doing the arithmetic by hand.
+
+     There is deliberately no hardcoded fallback rate. A constant 35.0 would
+     keep working after the real rate moved and quietly misstate every position
+     on the screen — and a wrong number that looks right is worse than a
+     control that is not offered. When no live rate exists the toggle is simply
+     absent and everything stays in the books' currency. */
+  const [priceCurrency, setPriceCurrency] = useState<'base' | 'quote'>('base');
+  const fxReady = brokerRate > 0;
+  const inQuote = fxReady && priceCurrency === 'quote';
+
+  /* One formatter for the whole screen, so a single toggle moves every figure
+     at once rather than each call site remembering to convert. */
+  const money = useMemo<MoneyFormatter>(
+    () =>
+      inQuote
+        ? quoteFormatter(baseMoney, brokerRate, brokerCurrency, settings.locale)
+        : baseMoney,
+    [inQuote, baseMoney, brokerRate, brokerCurrency, settings.locale],
+  );
 
   /**
    * Spots positions whose buy price was typed in the broker's currency but saved
@@ -651,6 +697,34 @@ export function InvestmentsPage() {
             <Button size="sm" onClick={() => void portfolio.refresh()} loading={portfolio.loading}>
               {t('invest.refreshPrices')}
             </Button>
+            {/* Only when a real rate exists — see the note on `fxReady`. */}
+            {fxReady && (
+              <div
+                className="fx-toggle"
+                role="radiogroup"
+                aria-label={t('invest.priceCurrency')}
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!inQuote}
+                  className={cx('fx-toggle-option', !inQuote && 'is-on')}
+                  onClick={() => setPriceCurrency('base')}
+                >
+                  {portfolio.baseCurrency}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={inQuote}
+                  className={cx('fx-toggle-option', inQuote && 'is-on')}
+                  onClick={() => setPriceCurrency('quote')}
+                >
+                  {brokerCurrency}
+                </button>
+              </div>
+            )}
+
             <Button size="sm" variant="primary" onClick={openNewPosition}>
               {t('invest.newPosition')}
             </Button>
@@ -702,6 +776,39 @@ export function InvestmentsPage() {
           </div>
         )}
 
+        {/* ---- Quick look ----
+            A different question from the one the list answers, so it is not a
+            filter: typing NVDA here when you own none of it still gets you a
+            price, and nothing is written down. */}
+        <form
+          className="quick-search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const ticker = quickTerm.trim();
+            if (!ticker) return;
+            quickQuote.lookup(ticker);
+            setQuickOpen(true);
+          }}
+        >
+          <Icon icon={Search} size="sm" className="quick-search-icon" />
+          <input
+            className="quick-search-input"
+            type="search"
+            value={quickTerm}
+            onChange={(event) => setQuickTerm(event.target.value)}
+            placeholder={t('invest.quickSearchPlaceholder')}
+            aria-label={t('invest.quickSearchLabel')}
+            /* Upper-cased on the way out, not here: forcing the case as they
+               type fights anyone who pastes a lowercase symbol. */
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <Button type="submit" size="sm" variant="ghost" disabled={!quickTerm.trim()}>
+            {t('common.search')}
+          </Button>
+        </form>
+
         {(view === 'hold' ? visibleHoldings.length : visibleSoldLots.length) === 0 ? (
           <EmptyState
             icon={<Icon icon={TrendingUp} size="xl" />}
@@ -720,7 +827,52 @@ export function InvestmentsPage() {
             }
           />
         ) : view === 'hold' ? (
-          /* ---------------- Open holdings ---------------- */
+          /* ---------------- Open holdings ----------------
+             Eleven columns is a reference table on a desktop and a horizontal
+             scrollbar on a phone. The tiles below carry the four figures
+             somebody actually opens this screen for — what it is, what it is
+             worth, and whether they are up or down — and the rest moves into a
+             sheet one tap away rather than into a column nobody can read. */
+          !desktop ? (
+            <ul className="holding-list">
+              {visibleHoldings.map((holding) => {
+                const up = holding.unrealizedPnl >= 0;
+                const perShare = holding.marketPrice - holding.avgCost;
+                return (
+                  <li key={holding.key} className="holding-tile">
+                    <button
+                      type="button"
+                      className="holding-tile-main"
+                      aria-label={t('invest.openDetails', { symbol: holding.symbol })}
+                      onClick={() => setDetailKey(holding.key)}
+                    >
+                      <span className="holding-tile-id">
+                        <strong>{holding.symbol}</strong>
+                        <span className="holding-tile-sub">
+                          {formatNumber(holding.quantity, 4, settings.locale)} @ {money(holding.avgCost)}
+                        </span>
+                      </span>
+
+                      <span className="holding-tile-figures">
+                        <span className="holding-tile-price">{money(holding.marketPrice)}</span>
+                        <span className={cx('holding-tile-pnl', up ? 'is-up' : 'is-down')}>
+                          {formatPercent(holding.unrealizedPnlPercent, 2, true)}
+                          {' '}
+                          <span>({money(holding.unrealizedPnl, { signed: true })})</span>
+                        </span>
+                        {/* The per-share move, which is the number people
+                            actually quote to themselves — "it's up two dollars
+                            a share" — and the one the totals above hide. */}
+                        <span className="holding-tile-each">
+                          {t('invest.perShare', { amount: money(perShare, { signed: true }) })}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
           <div className="table-wrap">
             <table className="data">
               <thead>
@@ -1013,6 +1165,7 @@ export function InvestmentsPage() {
               </tbody>
             </table>
           </div>
+          )
         ) : (
           /* ---------------- Closed lots ---------------- */
           <div className="table-wrap">
@@ -1422,6 +1575,57 @@ export function InvestmentsPage() {
           </p>
         )}
       </Modal>
+      <HoldingDetailSheet
+        /* Looked up fresh each render rather than stored: the list is rebuilt
+           on every quote refresh, so a held object would show a stale price
+           for as long as the sheet stayed open. */
+        holding={visibleHoldings.find((h) => h.key === detailKey) ?? null}
+        brokerRate={brokerRate}
+        brokerCurrency={brokerCurrency}
+        money={money}
+        onClose={() => setDetailKey(null)}
+        /* The same entry point the desktop table's row action uses, so a
+           purchase added from a phone lands in exactly the same place. The
+           sheet closes first: leaving it open behind the form would stack two
+           dialogs, and dismissing the form would reveal a sheet showing the
+           figures the purchase just changed. */
+        onAddPurchase={() => {
+          const holding = visibleHoldings.find((h) => h.key === detailKey);
+          if (!holding) return;
+          setDetailKey(null);
+          openBuyMore(holding);
+        }}
+        onSell={() => {
+          const holding = visibleHoldings.find((h) => h.key === detailKey);
+          if (!holding) return;
+          setDetailKey(null);
+          openSell(holding, 'all');
+        }}
+      />
+
+      <StockQuickView
+        open={quickOpen}
+        symbol={quickQuote.symbol}
+        quote={quickQuote.quote}
+        loading={quickQuote.loading}
+        error={quickQuote.error}
+        alreadyWatched={watchlist.symbols.some(
+          (symbol) => symbol.toUpperCase() === quickQuote.symbol,
+        )}
+        onAddToWatchlist={() => {
+          /* The one place this flow writes anything, and only because it was
+             asked for explicitly. */
+          void watchlist.create({ symbol: quickQuote.symbol });
+          setQuickOpen(false);
+          quickQuote.reset();
+          setQuickTerm('');
+        }}
+        onClose={() => {
+          setQuickOpen(false);
+          quickQuote.reset();
+        }}
+      />
+
     </>
   );
 }
