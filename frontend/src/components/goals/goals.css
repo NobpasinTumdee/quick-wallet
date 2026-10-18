@@ -29,7 +29,18 @@
   min-width: 0;
 }
 
-/* ---- Desktop side panel ---- */
+/* ---- Desktop filter panel: docked, rail, drawer ----
+   `--gp-w` is the docked width, set inline from the stored preference. The
+   list column is `minmax(0, 1fr)` in every state, so a wide panel shrinks the
+   list rather than pushing the page sideways. */
+
+.goals-layout.is-docked {
+  grid-template-columns: var(--gp-w, 300px) minmax(0, 1fr);
+}
+
+.goals-layout.is-railed {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
 
 .goals-panel {
   display: flex;
@@ -45,47 +56,284 @@
   box-shadow: var(--shadow-sm);
 }
 
+.goals-panel--docked {
+  position: sticky;
+  top: calc(var(--header-height) + var(--space-4));
+  max-height: calc(100vh - var(--header-height) - var(--space-8));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room on the right for the handle, which sits inside the scroll box. */
+  padding-right: calc(var(--space-5) + 4px);
+  animation: goals-panel-in var(--dur-goal) var(--ease-goal) both;
+}
+
+/* Medium screens: over the list, from the right so the app's own navigation
+   on the left stays usable. No backdrop — the list stays readable. */
+.goals-panel--drawer {
+  position: fixed;
+  z-index: 40;
+  top: calc(var(--header-height) + var(--space-2));
+  right: var(--space-4);
+  bottom: var(--space-4);
+  max-width: calc(100vw - 2 * var(--space-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--glass-bg-strong);
+  box-shadow: var(--shadow-xl);
+  animation: goals-drawer-in 240ms var(--ease-goal) both;
+}
+
+@keyframes goals-panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-8px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes goals-drawer-in {
+  from {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .goals-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .goals-panel-head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--text-md);
   line-height: 1.6;
 }
 
-/* Between tablet and wide desktop the panel sits above the list and lays its
-   groups out side by side; from 1280px it becomes a sticky column. */
-@media (min-width: 768px) {
-  .goals-panel .gf-controls {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: var(--space-5);
-  }
+.goals-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
-@media (min-width: 1280px) {
-  .goals-layout.has-panel {
-    grid-template-columns: 300px minmax(0, 1fr);
-  }
-
-  .goals-panel {
-    position: sticky;
-    top: calc(var(--header-height) + var(--space-4));
-    max-height: calc(100vh - var(--header-height) - var(--space-8));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .goals-panel .gf-controls {
-    display: flex;
-    flex-direction: column;
-  }
+.goals-panel-body {
+  min-width: 0;
 }
+
+/* The resize edge. A 10px hit area with a 2px line that appears on hover,
+   focus and while dragging — invisible until it is useful. */
+.goals-panel-handle {
+  position: absolute;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  right: 0;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: var(--radius-pill);
+}
+
+.goals-panel-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-goal) var(--ease-goal);
+}
+
+.goals-panel-handle:hover::after,
+.goals-panel-handle:focus-visible::after,
+.is-resizing-goals .goals-panel-handle::after {
+  opacity: 1;
+}
+
+.goals-panel-handle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* While dragging: no text selection, and the resize cursor everywhere so it
+   does not flicker as the pointer outruns the handle. */
+.is-resizing-goals,
+.is-resizing-goals * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+/* Closed on a wide screen: a slim rail that still shows the filter count. */
+.goals-rail {
+  position: sticky;
+  top: calc(var(--header-height) + var(--space-4));
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+}
+
+.goals-rail-open {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-goal) var(--ease-goal), color var(--dur-goal) var(--ease-goal),
+    transform var(--dur-goal) var(--ease-goal);
+}
+
+.goals-rail-open:hover {
+  transform: translateY(-1px);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.goals-rail-open:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.goals-rail-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 11px;
+  font-weight: var(--weight-semi);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- No goals at all ---- */
+
+.goals-first {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  margin: var(--space-6) auto;
+  padding: var(--space-7) var(--space-5) var(--space-6);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.goals-first-tools {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.goals-first .goals-card-alert {
+  width: 100%;
+  padding: 0;
+  text-align: start;
+}
+
+.goals-first-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent-softer);
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+}
+
+.goals-first h2 {
+  margin: 0;
+  font-size: var(--text-lg, 1.25rem);
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.goals-first p {
+  max-width: 44ch;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.goals-first-form {
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+/* ---- Goals exist, filters match none ---- */
+
+.goals-no-match {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.goals-no-match-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 200px;
+  min-width: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.goals-no-match-text strong {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.goals-no-match-text span {
+  font-size: var(--text-xs);
+}
+
 
 /* ---- Filter controls (panel and sheet) ---- */
 
@@ -355,8 +603,9 @@
   display: flex;
   gap: var(--space-2);
   min-width: 0;
-  margin-inline: calc(var(--space-4) * -1);
-  padding: 2px var(--space-4);
+  /* No edge bleed: a negative margin is one rounding error away from a
+     horizontal page scroll at 320px. */
+  padding: 2px 0;
   overflow-x: auto;
   scrollbar-width: none;
   scroll-snap-type: x proximity;
@@ -541,11 +790,11 @@
 .gs--mobile .gs-figures {
   display: flex;
   gap: var(--space-3);
-  margin-inline: calc(var(--space-4) * -1);
-  padding: 2px var(--space-4);
+  /* No edge bleed: a negative margin is one rounding error away from a
+     horizontal page scroll at 320px. */
+  padding: 2px 0;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-padding-inline: var(--space-4);
   scrollbar-width: none;
 }
 
@@ -1063,5 +1312,134 @@
   .gf-active-chip:hover,
   .gs-more:hover {
     transform: none;
+  }
+}
+
+/* ---- Section empty line ---- */
+
+.goal-section-empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-5) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   Nothing overflows, 320px to 1920px
+   ==========================================================================
+   The rules below are the Goals screen's side of "no horizontal page
+   scroll": every flex and grid child may shrink below its content, rows of
+   chips and buttons wrap, and long titles, Thai labels and seven-figure
+   amounts break instead of pushing the card wider. The desktop table is the
+   one thing allowed to be wider than its box, and it scrolls inside
+   `.goal-table-wrap`, never the page. */
+
+.goals-layout > *,
+.goals-main > *,
+.goals-main .card,
+.goal-grid > *,
+.goal-section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.goals-main .card-head > * {
+  min-width: 0;
+}
+
+.goals-main .card-title,
+.goals-main .card-subtitle {
+  overflow-wrap: anywhere;
+}
+
+.goal-head {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.goal-target {
+  /* May give way to a long title on a narrow card, but never below its own
+     figure: wrapping a price mid-number reads as two numbers. */
+  min-width: 0;
+  max-width: 100%;
+  margin-inline-start: auto;
+  overflow-wrap: anywhere;
+}
+
+.goal-progress-legend {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.goal-progress-legend > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.goal-meta {
+  min-width: 0;
+}
+
+.goal-chip {
+  /* Thai labels with a date in them outgrow a 320px card in one line. */
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.goal-actions .btn,
+.goal-quick .btn,
+.goals-no-match .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.goal-table-wrap {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+.gf-toolbar > *,
+.gf-bar--desktop .segmented {
+  min-width: 0;
+}
+
+.gf-bar--desktop .gf-toolbar {
+  flex-wrap: wrap;
+}
+
+.gs-figure > * {
+  max-width: 100%;
+}
+
+/* Modals opened from Goals at 320px: the sheet is the full width, and the
+   wallet chips and figures inside it wrap rather than widen it. */
+.modal-body .gf-controls,
+.modal-body .gs-breakdown,
+.modal-body .goal-sheet {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 360px) {
+  .gs--mobile .gs-figure {
+    flex-basis: 86%;
+  }
+
+  .goals-first {
+    padding: var(--space-6) var(--space-4) var(--space-5);
+  }
+
+  .goal-quick-amount {
+    flex-basis: 100%;
+  }
+
+  .gf-open {
+    padding: 0 var(--space-3);
   }
 }

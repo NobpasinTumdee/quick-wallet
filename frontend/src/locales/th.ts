@@ -1387,6 +1387,16 @@ export const th: TranslationSchema = {
     colDeadline: 'กำหนดเวลา',
     colCompleted: 'วันที่สำเร็จ',
     colActions: 'การจัดการ',
+
+    /* ---- แผงตัวกรองและหน้าว่าง ---- */
+    showFilters: 'แสดงตัวกรอง',
+    hideFilters: 'ซ่อนตัวกรอง',
+    resizeFilters: 'ปรับขนาดแผงตัวกรอง',
+    resizeFiltersHint: 'ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต',
+    firstTitle: 'สร้างเป้าหมายแรกของคุณ',
+    firstCreate: 'สร้างเป้าหมาย',
+    sectionActiveEmpty: 'ไม่มีเป้าหมายที่กำลังเก็บ — ทุกเป้าหมายซื้อแล้ว',
+    sectionActiveNoMatch: 'ไม่มีเป้าหมายที่กำลังเก็บตรงกับตัวกรองนี้',
   },
 
   receipt: {

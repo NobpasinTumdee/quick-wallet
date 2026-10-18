@@ -42,6 +42,8 @@ export function GoalFilterBar({
   view,
   onView,
   total,
+  drawerOpen,
+  onToggleDrawer,
 }: {
   state: GoalFiltersState;
   wallets: WalletBalance[];
@@ -50,6 +52,9 @@ export function GoalFilterBar({
   onView: (view: GoalView) => void;
   /** Goals before filtering — the "of N". */
   total: number;
+  /** Medium widths only: the filter drawer, opened from this bar. */
+  drawerOpen?: boolean;
+  onToggleDrawer?: () => void;
 }) {
   const { t } = useTranslation();
   const { filters, update, chips, visible } = state;
@@ -88,6 +93,19 @@ export function GoalFilterBar({
 
         {desktop ? (
           <>
+            {onToggleDrawer && (
+              <button
+                type="button"
+                className={cx('gf-open', (drawerOpen || removable.length > 0) && 'is-active')}
+                onClick={onToggleDrawer}
+                aria-expanded={Boolean(drawerOpen)}
+                data-goal-filters-toggle=""
+              >
+                <Icon icon={SlidersHorizontal} size="sm" />
+                <span>{t('goals.filters')}</span>
+                {removable.length > 0 && <Badge tone="accent">{removable.length}</Badge>}
+              </button>
+            )}
             <span className="gf-count" aria-live="polite">
               {visible.length === total
                 ? t('goals.resultCount', { count: total })

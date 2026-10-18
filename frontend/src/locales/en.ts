@@ -1437,6 +1437,16 @@ export const en = {
     colDeadline: 'Deadline',
     colCompleted: 'Completed',
     colActions: 'Actions',
+
+    /* ---- Filter panel & empty states ---- */
+    showFilters: 'Show filters',
+    hideFilters: 'Hide filters',
+    resizeFilters: 'Resize filters panel',
+    resizeFiltersHint: 'Drag to resize · double-click to reset',
+    firstTitle: 'Create your first goal',
+    firstCreate: 'Create goal',
+    sectionActiveEmpty: 'Nothing in progress — every goal here has been bought.',
+    sectionActiveNoMatch: 'No goals in progress match these filters.',
   },
 
   receipt: {

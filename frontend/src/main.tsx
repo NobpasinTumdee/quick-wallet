@@ -11,6 +11,12 @@ import './lib/i18n';
 import './styles/theme.css';
 import './styles/app.css';
 
+/* `qwOverflow()` / `qwOverflowAll()` in the console — see devOverflowCheck.
+   A dynamic import behind the DEV flag, so production never ships it. */
+if (import.meta.env.DEV) {
+  void import('./lib/devOverflowCheck').then((module) => module.installOverflowCheck());
+}
+
 /**
  * Vite's own signal that a chunk could not be preloaded.
  *

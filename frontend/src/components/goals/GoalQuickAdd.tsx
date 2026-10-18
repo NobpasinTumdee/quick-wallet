@@ -20,11 +20,14 @@ export function GoalQuickAdd({
   color,
   onCreate,
   onMore,
+  submitLabel,
 }: {
   /** The swatch a new goal gets, rotated by the page so neighbours differ. */
   color: string;
   onCreate: (payload: GoalPayload) => Promise<void>;
   onMore: (draft: Partial<GoalPayload>) => void;
+  /** The button text; "Add" beside an existing list, a fuller phrase on the first-goal screen. */
+  submitLabel?: string;
 }) {
   const { t } = useTranslation();
   const [title, setTitle] = useState('');
@@ -70,7 +73,7 @@ export function GoalQuickAdd({
       />
       <Button type="submit" variant="primary" loading={busy} disabled={!valid}>
         <Icon icon={Plus} size="sm" />
-        {t('goals.quickAdd')}
+        {submitLabel ?? t('goals.quickAdd')}
       </Button>
       <Button
         variant="ghost"
