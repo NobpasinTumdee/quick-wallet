@@ -1,9 +1,10 @@
-import { BadgeCheck, Minus, Plus, ShoppingBag, Star } from 'lucide-react';
+import { BadgeCheck, Minus, MoreHorizontal, Plus, ShoppingBag, Star } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
 import { Button, ProgressBar } from './ui';
+import { GoalSpend, daysUntil } from '../lib/goalFilters';
 import { goalPace, readyToBuy, ringPercent } from '../lib/goalMath';
 import { cx, formatDate } from '../lib/format';
 import { goalReview } from '../lib/goalReview';
@@ -38,8 +39,18 @@ export function GoalCard({
   onEdit,
   onDelete,
   onReview,
+  spend,
+  onMore,
 }: {
   goal: Goal;
+  /** What the purchase cost, from its expense. Null on a goal not yet bought. */
+  spend?: GoalSpend | null;
+  /**
+   * Phones. When given, the secondary actions (take out, review, edit,
+   * delete) collapse behind a "⋯" button that calls this, and only the one
+   * call to action stays on the card.
+   */
+  onMore?: () => void;
   onFund: () => void;
   onWithdraw: () => void;
   onBuy: () => void;
@@ -67,6 +78,11 @@ export function GoalCard({
   const percent = ringPercent(goal);
   const ready = readyToBuy(goal);
   const purchased = goal.purchased;
+  const days = !purchased && goal.deadline ? daysUntil(goal.deadline) : null;
+  /* The purchase's own figure when its expense was found; the target, marked
+     as an estimate, when it was not. */
+  const paid = spend ?? (purchased ? { amount: goal.targetAmount, estimated: true } : null);
+  const compact = Boolean(onMore);
 
   return (
     <article
@@ -116,9 +132,13 @@ export function GoalCard({
         />
         <div className="goal-progress-legend">
           <span>
-            {purchased
-              ? t('goals.paidAmount', { amount: money(goal.targetAmount) })
-              : t('goals.savedAmount', { amount: money(goal.savedAmount) })}
+            {purchased && paid ? (
+              <span title={paid.estimated ? t('goals.spendEstimatedTip') : undefined}>
+                {t('goals.paidAmount', { amount: `${paid.estimated ? '≈ ' : ''}${money(paid.amount)}` })}
+              </span>
+            ) : (
+              t('goals.savedAmount', { amount: money(goal.savedAmount) })
+            )}
           </span>
           <strong>{Math.round(percent)}%</strong>
         </div>
@@ -184,8 +204,16 @@ export function GoalCard({
           (goal.deadline ? (
             <span className={cx('goal-chip', pace.overdue && 'goal-chip--late')}>
               {pace.overdue
-                ? t('goals.overdue')
-                : t('goals.deadline', { date: formatDate(goal.deadline, locale) })}
+                ? days !== null && days < 0
+                  ? t('goals.overdueBy', { count: -days })
+                  : t('goals.overdue')
+                : days === 0
+                  ? t('goals.dueToday')
+                  : /* A count is easier to act on than a date while it is
+                       close; past two months the date reads better. */
+                    days !== null && days > 0 && days <= 60
+                    ? t('goals.daysLeft', { count: days })
+                    : t('goals.deadline', { date: formatDate(goal.deadline, locale) })}
             </span>
           ) : (
             <span className="goal-chip goal-chip--quiet">{t('goals.noDeadline')}</span>
@@ -216,16 +244,18 @@ export function GoalCard({
               <Icon icon={Plus} size="sm" />
               {t('goals.fund')}
             </Button>
-            <Button size="sm" variant="ghost" disabled={goal.savedAmount <= 0} onClick={onWithdraw}>
-              <Icon icon={Minus} size="sm" />
-              {t('goals.withdraw')}
-            </Button>
+            {!compact && (
+              <Button size="sm" variant="ghost" disabled={goal.savedAmount <= 0} onClick={onWithdraw}>
+                <Icon icon={Minus} size="sm" />
+                {t('goals.withdraw')}
+              </Button>
+            )}
           </>
         )}
 
         {/* Still reachable while a funded goal offers Buy: the money is saved,
             but taking some back out is a thing people do. */}
-        {ready && (
+        {ready && !compact && (
           <Button size="sm" variant="ghost" onClick={onWithdraw}>
             <Icon icon={Minus} size="sm" />
             {t('goals.withdraw')}
@@ -242,17 +272,32 @@ export function GoalCard({
         )}
 
         <div className="spacer" />
-        {/* Edit and delete travel as one unit. When the row wraps — a narrow
-            card, or a longer translation — a lone ✕ on its own line reads as a
-            mistake rather than as the end of a group. */}
-        <div className="goal-actions-end">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
-            {t('common.edit')}
+        {onMore ? (
+          /* 44px square: the one target on a phone card that has no label to
+             make it bigger, so it gets the minimum touch size on its own. */
+          <Button
+            size="sm"
+            variant="ghost"
+            className="goal-more"
+            aria-label={t('goals.actionsFor', { title: goal.title })}
+            aria-haspopup="dialog"
+            onClick={onMore}
+          >
+            <Icon icon={MoreHorizontal} size="sm" />
           </Button>
-          <Button size="sm" variant="ghost" aria-label={t('common.delete')} onClick={onDelete}>
-            ✕
-          </Button>
-        </div>
+        ) : (
+          /* Edit and delete travel as one unit. When the row wraps — a narrow
+             card, or a longer translation — a lone ✕ on its own line reads as
+             a mistake rather than as the end of a group. */
+          <div className="goal-actions-end">
+            <Button size="sm" variant="ghost" onClick={onEdit}>
+              {t('common.edit')}
+            </Button>
+            <Button size="sm" variant="ghost" aria-label={t('common.delete')} onClick={onDelete}>
+              ✕
+            </Button>
+          </div>
+        )}
       </div>
     </article>
   );

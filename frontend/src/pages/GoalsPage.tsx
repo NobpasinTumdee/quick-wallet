@@ -1,31 +1,46 @@
-import { PiggyBank, Plus, Target } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ChevronDown, PiggyBank, Plus, SearchX, Target } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { GoalCard } from '../components/GoalCard';
-import { GoalForm, GoalPayload } from '../components/GoalForm';
+import { GoalForm, GoalPayload, SWATCHES } from '../components/GoalForm';
 import { GoalPurchaseModal } from '../components/GoalPurchaseModal';
 import { GoalReviewModal } from '../components/GoalReviewModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
+import { GoalActionHandlers, GoalActionSheet } from '../components/goals/GoalActionSheet';
+import { GoalFilterBar, GoalView } from '../components/goals/GoalFilterBar';
+import { GoalFilterControls } from '../components/goals/GoalFilterControls';
+import {
+  GoalFilterSidebar,
+  PANEL_DEFAULT,
+  PANEL_MAX,
+  PANEL_MIN,
+} from '../components/goals/GoalFilterSidebar';
+import { GoalQuickAdd } from '../components/goals/GoalQuickAdd';
+import { GoalSpendingSummary } from '../components/goals/GoalSpendingSummary';
+import { GoalTable } from '../components/goals/GoalTable';
+import '../components/goals/goals.css';
 import {
   Alert,
   Button,
   Card,
   DecimalInput,
-  EmptyState,
   Field,
   Modal,
   RefreshButton,
-  Skeleton,
   parseDecimal,
 } from '../components/ui';
 import { useExcelDB } from '../hooks/useExcelDB';
+import { useGoalFilters } from '../hooks/useGoalFilters';
 import { useGoals } from '../hooks/useGoals';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useStoredBoolean, useStoredNumber } from '../hooks/useStoredBoolean';
 import { allocationSummary } from '../lib/goalMath';
+import { GoalRow } from '../lib/goalFilters';
 import { cx, formatPercent, todayKey } from '../lib/format';
 import { toast } from '../lib/toast';
-import { useMoneyFormatter } from '../state/SettingsContext';
+import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Goal, WalletBalance } from '../types';
 
 /**
@@ -42,6 +57,19 @@ import { Goal, WalletBalance } from '../types';
  * Funding writes no Transaction and moves no balance — see `lib/goalMath.ts`.
  * Buying does both, once, at the end of a goal's life: see `purchase` in
  * `useGoals`, and the wallet dialog it goes through.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO LAYOUTS
+ * ---------------------------------------------------------------------------
+ *   Phone    stacked: summary, a sticky search with quick chips, then the
+ *            goals as cards. Every filter is in a bottom sheet; a card's
+ *            secondary actions are behind "⋯".
+ *   Desktop  every filter in a persistent panel that applies instantly, the
+ *            spending breakdown inline, cards or a sortable table, and every
+ *            action as a labelled button.
+ *
+ * The allocation header stays on top of both: a filter changes which goals
+ * are listed, never how much of your cash is spoken for.
  */
 
 interface FundTarget {
@@ -50,15 +78,48 @@ interface FundTarget {
   direction: 'add' | 'withdraw';
 }
 
+/** Wide enough to dock the filter panel beside the list. */
+const WIDE_QUERY = '(min-width: 1100px)';
+
 export function GoalsPage() {
   const { t } = useTranslation();
   const money = useMoneyFormatter();
+  const { settings } = useSettings();
+  const desktop = useMediaQuery(DESKTOP_QUERY);
 
   const goals = useGoals();
   const wallets = useExcelDB<WalletBalance>('wallets');
+  const filter = useGoalFilters(goals.items, settings.locale);
+
+  /* From here the panel can sit beside the list without squeezing the cards
+     into one narrow column; below it (down to the phone breakpoint) it is a
+     drawer over the list instead. */
+  const wide = useMediaQuery(WIDE_QUERY);
+  const [panelOpen, setPanelOpen] = useStoredBoolean('quick-wallet.goals-filters-open', true);
+  const [storedWidth, setStoredWidth] = useStoredNumber('quick-wallet.goals-filters-width', PANEL_DEFAULT, {
+    min: PANEL_MIN,
+    max: PANEL_MAX,
+  });
+  const panelWidth = storedWidth ?? PANEL_DEFAULT;
+  const setPanelWidth = useCallback((width: number) => setStoredWidth(width), [setStoredWidth]);
+  /* Not remembered: on a medium screen the drawer covers the list, and
+     reopening onto a covered list would be the wrong default. */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    if (wide || !desktop) setDrawerOpen(false);
+  }, [wide, desktop]);
+
+  const [tableView, setTableView] = useStoredBoolean('quick-wallet.goals-table', false);
+  const view: GoalView = tableView ? 'table' : 'cards';
+
+  /* Completed goals need nothing from the user, so on a phone — where every
+     card is a full screen-width of scrolling — they start folded away. */
+  const [completedOpen, setCompletedOpen] = useState(desktop);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Goal | undefined>();
+  /** What quick-add had typed when "More options" was pressed. */
+  const [draft, setDraft] = useState<Partial<GoalPayload> | undefined>();
   const [fundTarget, setFundTarget] = useState<FundTarget | null>(null);
   /** Raw string so a half-typed decimal survives; parsed on confirm. */
   const [fundAmount, setFundAmount] = useState('');
@@ -76,6 +137,9 @@ export function GoalsPage() {
   const [reviewing, setReviewing] = useState<Goal | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
 
+  /** The goal whose "⋯" sheet is open (phones). */
+  const [menuGoal, setMenuGoal] = useState<Goal | null>(null);
+
   const allocation = allocationSummary(wallets.items, goals.items);
 
   /* A goal is bought with real cash, so a brokerage account is not an option —
@@ -85,6 +149,9 @@ export function GoalsPage() {
     () => wallets.items.filter((w) => !w.archived && w.mode === 'expense'),
     [wallets.items],
   );
+
+  /* Rotated so two goals added in a row do not share a colour. */
+  const nextColor = SWATCHES[goals.items.length % SWATCHES.length];
 
   function openBuy(goal: Goal) {
     setBuying(goal);
@@ -97,7 +164,7 @@ export function GoalsPage() {
   }
 
   async function confirmBuy() {
-    if (!buying || !payWalletId) return;
+    if (!buying || !payWalletId || buyBusy) return;
     setBuyBusy(true);
     setBuyError(null);
     try {
@@ -116,10 +183,21 @@ export function GoalsPage() {
     }
   }
 
+  function openNew(initial?: Partial<GoalPayload>) {
+    setEditing(undefined);
+    setDraft({ color: nextColor, ...initial });
+    setFormOpen(true);
+  }
+
   function closeForm() {
     setFormOpen(false);
     setEditing(undefined);
+    setDraft(undefined);
     goals.clearMutationError();
+  }
+
+  async function quickCreate(payload: GoalPayload) {
+    await goals.create(payload);
   }
 
   async function save(payload: GoalPayload) {
@@ -135,11 +213,14 @@ export function GoalsPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   async function confirmDelete() {
-    if (!deleting) return;
+    if (!deleting || deleteBusy) return;
     setDeleteBusy(true);
     try {
       await goals.remove(deleting.id);
       setDeleting(null);
+    } catch {
+      /* useExcelDB toasted it and rolled the row back; the dialog stays open
+         so the user can try again or cancel. */
     } finally {
       /* Cleared even on failure, so a server error leaves the dialog open with
          its button usable rather than spinning forever. */
@@ -157,7 +238,7 @@ export function GoalsPage() {
   const fundValue = parseDecimal(fundAmount);
 
   async function confirmFund() {
-    if (!fundTarget || fundValue <= 0) return;
+    if (!fundTarget || fundValue <= 0 || goals.mutating) return;
     const { goal, direction } = fundTarget;
 
     try {
@@ -168,13 +249,97 @@ export function GoalsPage() {
     }
   }
 
-  if (goals.initialLoading || wallets.initialLoading) {
+  const handlers: GoalActionHandlers = {
+    onFund: (goal) => openFund(goal, 'add'),
+    onWithdraw: (goal) => openFund(goal, 'withdraw'),
+    onBuy: openBuy,
+    onReview: setReviewing,
+    onEdit: (goal) => {
+      setEditing(goal);
+      setDraft(undefined);
+      setFormOpen(true);
+    },
+    onDelete: setDeleting,
+  };
+
+  const hasPurchases = filter.rows.some((row) => row.goal.purchased);
+  const filtered = filter.chips.length > 0;
+  /* The search box shows its own text, so it is not counted on the badges. */
+  const filterCount = filter.chips.filter((chip) => chip.kind !== 'search').length;
+
+  function renderCard(row: GoalRow) {
+    const { goal } = row;
     return (
-      <Card title={t('goals.title')}>
-        <Skeleton rows={4} />
-      </Card>
+      <GoalCard
+        key={goal.id}
+        goal={goal}
+        spend={row.spend}
+        onFund={() => handlers.onFund(goal)}
+        onWithdraw={() => handlers.onWithdraw(goal)}
+        onBuy={() => handlers.onBuy(goal)}
+        onEdit={() => handlers.onEdit(goal)}
+        onDelete={() => handlers.onDelete(goal)}
+        onReview={goal.purchased ? () => handlers.onReview(goal) : undefined}
+        onMore={desktop ? undefined : () => setMenuGoal(goal)}
+      />
     );
   }
+
+  if (goals.initialLoading || wallets.initialLoading) {
+    return <GoalsSkeleton />;
+  }
+
+  const noGoals = goals.items.length === 0;
+
+  /* When the active section is empty — a "Completed" filter, or everything
+     bought — the completed list is the whole answer and is never folded. */
+  const showCompleted = completedOpen || filter.activeRows.length === 0;
+
+  /* A status filter of only "Completed" empties the active section on
+     purpose; saying "nothing in progress" under it would be noise. */
+  const onlyCompletedWanted =
+    filter.filters.statuses.length > 0 && filter.filters.statuses.every((status) => status === 'purchased');
+
+  const refreshAll = () => Promise.all([goals.refresh(), wallets.refresh(), filter.refreshSpend()]);
+
+  const errorBanner = goals.mutationError && !formOpen && (
+    <div className="goals-card-alert">
+      <Alert tone="error" onDismiss={goals.clearMutationError}>
+        {goals.mutationError}
+      </Alert>
+    </div>
+  );
+
+  /* ---- No goals at all: one centred card, nothing to filter ---- */
+  if (noGoals) {
+    return (
+      <>
+        <section className="goals-first" aria-labelledby="goals-first-title">
+          <div className="goals-first-tools">
+            <RefreshButton onRefresh={refreshAll} busy={goals.isValidating} label={t('common.refresh')} />
+          </div>
+          {errorBanner}
+          <div className="goals-first-icon" aria-hidden="true">
+            <Icon icon={PiggyBank} size="xl" />
+          </div>
+          <h2 id="goals-first-title">{t('goals.firstTitle')}</h2>
+          <p>{t('goals.emptyHint')}</p>
+          <div className="goals-first-form">
+            <GoalQuickAdd
+              color={nextColor}
+              onCreate={quickCreate}
+              onMore={openNew}
+              submitLabel={t('goals.firstCreate')}
+            />
+          </div>
+        </section>
+        {renderDialogs()}
+      </>
+    );
+  }
+
+  const docked = desktop && wide;
+  const panelIsOpen = docked ? panelOpen : drawerOpen;
 
   return (
     <>
@@ -217,200 +382,332 @@ export function GoalsPage() {
         </Alert>
       )}
 
-      <Card
-        title={t('goals.title')}
-        subtitle={t('goals.subtitle')}
-        actions={
-          <>
-            <RefreshButton
-              onRefresh={() => Promise.all([goals.refresh(), wallets.refresh()])}
-              busy={goals.isValidating || wallets.isValidating}
-              label={t('common.refresh')}
+      <div
+        className={cx('goals-layout', docked && (panelOpen ? 'is-docked' : 'is-railed'))}
+        style={{ '--gp-w': `${panelWidth}px` } as React.CSSProperties}
+      >
+        {/* ---- Desktop: every filter, applied instantly ---- */}
+        {desktop && (
+          <GoalFilterSidebar
+            mode={docked ? 'docked' : 'drawer'}
+            open={panelIsOpen}
+            onOpenChange={docked ? setPanelOpen : setDrawerOpen}
+            width={panelWidth}
+            onWidth={setPanelWidth}
+            count={filterCount}
+            onClear={filter.clearAll}
+          >
+            <GoalFilterControls
+              filters={filter.filters}
+              onChange={filter.update}
+              onPreset={filter.replace}
+              wallets={wallets.items}
+              walletOptions={filter.walletOptions}
+              categoryOptions={filter.categoryOptions}
             />
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                setEditing(undefined);
-                setFormOpen(true);
-              }}
-            >
-              <Icon icon={Plus} size="sm" />
-              {t('goals.addGoal')}
-            </Button>
-          </>
-        }
-        padded={false}
-      >
-        {goals.mutationError && (
-          <div style={{ padding: 'var(--space-4) var(--space-4) 0' }}>
-            <Alert tone="error" onDismiss={goals.clearMutationError}>
-              {goals.mutationError}
-            </Alert>
-          </div>
+          </GoalFilterSidebar>
         )}
 
-        {goals.items.length === 0 ? (
-          <EmptyState
-            icon={<Icon icon={PiggyBank} size="xl" />}
-            title={t('goals.empty')}
-            description={t('goals.emptyHint')}
-            action={
-              <Button variant="primary" onClick={() => setFormOpen(true)}>
-                {t('goals.addGoal')}
-              </Button>
-            }
+        <div className="goals-main">
+          {/* Search and filters first, so they sit in the same place whether
+              or not anything matches. */}
+          <GoalFilterBar
+            state={filter}
+            wallets={wallets.items}
+            desktop={desktop}
+            view={view}
+            onView={(next) => setTableView(next === 'table')}
+            total={filter.rows.length}
+            drawerOpen={drawerOpen}
+            onToggleDrawer={desktop && !wide ? () => setDrawerOpen((open) => !open) : undefined}
           />
-        ) : (
-          <div className="goal-grid">
-            {goals.items.map((goal) => (
-              <GoalCard
-                key={goal.id}
-                goal={goal}
-                onFund={() => openFund(goal, 'add')}
-                onWithdraw={() => openFund(goal, 'withdraw')}
-                onBuy={() => openBuy(goal)}
-                onEdit={() => {
-                  setEditing(goal);
-                  setFormOpen(true);
-                }}
-                onDelete={() => setDeleting(goal)}
-                onReview={goal.purchased ? () => setReviewing(goal) : undefined}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
 
-      <ConfirmDialog
-        open={deleting !== null}
-        title={t('goals.deleteTitle')}
-        /* The goal's own name above the generic warning: the warning explains
-           the consequence, this says which row it applies to. */
-        body={
-          <>
-            <strong className="confirm-subject">{deleting?.title}</strong>
-            {t('goals.deleteWarning')}
-          </>
-        }
-        confirmLabel={t('goals.deleteConfirmAction')}
-        busy={deleteBusy}
-        onConfirm={() => void confirmDelete()}
-        onClose={() => setDeleting(null)}
-      />
+          {hasPurchases && filter.visible.length > 0 && (
+            <GoalSpendingSummary
+              summary={filter.summary}
+              filters={filter.filters}
+              filtered={filtered}
+              wallets={wallets.items}
+              desktop={desktop}
+              loading={filter.spendLoading}
+            />
+          )}
 
-      <GoalReviewModal
-        open={reviewing !== null}
-        goal={reviewing ?? undefined}
-        busy={reviewBusy}
-        onClose={() => setReviewing(null)}
-        onSubmit={(review) => {
-          if (!reviewing) return;
-          setReviewBusy(true);
-          /* Closed on success only. A review is typed, not picked, and
-             dropping the dialog before the write lands would lose the text
-             with nowhere to recover it from. */
-          goals
-            .reviewGoal(reviewing.id, review)
-            .then(() => setReviewing(null))
-            .finally(() => setReviewBusy(false));
-        }}
-      />
+          <Card
+            title={t('goals.title')}
+            subtitle={t('goals.subtitle')}
+            actions={
+              <>
+                <RefreshButton
+                  onRefresh={refreshAll}
+                  busy={goals.isValidating || wallets.isValidating}
+                  label={t('common.refresh')}
+                />
+                <Button size="sm" variant="primary" onClick={() => openNew()}>
+                  <Icon icon={Plus} size="sm" />
+                  {t('goals.addGoal')}
+                </Button>
+              </>
+            }
+            padded={false}
+          >
+            {errorBanner}
 
-      <GoalPurchaseModal
-        goal={buying}
-        wallets={payableFrom}
-        walletId={payWalletId}
-        onWalletId={setPayWalletId}
-        date={payDate}
-        onDate={setPayDate}
-        busy={buyBusy}
-        error={buyError}
-        onClose={() => setBuying(null)}
-        onConfirm={() => void confirmBuy()}
-      />
+            <div className="goals-quick-wrap">
+              <GoalQuickAdd color={nextColor} onCreate={quickCreate} onMore={openNew} />
+            </div>
 
-      <GoalForm
-        open={formOpen}
-        goal={editing}
-        busy={goals.mutating}
-        error={goals.mutationError}
-        onClose={closeForm}
-        onSubmit={save}
-      />
+            {filter.visible.length === 0 ? (
+              <div className="goals-no-match" role="status">
+                <Icon icon={SearchX} size="lg" />
+                <div className="goals-no-match-text">
+                  <strong>{t('goals.noResults')}</strong>
+                  <span>{t('goals.noResultsHint')}</span>
+                </div>
+                <Button variant="primary" size="sm" onClick={filter.clearAll}>
+                  {t('goals.clearFilters')}
+                </Button>
+              </div>
+            ) : desktop && view === 'table' ? (
+              <GoalTable rows={filter.visible} filters={filter.filters} onSort={filter.update} handlers={handlers} />
+            ) : (
+              <>
+                {filter.activeRows.length > 0 ? (
+                  <section className="goal-section" aria-labelledby="goal-section-active">
+                    <h3 className="goal-section-head" id="goal-section-active">
+                      {t('goals.sectionActive')}
+                      <span className="goal-section-count">{filter.activeRows.length}</span>
+                    </h3>
+                    <div className="goal-grid">{filter.activeRows.map(renderCard)}</div>
+                  </section>
+                ) : (
+                  !onlyCompletedWanted && (
+                    /* A line, not a card: the completed list below is the
+                       content, this only explains the gap above it. */
+                    <section className="goal-section" aria-labelledby="goal-section-active">
+                      <h3 className="goal-section-head" id="goal-section-active">
+                        {t('goals.sectionActive')}
+                        <span className="goal-section-count">0</span>
+                      </h3>
+                      <p className="goal-section-empty">
+                        {filtered ? t('goals.sectionActiveNoMatch') : t('goals.sectionActiveEmpty')}
+                      </p>
+                    </section>
+                  )
+                )}
 
-      {/* ---- Fund / withdraw ---- */}
-      <Modal
-        open={Boolean(fundTarget)}
-        title={
-          fundTarget?.direction === 'withdraw'
-            ? t('goals.withdrawTitle', { title: fundTarget?.goal.title ?? '' })
-            : t('goals.fundTitle', { title: fundTarget?.goal.title ?? '' })
-        }
-        onClose={() => setFundTarget(null)}
-        width={400}
-        footer={
-          <>
-            <Button onClick={() => setFundTarget(null)}>{t('common.cancel')}</Button>
-            <Button
-              variant="primary"
-              loading={goals.mutating}
-              disabled={fundValue <= 0}
-              onClick={() => void confirmFund()}
-            >
-              {fundTarget?.direction === 'withdraw'
-                ? t('goals.withdrawConfirm')
-                : t('goals.fundConfirm')}
-            </Button>
-          </>
-        }
-      >
-        {fundTarget && (
-          <>
-            <Field
-              label={
-                fundTarget.direction === 'withdraw'
-                  ? t('goals.withdrawAmount')
-                  : t('goals.fundAmount')
-              }
-              hint={
-                fundTarget.direction === 'withdraw' ? t('goals.withdrawHint') : t('goals.fundHint')
-              }
-            >
-              <DecimalInput
-                value={fundAmount}
-                onChange={setFundAmount}
-                placeholder="0.00"
-                autoFocus
-              />
-            </Field>
-
-            {fundTarget.direction === 'withdraw' && fundTarget.goal.savedAmount > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setFundAmount(String(fundTarget.goal.savedAmount))}
-              >
-                {t('goals.withdrawAll')}
-              </Button>
+                {filter.completedRows.length > 0 && (
+                  <section className="goal-section goal-section--done" aria-labelledby="goal-section-done">
+                    <h3 className="goal-section-head" id="goal-section-done">
+                      <button
+                        type="button"
+                        className="goal-section-toggle"
+                        aria-expanded={showCompleted}
+                        aria-controls="goal-section-done-list"
+                        onClick={() => setCompletedOpen(!showCompleted)}
+                        disabled={filter.activeRows.length === 0}
+                      >
+                        {t('goals.sectionCompleted')}
+                        <span className="goal-section-count">{filter.completedRows.length}</span>
+                        {filter.activeRows.length > 0 && (
+                          <Icon
+                            icon={ChevronDown}
+                            size="sm"
+                            className={cx('goal-section-caret', showCompleted && 'is-open')}
+                          />
+                        )}
+                      </button>
+                    </h3>
+                    {showCompleted && (
+                      <div className="goal-grid" id="goal-section-done-list">
+                        {filter.completedRows.map(renderCard)}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </>
             )}
+          </Card>
+        </div>
+      </div>
 
-            <p className="field-hint" style={{ marginTop: 10 }}>
-              <Icon icon={Target} size="sm" />{' '}
-              {t('goals.saved', {
-                saved: money(
-                  Math.max(
-                    0,
-                    fundTarget.goal.savedAmount +
-                      (fundTarget.direction === 'add' ? fundValue : -fundValue),
-                  ),
-                ),
-                target: money(fundTarget.goal.targetAmount),
-              })}
-            </p>
-          </>
-        )}
-      </Modal>
+      {renderDialogs()}
     </>
+  );
+
+  /* Every dialog the page can open, shared by the empty and the full layout
+     so creating the first goal goes through the same form as the hundredth. */
+  function renderDialogs() {
+    return (
+      <>
+        <GoalActionSheet goal={menuGoal} onClose={() => setMenuGoal(null)} handlers={handlers} />
+
+        <ConfirmDialog
+          open={deleting !== null}
+          title={t('goals.deleteTitle')}
+          /* The goal's own name above the generic warning: the warning explains
+             the consequence, this says which row it applies to. */
+          body={
+            <>
+              <strong className="confirm-subject">{deleting?.title}</strong>
+              {t('goals.deleteWarning')}
+            </>
+          }
+          confirmLabel={t('goals.deleteConfirmAction')}
+          busy={deleteBusy}
+          onConfirm={() => void confirmDelete()}
+          onClose={() => setDeleting(null)}
+        />
+
+        <GoalReviewModal
+          open={reviewing !== null}
+          goal={reviewing ?? undefined}
+          busy={reviewBusy}
+          onClose={() => setReviewing(null)}
+          onSubmit={(review) => {
+            if (!reviewing || reviewBusy) return;
+            setReviewBusy(true);
+            /* Closed on success only. A review is typed, not picked, and
+               dropping the dialog before the write lands would lose the text
+               with nowhere to recover it from. */
+            goals
+              .reviewGoal(reviewing.id, review)
+              .then(() => setReviewing(null))
+              .catch(() => {
+                /* useExcelDB toasted it; the dialog keeps the typed review. */
+              })
+              .finally(() => setReviewBusy(false));
+          }}
+        />
+
+        <GoalPurchaseModal
+          goal={buying}
+          wallets={payableFrom}
+          walletId={payWalletId}
+          onWalletId={setPayWalletId}
+          date={payDate}
+          onDate={setPayDate}
+          busy={buyBusy}
+          error={buyError}
+          onClose={() => setBuying(null)}
+          onConfirm={() => void confirmBuy()}
+        />
+
+        <GoalForm
+          open={formOpen}
+          goal={editing}
+          draft={draft}
+          busy={goals.mutating}
+          error={goals.mutationError}
+          onClose={closeForm}
+          onSubmit={save}
+        />
+
+        {/* ---- Fund / withdraw ---- */}
+        <Modal
+          open={Boolean(fundTarget)}
+          title={
+            fundTarget?.direction === 'withdraw'
+              ? t('goals.withdrawTitle', { title: fundTarget?.goal.title ?? '' })
+              : t('goals.fundTitle', { title: fundTarget?.goal.title ?? '' })
+          }
+          onClose={() => setFundTarget(null)}
+          width={400}
+          footer={
+            <>
+              <Button onClick={() => setFundTarget(null)}>{t('common.cancel')}</Button>
+              <Button
+                variant="primary"
+                loading={goals.mutating}
+                disabled={fundValue <= 0}
+                onClick={() => void confirmFund()}
+              >
+                {fundTarget?.direction === 'withdraw'
+                  ? t('goals.withdrawConfirm')
+                  : t('goals.fundConfirm')}
+              </Button>
+            </>
+          }
+        >
+          {fundTarget && (
+            <>
+              <Field
+                label={
+                  fundTarget.direction === 'withdraw'
+                    ? t('goals.withdrawAmount')
+                    : t('goals.fundAmount')
+                }
+                hint={
+                  fundTarget.direction === 'withdraw' ? t('goals.withdrawHint') : t('goals.fundHint')
+                }
+              >
+                <DecimalInput
+                  value={fundAmount}
+                  onChange={setFundAmount}
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </Field>
+
+              {fundTarget.direction === 'withdraw' && fundTarget.goal.savedAmount > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setFundAmount(String(fundTarget.goal.savedAmount))}
+                >
+                  {t('goals.withdrawAll')}
+                </Button>
+              )}
+
+              <p className="field-hint" style={{ marginTop: 10 }}>
+                <Icon icon={Target} size="sm" />{' '}
+                {t('goals.saved', {
+                  saved: money(
+                    Math.max(
+                      0,
+                      fundTarget.goal.savedAmount +
+                        (fundTarget.direction === 'add' ? fundValue : -fundValue),
+                    ),
+                  ),
+                  target: money(fundTarget.goal.targetAmount),
+                })}
+              </p>
+            </>
+          )}
+        </Modal>
+      </>
+    );
+  }
+}
+
+/**
+ * The page's own shape, shimmering: the allocation strip and three cards.
+ * Sized like the real thing so nothing jumps when the data lands.
+ */
+function GoalsSkeleton() {
+  return (
+    <div className="goals-skeleton" aria-busy="true">
+      <div className="alloc sk-card">
+        <div className="alloc-figures">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="alloc-figure">
+              <span className="sk" style={{ width: '45%', height: 10 }} />
+              <span className="sk sk-strong" style={{ width: '70%', height: 26 }} />
+            </div>
+          ))}
+        </div>
+        <span className="sk" style={{ width: '100%', height: 8 }} />
+      </div>
+      <div className="goal-grid goal-grid--skeleton">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="goal-card sk-card">
+            <span className="sk sk-strong" style={{ width: '60%', height: 16 }} />
+            <span className="sk" style={{ width: '100%', height: 8 }} />
+            <span className="sk" style={{ width: '40%', height: 12 }} />
+            <span className="sk" style={{ width: '50%', height: 30, marginTop: 8 }} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

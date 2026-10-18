@@ -24,7 +24,7 @@ export interface GoalPayload {
 }
 
 /** Swatches, not a colour picker: eight good choices beat sixteen million. */
-const SWATCHES = ['#3b6fff', '#0f9d6b', '#d1830f', '#e03e58', '#8b5cf6', '#0ea5e9', '#ec4899', '#64748b'];
+export const SWATCHES = ['#3b6fff', '#0f9d6b', '#d1830f', '#e03e58', '#8b5cf6', '#0ea5e9', '#ec4899', '#64748b'];
 
 interface FormState {
   title: string;
@@ -34,13 +34,13 @@ interface FormState {
   note: string;
 }
 
-function initialState(goal?: Goal): FormState {
+function initialState(goal?: Goal, draft?: Partial<GoalPayload>): FormState {
   return {
-    title: goal?.title ?? '',
-    targetAmount: decimalToInput(goal?.targetAmount),
-    deadline: goal?.deadline ?? '',
-    color: goal?.color || SWATCHES[0],
-    note: goal?.note ?? '',
+    title: goal?.title ?? draft?.title ?? '',
+    targetAmount: decimalToInput(goal?.targetAmount ?? draft?.targetAmount),
+    deadline: goal?.deadline ?? draft?.deadline ?? '',
+    color: goal?.color || draft?.color || SWATCHES[0],
+    note: goal?.note ?? draft?.note ?? '',
   };
 }
 
@@ -59,6 +59,7 @@ export function GoalForm({
   error,
   onClose,
   onSubmit,
+  draft,
 }: {
   open: boolean;
   goal?: Goal;
@@ -66,9 +67,11 @@ export function GoalForm({
   error?: string | null;
   onClose: () => void;
   onSubmit: (payload: GoalPayload) => Promise<void>;
+  /** A new goal's starting values — what was typed into quick-add, and its colour. */
+  draft?: Partial<GoalPayload>;
 }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState<FormState>(() => initialState(goal));
+  const [form, setForm] = useState<FormState>(() => initialState(goal, draft));
   const [localError, setLocalError] = useState<string | null>(null);
 
   /* Only on open, or when opened onto a different record — the same rule the
@@ -76,7 +79,7 @@ export function GoalForm({
      field under the user. */
   useEffect(() => {
     if (open) {
-      setForm(initialState(goal));
+      setForm(initialState(goal, draft));
       setLocalError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
