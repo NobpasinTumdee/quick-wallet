@@ -71,7 +71,7 @@
    on the left stays usable. No backdrop — the list stays readable. */
 .goals-panel--drawer {
   position: fixed;
-  z-index: 40;
+  z-index: var(--z-drawer);
   top: calc(var(--header-height) + var(--space-2));
   right: var(--space-4);
   bottom: var(--space-4);
@@ -593,7 +593,7 @@
 .gf-bar--mobile .gf-toolbar {
   position: sticky;
   top: calc(var(--header-height) + var(--space-1));
-  z-index: 5;
+  z-index: var(--z-sticky);
   flex-wrap: nowrap;
 }
 

@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Minus, Pencil, Plus, ShoppingBag, Star, Trash2 } fr
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../Icon';
-import { Button, ProgressBar } from '../ui';
+import { Button, InfoTip, ProgressBar } from '../ui';
 import { GoalActionHandlers } from './GoalActionSheet';
 import { cx, formatDate } from '../../lib/format';
 import { GoalFilters, GoalRow, GoalSortKey } from '../../lib/goalFilters';
@@ -145,8 +145,8 @@ export function GoalTable({
                 <td className="is-num">{money(goal.savedAmount)}</td>
                 <td className="is-num">
                   {spend ? (
-                    <span title={spend.estimated ? t('goals.spendEstimatedTip') : undefined}>
-                      {spend.estimated ? '≈ ' : ''}
+                    <span>
+                      {spend.estimated && <InfoTip label="≈" text={t('goals.spendEstimatedTip')} />}
                       {money(spend.amount)}
                     </span>
                   ) : (

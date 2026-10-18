@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Button, ProgressBar } from './ui';
+import { Button, InfoTip, ProgressBar } from './ui';
 import { GoalSpend, daysUntil } from '../lib/goalFilters';
 import { goalPace, readyToBuy, ringPercent } from '../lib/goalMath';
 import { cx, formatDate } from '../lib/format';
@@ -133,8 +133,9 @@ export function GoalCard({
         <div className="goal-progress-legend">
           <span>
             {purchased && paid ? (
-              <span title={paid.estimated ? t('goals.spendEstimatedTip') : undefined}>
-                {t('goals.paidAmount', { amount: `${paid.estimated ? '≈ ' : ''}${money(paid.amount)}` })}
+              <span>
+                {paid.estimated && <InfoTip label="≈" text={t('goals.spendEstimatedTip')} />}
+                {t('goals.paidAmount', { amount: money(paid.amount) })}
               </span>
             ) : (
               t('goals.savedAmount', { amount: money(goal.savedAmount) })

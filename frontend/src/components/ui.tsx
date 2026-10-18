@@ -1,17 +1,24 @@
 import { FileText, RefreshCw, X } from 'lucide-react';
 import {
   ButtonHTMLAttributes,
+  CSSProperties,
   forwardRef,
   InputHTMLAttributes,
+  KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
   useEffect,
   useId,
+  useLayoutEffect,
+  useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 import { cx } from '../lib/format';
+import { OverlayHandle, pushOverlay, updateOverlayClose } from '../lib/overlayStack';
 import { Icon } from './Icon';
 
 /* ------------------------------------------------------------------ */
@@ -384,8 +391,66 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Modal                                                               */
+/* Overlays                                                            */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Renders straight into `<body>`.
+ *
+ * Every overlay goes through here because `position: fixed` is only fixed to
+ * the screen while no ancestor has a `transform`, `filter`, `backdrop-filter`,
+ * `will-change` or `contain`. The glass panels have `backdrop-filter`, and
+ * every direct child of `.page` runs a transform animation on entry — so a
+ * sheet rendered inside either was positioned against the card, clipped by
+ * its `overflow: hidden`, and stacked inside its z-index context, under the
+ * tab bar. Outside the tree, none of that can reach it.
+ */
+export function Portal({ children }: { children: ReactNode }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Registers an open overlay on the shared stack for as long as `open` holds.
+ *
+ * The close handler is kept in a ref so callers can pass an inline arrow
+ * without re-registering — which used to re-run the Escape listener and the
+ * scroll lock on every render.
+ */
+export function useOverlay(open: boolean, onClose: () => void): OverlayHandle | null {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [handle, setHandle] = useState<OverlayHandle | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const next = pushOverlay(() => closeRef.current());
+    setHandle(next);
+    return () => {
+      next.release();
+      setHandle(null);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (handle) updateOverlayClose(handle.id, () => closeRef.current());
+  }, [handle]);
+
+  return handle;
+}
+
+/** Inputs scrolled into view above the on-screen keyboard. */
+function revealFocusedField(event: FocusEvent): void {
+  const target = event.target as HTMLElement | null;
+  if (!target || !target.matches('input, textarea, select, [contenteditable="true"]')) return;
+  if (!window.matchMedia?.('(max-width: 767px)').matches) return;
+  /* After the keyboard has finished opening, which is when the visual
+     viewport has its final size. */
+  window.setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 320);
+}
 
 export function Modal({
   open,
@@ -402,37 +467,209 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
 }) {
+  const { t } = useTranslation();
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const handle = useOverlay(open, onClose);
 
+  /* Focus in on open, back to whatever opened it on close. */
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    // Stop the page behind the sheet from scrolling on mobile.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const opener = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) {
+      const wanted = dialog.querySelector<HTMLElement>('[autofocus], [data-autofocus]');
+      (wanted ?? dialog).focus({ preventScroll: true });
+    }
+    dialog?.addEventListener('focusin', revealFocusedField);
     return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previousOverflow;
+      dialog?.removeEventListener('focusin', revealFocusedField);
+      if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    /* Only the top overlay answers: Escape on a confirm opened from a sheet
+       closes the confirm, not both. */
+    if (!handle?.isTop()) return;
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== 'Tab' || !dialogRef.current) return;
+    /* Keep Tab inside the dialog — the page behind it is inert. */
+    const items = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+      (item) => item.offsetParent !== null,
+    );
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  const depth = handle?.depth ?? 0;
+
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ maxWidth: width }}>
-        <header className="modal-head">
-          <h2 id={titleId}>{title}</h2>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
-        <div className="modal-body">{children}</div>
-        {footer && <footer className="modal-foot">{footer}</footer>}
+    <Portal>
+      <div
+        className={cx('modal-backdrop', depth > 0 && 'is-stacked')}
+        style={{ zIndex: `calc(var(--z-sheet) + ${depth})` } as CSSProperties}
+        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+        onKeyDown={onKeyDown}
+      >
+        <div
+          ref={dialogRef}
+          className="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          style={{ maxWidth: width }}
+        >
+          <header className="modal-head">
+            <h2 id={titleId}>{title}</h2>
+            <button type="button" className="modal-close" onClick={onClose} aria-label={t('common.close')}>
+              ×
+            </button>
+          </header>
+          <div className="modal-body">{children}</div>
+          {footer && <footer className="modal-foot">{footer}</footer>}
+        </div>
       </div>
-    </div>
+    </Portal>
+  );
+}
+
+/**
+ * A small explanation behind a tap, for the "≈" marks and anything like them.
+ *
+ * Not a `title` attribute: a phone has no hover, so a `title` is a tooltip
+ * nobody can open there. This is a button that toggles a popover rendered in
+ * a portal and placed against the screen edges — above the trigger when there
+ * is room, below when there is not, shifted sideways so it never runs off
+ * either edge, and never wider than the screen minus a margin.
+ */
+export function InfoTip({
+  label,
+  text,
+  className,
+}: {
+  /** What the trigger shows, e.g. "≈". */
+  label: ReactNode;
+  /** The explanation, also the trigger's accessible name. */
+  text: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<{ left: number; top: number; below: boolean; arrow: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const tipId = useId();
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlace(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const tip = tipRef.current;
+    if (!trigger || !tip) return;
+    const margin = 8;
+    const gap = 6;
+    const anchor = trigger.getBoundingClientRect();
+    const box = tip.getBoundingClientRect();
+    const viewW = document.documentElement.clientWidth;
+    const viewH = window.visualViewport?.height ?? window.innerHeight;
+    const roomAbove = anchor.top - margin;
+    /* Flip below when it does not fit above and there is more room below. */
+    const below = roomAbove < box.height + gap && viewH - anchor.bottom > roomAbove;
+    const top = below ? anchor.bottom + gap : anchor.top - gap - box.height;
+    const centre = anchor.left + anchor.width / 2;
+    /* Shift sideways to stay inside both edges. */
+    const left = Math.min(Math.max(margin, centre - box.width / 2), viewW - margin - box.width);
+    setPlace({
+      left,
+      top: Math.max(margin, top),
+      below,
+      arrow: Math.min(Math.max(12, centre - left), box.width - 12),
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || tipRef.current?.contains(target)) return;
+      close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        /* Captured first, so Escape closes the tip and not the sheet under it. */
+        event.stopPropagation();
+        close();
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    /* A popover pinned to a spot that has scrolled away is worse than none. */
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cx('info-tip', className)}
+        aria-label={text}
+        aria-expanded={open}
+        aria-describedby={open ? tipId : undefined}
+        onClick={(event) => {
+          /* Inside a clickable row or card, a tap here is only about the tip. */
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+      >
+        {label}
+      </button>
+      {open && (
+        <Portal>
+          <div
+            ref={tipRef}
+            id={tipId}
+            role="tooltip"
+            className={cx('info-tip-pop', place?.below && 'is-below')}
+            style={
+              {
+                left: place?.left ?? 0,
+                top: place?.top ?? 0,
+                visibility: place ? 'visible' : 'hidden',
+                '--arrow-x': `${place?.arrow ?? 12}px`,
+              } as CSSProperties
+            }
+          >
+            {text}
+          </div>
+        </Portal>
+      )}
+    </>
   );
 }

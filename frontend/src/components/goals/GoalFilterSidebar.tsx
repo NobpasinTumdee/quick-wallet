@@ -3,7 +3,7 @@ import { KeyboardEvent, PointerEvent, ReactNode, useEffect, useRef } from 'react
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../Icon';
-import { Badge, Button } from '../ui';
+import { Badge, Button, Portal } from '../ui';
 import { cx } from '../../lib/format';
 
 export const PANEL_MIN = 240;
@@ -136,7 +136,7 @@ export function GoalFilterSidebar({
     onWidth(clampPanelWidth(next));
   }
 
-  return (
+  const panel = (
     <aside
       ref={panelRef}
       className={cx('goals-panel', mode === 'drawer' ? 'goals-panel--drawer' : 'goals-panel--docked')}
@@ -191,4 +191,10 @@ export function GoalFilterSidebar({
       )}
     </aside>
   );
+
+  /* The drawer floats over the page, so it renders outside it: inside
+     `.page` it would be positioned and stacked against the page's own
+     entry animation rather than the screen. The docked panel is part of the
+     layout and stays where it is. */
+  return mode === 'drawer' ? <Portal>{panel}</Portal> : panel;
 }

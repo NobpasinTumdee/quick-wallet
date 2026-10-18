@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../Icon';
 import { WalletIconRenderer } from '../WalletIconRenderer';
-import { Button, Modal } from '../ui';
+import { Button, InfoTip, Modal } from '../ui';
 import { cx } from '../../lib/format';
 import { GoalFilters, SpendBucket, SpendingSummary, goalPresetRange } from '../../lib/goalFilters';
 import { useMoneyFormatter, useSettings } from '../../state/SettingsContext';
@@ -53,14 +53,15 @@ export function GoalSpendingSummary({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const estimated = summary.estimatedCount > 0;
-  const approx = estimated ? '≈ ' : '';
+  /* A tap-able ≈, not a title attribute: phones have no hover. */
+  const approx = estimated ? <InfoTip label="≈" text={t('goals.spendEstimatedTip')} /> : null;
   const scope = scopeLabel(summary, filters, locale, t('goals.spendScope', { count: summary.count }));
 
   const figures = (
     <div className="gs-figures">
       <div className="gs-figure gs-figure--total">
         <span className="section-label">{t('goals.spendTotal')}</span>
-        <strong title={estimated ? t('goals.spendEstimatedTip') : undefined}>
+        <strong>
           {approx}
           {money(summary.total)}
         </strong>
@@ -113,7 +114,7 @@ export function GoalSpendingSummary({
           {figures}
 
           {estimated && (
-            <p className="gs-estimate" title={t('goals.spendEstimatedTip')}>
+            <p className="gs-estimate">
               {t('goals.spendEstimatedNote', {
                 count: summary.estimatedCount,
                 amount: money(summary.estimatedTotal),
@@ -274,9 +275,7 @@ function BucketList({
               </span>
               <span className="gs-row-amount">
                 {bucket.estimated && (
-                  <abbr className="gs-approx" title={t('goals.spendEstimatedTip')}>
-                    ≈
-                  </abbr>
+                  <InfoTip label="≈" text={t('goals.spendEstimatedTip')} />
                 )}
                 {money(bucket.amount)}
               </span>

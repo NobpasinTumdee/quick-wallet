@@ -136,6 +136,28 @@
   --dur-fast: 140ms;
   --dur-base: 240ms;
   --dur-slow: 420ms;
+  /* Sheets and popovers: a fast, iOS-like settle, kept inside 150–260ms. */
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-sheet: 260ms;
+
+  /* ---------- layers ----------
+     One scale for everything that floats. A new fixed element picks a step
+     here instead of a number, so nothing can quietly land behind the tab bar
+     or above a dialog it should sit under. Gaps leave room for one-off
+     neighbours (a tooltip inside the sidebar uses its own context). */
+  --z-sticky: 5; /* sticky bars inside the page: the Goals search */
+  --z-header: 20; /* the top bar */
+  --z-sidebar: 25;
+  --z-nav: 30; /* the mobile tab bar */
+  --z-gnav: 40; /* the gesture-nav arc over the tab bar */
+  --z-fullscreen: 50; /* a card taken fullscreen */
+  --z-drawer: 55; /* side drawers over the page (Goals filters, medium widths) */
+  --z-fab-backdrop: 70; /* the quick-add button's own scrim */
+  --z-fab: 80; /* the quick-add button and its menu */
+  --z-sheet: 100; /* dialogs and bottom sheets, stacked by +1 per level */
+  --z-popover: 120; /* tooltips and menus, above whatever opened them */
+  --z-toast: 130;
+  --z-boot: 200;
 
   color-scheme: light;
 }

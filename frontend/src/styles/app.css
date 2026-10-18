@@ -263,7 +263,7 @@ body::after {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: var(--z-header);
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -429,7 +429,7 @@ body::after {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 30;
+  z-index: var(--z-nav);
   display: grid;
   /* Two links, the centre button's slot, two links. The button itself is not
      in this grid — see .gnav — so slot 3 is deliberately empty. */
@@ -1620,7 +1620,7 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-sheet);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -3804,7 +3804,7 @@ table.data.data--nested td {
 .boot {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-boot);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4150,7 +4150,7 @@ table.data.data--nested td {
 
 .toaster {
   position: fixed;
-  z-index: 90;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -4278,7 +4278,7 @@ table.data.data--nested td {
 
 .qa {
   position: fixed;
-  z-index: 80;
+  z-index: var(--z-fab);
   right: var(--space-4);
   /* Clears the mobile tab bar, matching the toaster's offset. */
   bottom: calc(84px + env(safe-area-inset-bottom, 0px));
@@ -4297,7 +4297,7 @@ table.data.data--nested td {
 .qa-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: var(--z-fab-backdrop);
   background: color-mix(in srgb, var(--text) 28%, transparent);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
@@ -8203,7 +8203,7 @@ line.arate-zero {
 .card--fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-fullscreen);
   display: flex;
   flex-direction: column;
   border: 0;
@@ -9503,7 +9503,7 @@ line.arate-zero {
      and stays well under the modal layer (50+). Only while railed, which is
      the only time anything needs to escape the panel. */
   .shell.is-railed .sidebar {
-    z-index: 25;
+    z-index: var(--z-sidebar);
   }
 
   /* The active rail would sit under a centred icon rather than beside it. */
@@ -10532,7 +10532,7 @@ line.arate-zero {
      both `position: fixed; inset: 0`, so at equal z-index DOM order would
      decide and this element, being later, would win. Below the modal backdrop
      (60), the quick-add widget (80) and the toaster (90). */
-  z-index: 40;
+  z-index: var(--z-gnav);
   /* The layer spans the viewport so the backdrop can, but must not intercept
      anything itself — only the button and the open arc take input. */
   pointer-events: none;
@@ -14075,4 +14075,215 @@ line.arate-zero {
 
 .pie-chip-reset:hover {
   text-decoration: underline;
+}
+
+/* ==========================================================================
+   Overlays — sheets, dialogs and popovers on a phone
+   ==========================================================================
+   Every overlay renders in a portal on <body> (see `Portal` in ui.tsx), so
+   nothing here has to fight a transformed or blurred ancestor. Layers come
+   from the `--z-*` scale in theme.css; the open overlays themselves are
+   tracked in lib/overlayStack.ts, which also publishes the on-screen
+   keyboard as `--kb-inset` and the visible height as `--vv-height`.
+
+   Desktop keeps its centred dialog exactly as before; only the shared
+   hardening (the body may shrink, the head and foot may not) applies there. */
+
+.modal {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.modal:focus {
+  outline: none;
+}
+
+/* Head and foot never scroll away; only the body between them does. */
+.modal-head,
+.modal-foot {
+  flex: none;
+}
+
+.modal-head h2 {
+  line-height: 1.6;
+  padding-block: 2px;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+.modal-foot {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767px) {
+  /* The sheet rides above the keyboard: on iOS the layout viewport does not
+     shrink when it opens, so the space it covers is padded out instead. */
+  .modal-backdrop {
+    padding-bottom: var(--kb-inset, 0px);
+    transition: padding-bottom var(--dur-sheet) var(--ease-sheet);
+    overscroll-behavior: contain;
+  }
+
+  .modal {
+    max-height: 90vh;
+    /* `dvh` follows the browser's own toolbars; `--vv-height` follows the
+       keyboard. Whichever is smaller wins, less room for the notch. */
+    max-height: min(90dvh, calc(var(--vv-height, 100dvh) - env(safe-area-inset-top, 0px) - var(--space-3)));
+    animation: sheet-slide-up var(--dur-sheet) var(--ease-sheet);
+  }
+
+  .modal-backdrop::before {
+    animation-duration: var(--dur-sheet);
+  }
+
+  .modal-head {
+    padding: var(--space-4) var(--space-4) var(--space-3) var(--space-5);
+  }
+
+  .modal-close {
+    width: 44px;
+    height: 44px;
+    flex: none;
+  }
+
+  .modal-body {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  /* Buttons share the row and are full touch targets; a long Thai label
+     wraps inside its button instead of pushing the row off screen. */
+  .modal-foot .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.6;
+  }
+
+  /* Below 16px, iOS zooms the whole page when a field is focused, which is
+     what made sheets look as if they ran off the screen. */
+  .modal .control,
+  .goal-quick .control {
+    font-size: 16px;
+  }
+}
+
+@keyframes sheet-slide-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---- The tap-able "≈" and its popover ---- */
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  margin-inline-end: 4px;
+  padding: 0 5px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85em;
+  line-height: 1.6;
+  vertical-align: middle;
+  cursor: help;
+  transition: border-color var(--dur-fast) var(--ease-sheet), color var(--dur-fast) var(--ease-sheet);
+}
+
+/* A 44px hit area around a 22px mark. */
+.info-tip::after {
+  content: '';
+  position: absolute;
+  inset: -11px;
+}
+
+.info-tip:hover,
+.info-tip[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.info-tip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.info-tip-pop {
+  position: fixed;
+  z-index: var(--z-popover);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-xl);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.6;
+  text-align: start;
+  overflow-wrap: anywhere;
+  animation: info-tip-in 160ms var(--ease-sheet) both;
+}
+
+.info-tip-pop::after {
+  content: '';
+  position: absolute;
+  left: var(--arrow-x, 12px);
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.info-tip-pop.is-below::after {
+  top: -5px;
+  bottom: auto;
+  transform: rotate(225deg);
+}
+
+@keyframes info-tip-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal,
+  .info-tip-pop {
+    animation: none;
+  }
+
+  .modal-backdrop {
+    transition: none;
+  }
 }
