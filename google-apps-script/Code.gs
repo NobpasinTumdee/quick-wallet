@@ -450,6 +450,45 @@ var SHEETS = {
       { key: 'transactionId', header: 'Transaction ID', type: 'string' }
     ]
   },
+  /**
+   * Long-form notes — one page of text per topic.
+   *
+   * -----------------------------------------------------------------------
+   * WHY THIS IS NOT THE INBOX
+   * -----------------------------------------------------------------------
+   * An Inbox item is a line waiting for a decision; it is resolved and gone.
+   * A note is something kept and re-read: a title, a body that can run to
+   * pages, and optional pointers at the records it is about. Nothing here
+   * moves money or is ever "resolved".
+   *
+   * -----------------------------------------------------------------------
+   * WHY EVERY COLUMN IS 'text'
+   * -----------------------------------------------------------------------
+   * Free text is exactly what Sheets likes to reinterpret: a body starting
+   * with "=1+1" becomes a formula, "+66 81…" a number, "2026-08-01" a date.
+   * `text` writes with the leading apostrophe that tells Sheets "store this
+   * literally", so what the user typed is what comes back — see `serialize_`
+   * and `testNotesRoundTrip`. The timestamps are `text` too: `notes.update`
+   * compares `updatedAt` for equality to catch stale saves, and a value that
+   * Sheets turned into a Date and back would never compare equal again.
+   */
+  Notes: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      /* Same reason as every other table: `userRows_` scopes on it. */
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'title', header: 'Title', type: 'text' },
+      /* Up to NOTE_BODY_MAX characters — under the 50,000 a cell can hold. */
+      { key: 'body', header: 'Body', type: 'text' },
+      /* JSON array of { type, id }. Read through `parseNoteRefs_`, which drops
+         anything malformed rather than failing the whole note. */
+      { key: 'refs', header: 'Refs (JSON)', type: 'text' },
+      { key: 'pinned', header: 'Pinned', type: 'boolean' },
+      { key: 'createdAt', header: 'Created At', type: 'text' },
+      { key: 'updatedAt', header: 'Updated At', type: 'text' }
+    ]
+  },
   Settings: {
     key: 'userId',
     columns: [
@@ -690,6 +729,14 @@ function dispatch_(action, method, query, body, token) {
     'inbox.resolve': function () { return inboxResolve_(requireAuth_(token), query, body); },
     'inbox.reopen': function () { return inboxReopen_(requireAuth_(token), query); },
     'inbox.delete': function () { return inboxDelete_(requireAuth_(token), query); },
+
+    /* Long-form notes. Text only; nothing here moves money. `notes.update`
+       refuses a save based on an older version — see the note there. */
+    'notes.list': function () { return notesList_(requireAuth_(token)); },
+    'notes.get': function () { return notesGet_(requireAuth_(token), query); },
+    'notes.create': function () { return notesCreate_(requireAuth_(token), body); },
+    'notes.update': function () { return notesUpdate_(requireAuth_(token), query, body); },
+    'notes.delete': function () { return notesDelete_(requireAuth_(token), query); },
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
@@ -1030,6 +1077,14 @@ function serialize_(value, type) {
     case 'datekey':
     case 'period':
       return value ? "'" + String(value) : '';
+    /* Free text stored exactly as typed. Sheets strips exactly one leading
+       apostrophe on write and keeps the rest as a literal string, so "=1+1",
+       "+66", "007", "2026-08-01" — and text that itself starts with an
+       apostrophe — all read back unchanged. Always prefixed, never "only when
+       it looks risky", so there is one rule and no guessing about what Sheets
+       will parse. Only the Notes table uses this type. */
+    case 'text':
+      return value === '' ? '' : "'" + String(value);
     default:
       return String(value);
   }
@@ -3732,6 +3787,224 @@ function inboxDelete_(user, query) {
 }
 
 /* =========================================================================
+ * Notes
+ * -------------------------------------------------------------------------
+ * Long text, one page per topic, optionally pointing at records elsewhere in
+ * the app. Text only — nothing here moves money, so nothing cascades.
+ *
+ * ---------------------------------------------------------------------------
+ * STALE SAVES
+ * ---------------------------------------------------------------------------
+ * The editor autosaves, so a note open on a phone and a laptop would quietly
+ * overwrite one with the other. Every update therefore carries the
+ * `updatedAt` it was based on (`baseUpdatedAt`); if the row has moved on since,
+ * the save is refused with 409 CONFLICT and the client asks the user to reload
+ * or overwrite. Overwrite resends with `force: true`.
+ *
+ * ---------------------------------------------------------------------------
+ * A WORKBOOK WITHOUT THE SHEET
+ * ---------------------------------------------------------------------------
+ * Reads answer an empty list rather than SHEET_MISSING, so an app deployed
+ * before anyone ran `createMissingSheets()` still loads. The first write
+ * creates the sheet with exactly the headers `createMissingSheets()` would.
+ * ========================================================================= */
+
+var NOTE_TITLE_MAX = 200;
+/* A Sheets cell holds 50,000 characters. The margin covers the apostrophe
+   `serialize_` adds and leaves room should the column ever carry more. */
+var NOTE_BODY_MAX = 40000;
+var NOTE_REFS_MAX = 20;
+var NOTE_REF_TYPES = ['transaction', 'wallet', 'goal', 'subscription', 'split'];
+
+function notesSheetExists_() {
+  return Boolean(spreadsheet_().getSheetByName('Notes'));
+}
+
+/**
+ * Accepts the array the client sends or the JSON string the sheet holds, and
+ * answers a clean, de-duplicated list. Anything malformed is dropped rather
+ * than thrown: a broken pointer must not make the note itself unreadable.
+ */
+function parseNoteRefs_(value) {
+  var list = value;
+  if (typeof list === 'string') {
+    try {
+      list = list ? JSON.parse(list) : [];
+    } catch (err) {
+      list = [];
+    }
+  }
+  if (Object.prototype.toString.call(list) !== '[object Array]') return [];
+
+  var seen = {};
+  var out = [];
+  list.forEach(function (ref) {
+    if (!ref || typeof ref !== 'object') return;
+    var type = String(ref.type || '').trim();
+    var id = String(ref.id || '').trim();
+    if (NOTE_REF_TYPES.indexOf(type) === -1 || !id || id.length > 80) return;
+    if (seen[type + ':' + id]) return;
+    seen[type + ':' + id] = true;
+    out.push({ type: type, id: id });
+  });
+  return out;
+}
+
+/**
+ * Validates what the client may set. Title and body are deliberately *not*
+ * trimmed: the editor shows exactly what was typed, and a save that answered
+ * with a different string would fight the cursor.
+ */
+function parseNote_(body) {
+  var title = body.title === undefined || body.title === null ? '' : String(body.title);
+  /* One line: a pasted newline in the title is a space, not a second line. */
+  title = title.replace(/[\r\n]+/g, ' ');
+  if (title.length > NOTE_TITLE_MAX) {
+    throw bad_('"title" must be ' + NOTE_TITLE_MAX + ' characters or fewer');
+  }
+
+  var text = body.body === undefined || body.body === null ? '' : String(body.body);
+  if (text.length > NOTE_BODY_MAX) {
+    throw bad_('"body" must be ' + NOTE_BODY_MAX + ' characters or fewer');
+  }
+
+  var refs = parseNoteRefs_(body.refs);
+  if (refs.length > NOTE_REFS_MAX) {
+    throw bad_('A note can reference at most ' + NOTE_REFS_MAX + ' records');
+  }
+
+  return { title: title, body: text, refs: refs, pinned: bool_(body.pinned, false) };
+}
+
+/** The row as the client sees it: refs as an array, no sheet bookkeeping. */
+function decorateNote_(row) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    title: row.title || '',
+    body: row.body || '',
+    refs: parseNoteRefs_(row.refs),
+    pinned: Boolean(row.pinned),
+    createdAt: row.createdAt || '',
+    updatedAt: row.updatedAt || row.createdAt || ''
+  };
+}
+
+/**
+ * Strictly later than `previous`, so two saves inside one millisecond still
+ * produce two different versions and the stale check can tell them apart.
+ */
+function noteStamp_(previous) {
+  var now = new Date();
+  var prev = previous ? new Date(previous) : null;
+  if (prev && !isNaN(prev.getTime()) && now.getTime() <= prev.getTime()) {
+    now = new Date(prev.getTime() + 1);
+  }
+  return now.toISOString();
+}
+
+function ownedNote_(user, query) {
+  var id = str_(query.id, 'id');
+  if (!notesSheetExists_()) throw apiError_('Note not found', 404, 'NOT_FOUND');
+  var existing = findById_('Notes', id);
+  if (!existing || existing.userId !== user.id) {
+    throw apiError_('Note not found', 404, 'NOT_FOUND');
+  }
+  return existing;
+}
+
+function notesList_(user) {
+  if (!notesSheetExists_()) return [];
+  return userRows_('Notes', user.id)
+    .map(decorateNote_)
+    .sort(function (a, b) {
+      /* Pinned first, then most recently edited — the order the list shows. */
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return String(b.updatedAt).localeCompare(String(a.updatedAt));
+    });
+}
+
+function notesGet_(user, query) {
+  return decorateNote_(ownedNote_(user, query));
+}
+
+function notesCreate_(user, body) {
+  var parsed = parseNote_(body || {});
+  /* An empty page is not a note. The client only creates once something has
+     been typed; this stops a script or a double tap filling the sheet with
+     blank rows. */
+  if (!parsed.title.trim() && !parsed.body.trim()) {
+    throw bad_('A note needs a title or some text');
+  }
+
+  ensureSheet_('Notes');
+  var stamp = new Date().toISOString();
+  var note = {
+    id: uuid_(), userId: user.id,
+    title: parsed.title, body: parsed.body,
+    refs: JSON.stringify(parsed.refs),
+    pinned: parsed.pinned,
+    createdAt: stamp,
+    updatedAt: stamp
+  };
+
+  insertRow_('Notes', note);
+  return decorateNote_(note);
+}
+
+function notesUpdate_(user, query, body) {
+  body = body || {};
+  var existing = ownedNote_(user, query);
+  var current = decorateNote_(existing);
+
+  /* The stale check. Skipped only when the client explicitly chose to
+     overwrite, or sent no base at all (a script, or a pin toggle from the
+     list, which does not touch the text). */
+  var base = body.baseUpdatedAt === undefined || body.baseUpdatedAt === null
+    ? ''
+    : String(body.baseUpdatedAt);
+  if (base && !bool_(body.force, false) && base !== current.updatedAt) {
+    throw apiError_(
+      'This note was changed somewhere else since you opened it',
+      409,
+      'CONFLICT'
+    );
+  }
+
+  var merged = {
+    title: Object.prototype.hasOwnProperty.call(body, 'title') ? body.title : current.title,
+    body: Object.prototype.hasOwnProperty.call(body, 'body') ? body.body : current.body,
+    refs: Object.prototype.hasOwnProperty.call(body, 'refs') ? body.refs : current.refs,
+    pinned: Object.prototype.hasOwnProperty.call(body, 'pinned') ? body.pinned : current.pinned
+  };
+  var parsed = parseNote_(merged);
+
+  /* Pinning is not editing: it keeps the note's place in "last edited" and,
+     more importantly, its version, so pinning from the list never makes an
+     editor open elsewhere hit a conflict on its next autosave. */
+  var edited = ['title', 'body', 'refs'].some(function (key) {
+    return Object.prototype.hasOwnProperty.call(body, key);
+  });
+
+  var updated = updateRow_('Notes', existing.id, {
+    title: parsed.title,
+    body: parsed.body,
+    refs: JSON.stringify(parsed.refs),
+    pinned: parsed.pinned,
+    updatedAt: edited ? noteStamp_(current.updatedAt) : current.updatedAt
+  });
+  delete updated._row;
+  return decorateNote_(updated);
+}
+
+function notesDelete_(user, query) {
+  var existing = ownedNote_(user, query);
+  /* Nothing to cascade: a note only points at records, it owns none. */
+  deleteRow_('Notes', existing.id);
+  return { ok: true, id: existing.id };
+}
+
+/* =========================================================================
  * Subscriptions & recurring bills
  *
  * Just-in-time rather than scheduled: nothing runs on a timer. A subscription
@@ -5420,6 +5693,69 @@ function setup() {
 }
 
 /**
+ * Adds one sheet from SHEETS with its header row. The single definition of
+ * "a new sheet", shared by `createMissingSheets()` and `ensureSheet_()`, so a
+ * sheet created on demand is identical to one created by hand.
+ */
+function insertSheetWithHeaders_(ss, name) {
+  var headers = schema_(name).columns.map(function (col) { return col.header; });
+  var sheet = ss.insertSheet(name);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.setFrozenRows(1);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  return sheet;
+}
+
+/**
+ * Creates the sheet if the workbook does not have it yet. Called from inside
+ * a write, which already holds the script lock, so two first writes cannot
+ * both insert it.
+ */
+function ensureSheet_(name) {
+  var ss = spreadsheet_();
+  if (ss.getSheetByName(name)) return;
+  insertSheetWithHeaders_(ss, name);
+  invalidate_(name);
+}
+
+/**
+ * Proves the Notes text columns round-trip. Run from the Apps Script editor,
+ * then View → Logs. Writes awkward strings through the same `serialize_` the
+ * Notes table uses into a scratch sheet, reads them back with `getValues()`
+ * (what `readTable_` uses), compares, and deletes the scratch sheet.
+ */
+function testNotesRoundTrip() {
+  var samples = [
+    '=1+1', '+66 81 234 5678', '-5', '@mention', "'quoted", "''two", '007', '1e5',
+    '2026-08-01', '1/2', '12:30', 'TRUE', '50%', '  padded  ', 'line one\nline two',
+    'ภาษาไทย ทดสอบ', '[{"type":"goal","id":"abc"}]', '2026-10-25T09:15:00.123Z'
+  ];
+  var ss = spreadsheet_();
+  var name = 'NotesRoundTripTest';
+  var old = ss.getSheetByName(name);
+  if (old) ss.deleteSheet(old);
+  var sheet = ss.insertSheet(name);
+  var failures = [];
+  try {
+    sheet.getRange(1, 1, samples.length, 1).setValues(
+      samples.map(function (s) { return [serialize_(s, 'text')]; })
+    );
+    SpreadsheetApp.flush();
+    var back = sheet.getRange(1, 1, samples.length, 1).getValues();
+    samples.forEach(function (s, i) {
+      var got = coerce_(back[i][0], 'text');
+      if (got !== s) failures.push(JSON.stringify(s) + ' came back as ' + JSON.stringify(got));
+    });
+  } finally {
+    ss.deleteSheet(sheet);
+  }
+  Logger.log(failures.length
+    ? 'ROUND TRIP FAILURES:\n - ' + failures.join('\n - ')
+    : 'All ' + samples.length + ' samples round-tripped exactly.');
+  return failures;
+}
+
+/**
  * Creates any sheet in SHEETS that the workbook does not have yet, with the
  * exact header row readTable_() expects, and adds any column missing from a
  * sheet that already exists.
@@ -5438,10 +5774,7 @@ function createMissingSheets() {
     var sheet = ss.getSheetByName(name);
 
     if (!sheet) {
-      sheet = ss.insertSheet(name);
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.setFrozenRows(1);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      insertSheetWithHeaders_(ss, name);
       created.push(name);
       return;
     }

@@ -79,6 +79,15 @@ const RESOURCES: Record<string, ResourceConfig> = {
     // a timeline reads forwards while a ledger reads backwards.
     sort: (a, b) => String(a.nextDueDate ?? '').localeCompare(String(b.nextDueDate ?? '')),
   },
+  notes: {
+    /* Text only: nothing else is derived from a note, so a write refreshes the
+       notes list and nothing more — in particular not the dashboard. */
+    invalidates: ['/api/notes'],
+    // Pinned first, then most recently edited, matching the server.
+    sort: (a, b) =>
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+      String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')),
+  },
   'bill-splits': {
     /* A bill writes an expense when it is created and an income row every time
        someone pays you back, so the ledger, balances and budget progress are

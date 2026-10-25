@@ -461,6 +461,35 @@ export interface InboxItem {
   convertible: boolean;
 }
 
+/** What a note may point at: Activity, Wallets, Goals, Recurring, Shared. */
+export type NoteRefType = 'transaction' | 'wallet' | 'goal' | 'subscription' | 'split';
+
+export interface NoteRef {
+  type: NoteRefType;
+  id: string;
+}
+
+/**
+ * A long-form note. Unrelated to the Inbox's `note` type, which is a one-line
+ * reminder waiting for a decision — see the `Notes` schema note in Code.gs.
+ */
+export interface Note {
+  id: string;
+  userId: string;
+  title: string;
+  /** Plain text with line breaks. Up to `NOTE_BODY_MAX` characters. */
+  body: string;
+  /** Empty by default; the user adds references deliberately. */
+  refs: NoteRef[];
+  pinned: boolean;
+  createdAt: string;
+  /**
+   * The note's version. Sent back as `baseUpdatedAt` on every save so the
+   * server can refuse one based on an older copy. Pinning does not change it.
+   */
+  updatedAt: string;
+}
+
 /** What `goals.purchase` answers with: both halves of the one write. */
 export interface GoalPurchaseResult {
   ok: boolean;

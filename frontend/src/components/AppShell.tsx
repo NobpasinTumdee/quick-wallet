@@ -9,6 +9,7 @@ import {
   Landmark,
   LayoutGrid,
   LogOut,
+  NotebookPen,
   ChartNoAxesCombined,
   Receipt,
   Repeat2,
@@ -39,6 +40,7 @@ import { AnalyticsPage } from '../pages/AnalyticsPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { DebtManagerPage } from '../pages/DebtManagerPage';
 import { GoalsPage } from '../pages/GoalsPage';
+import { NotesPage } from '../pages/NotesPage';
 import { MoreMenuPage } from '../pages/MoreMenuPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { InvestmentsPage } from '../pages/InvestmentsPage';
@@ -107,6 +109,7 @@ const NAV_MAIN: NavItem[] = [
   { route: 'transactions', labelKey: NAV_LABEL_KEYS.transactions, icon: Receipt },
   { route: 'wallets', labelKey: NAV_LABEL_KEYS.wallets, icon: Wallet },
   { route: 'goals', labelKey: NAV_LABEL_KEYS.goals, icon: PiggyBank },
+  { route: 'notes', labelKey: NAV_LABEL_KEYS.notes, icon: NotebookPen },
   { route: 'splits', labelKey: NAV_LABEL_KEYS.splits, icon: HandCoins },
   { route: 'investments', labelKey: NAV_LABEL_KEYS.investments, icon: TrendingUp },
   { route: 'analytics', labelKey: NAV_LABEL_KEYS.analytics, icon: ChartNoAxesCombined },
@@ -274,6 +277,9 @@ function warmRoute(route: Route, period: string): void {
       prefetch('/api/subscriptions');
       prefetch('/api/wallets');
       break;
+    case 'notes':
+      prefetch('/api/notes');
+      break;
     default:
       break;
   }
@@ -308,6 +314,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   /* The topbar's Refresh re-fetches whichever raw table is open — the key
      prefix matches every `?source=` variant in the cache. */
   'deep-analytics': ['/api/analytics/raw-data'],
+  notes: ['/api/notes'],
   notFound: [],
 };
 
@@ -606,6 +613,7 @@ export function AppShell() {
           {route === 'subscriptions' && <SubscriptionsPage onNavigate={go} />}
           {route === 'analytics' && <AnalyticsPage period={period} onNavigate={go} />}
           {route === 'goals' && <GoalsPage />}
+          {route === 'notes' && <NotesPage />}
           {route === 'debt' && <DebtManagerPage />}
           {route === 'settings' && <SettingsPage />}
           {route === 'more' && (

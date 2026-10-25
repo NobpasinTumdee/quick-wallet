@@ -114,6 +114,9 @@ export function QuickTransactionWidget({
 
   const holdTimer = useRef<number | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
+  /** Set on a pointerup that was a plain tap; the click after it opens the
+   *  full form. A click after a hold-and-drag finds it false and does nothing. */
+  const tapped = useRef(false);
   /** Mirrors `phase` for the pointer handlers, which run outside React's
    *  render and would otherwise read a stale closure. */
   const phaseRef = useRef<Phase>('idle');
@@ -224,6 +227,7 @@ export function QuickTransactionWidget({
   }
 
   function onPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    tapped.current = false;
     // A tap still has to work when there is nothing to pick.
     if (!gestureUsable) return;
     if (phaseRef.current === 'amount') return;
@@ -265,10 +269,13 @@ export function QuickTransactionWidget({
 
     const current = phaseRef.current;
 
-    // Released before the hold fired — a plain tap. Full form.
+    /* Released before the hold fired — a plain tap. The full form opens from
+       the click that follows, not here: on touch the browser still has a
+       compatibility mousedown and click to deliver for this tap, and a sheet
+       mounted now would receive them. */
     if (current === 'pressing' || !gestureUsable) {
       reset();
-      onOpenFullForm();
+      tapped.current = true;
       return;
     }
 
@@ -486,6 +493,11 @@ export function QuickTransactionWidget({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={reset}
+          onClick={() => {
+            if (!tapped.current) return;
+            tapped.current = false;
+            onOpenFullForm();
+          }}
           // The browser's own long-press behaviours (text selection, the
           // context menu, scroll-start) all fight this gesture.
           onContextMenu={(event) => event.preventDefault()}

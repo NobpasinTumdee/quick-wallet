@@ -28,6 +28,10 @@ export const ROUTES = [
      and reached with the back button. Hyphenated because the hash is the URL a
      person sees; every consumer treats it as an opaque id. */
   'deep-analytics',
+  /* Long-form notes. Last on purpose: `resolveMobileNav` backfills a short tab
+     bar from this list in order, and a new screen must not change anyone's
+     phone layout by appearing early in it. */
+  'notes',
 ] as const;
 
 /**

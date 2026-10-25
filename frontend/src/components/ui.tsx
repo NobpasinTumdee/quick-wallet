@@ -470,6 +470,7 @@ export function Modal({
   const { t } = useTranslation();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const pressedBackdrop = useRef(false);
   const handle = useOverlay(open, onClose);
 
   /* Focus in on open, back to whatever opened it on close. */
@@ -523,7 +524,20 @@ export function Modal({
       <div
         className={cx('modal-backdrop', depth > 0 && 'is-stacked')}
         style={{ zIndex: `calc(var(--z-sheet) + ${depth})` } as CSSProperties}
-        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+        /* Closes only on a press that both started and ended on the backdrop.
+           A tap that *opened* the sheet (on pointerup) is followed on touch by
+           the browser's compatibility mousedown/click at the same spot — which
+           now lands on this backdrop and used to close the sheet at once. That
+           tap's pointerdown happened before the backdrop existed, so it never
+           counts. It also stops a text selection dragged out of the sheet from
+           closing it. */
+        onPointerDown={(e) => {
+          pressedBackdrop.current = e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          if (pressedBackdrop.current && e.target === e.currentTarget) onClose();
+          pressedBackdrop.current = false;
+        }}
         onKeyDown={onKeyDown}
       >
         <div

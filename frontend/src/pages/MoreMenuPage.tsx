@@ -5,6 +5,7 @@ import {
   HandCoins,
   Landmark,
   LayoutDashboard,
+  NotebookPen,
   PiggyBank,
   Receipt,
   Repeat2,
@@ -127,6 +128,7 @@ const SECTIONS: MenuSection[] = [
     hintKey: 'more.sectionPlanningHint',
     entries: [
       { route: 'goals', labelKey: 'nav.goals', descriptionKey: 'more.goals', icon: PiggyBank },
+      { route: 'notes', labelKey: 'nav.notes', descriptionKey: 'more.notes', icon: NotebookPen },
       { route: 'budgets', labelKey: 'nav.budgets', descriptionKey: 'more.budgets', icon: Target },
       {
         route: 'subscriptions',
