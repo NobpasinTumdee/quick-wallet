@@ -279,6 +279,8 @@ function warmRoute(route: Route, period: string): void {
       break;
     case 'notes':
       prefetch('/api/notes');
+      /* The Markdown reader is its own chunk; fetch it before a note is opened. */
+      void import('./notes/MarkdownView').catch(() => undefined);
       break;
     default:
       break;

@@ -664,11 +664,348 @@
   line-height: 1.6;
 }
 
+/* ---- Formatting bar ----
+   Sticky under the toolbar on a desktop; on a phone with the keyboard up it
+   is docked just above the keyboard (`.is-docked`, bottom set from the
+   visual viewport). The slot keeps its height in the page either way. */
+
+.note-format-slot {
+  position: sticky;
+  top: calc(var(--header-height) + var(--space-1) + var(--note-toolbar-h, 50px) + var(--space-2));
+  z-index: var(--z-sticky);
+  min-width: 0;
+  min-height: 50px;
+}
+
+.note-format {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-xs);
+}
+
+.note-format::-webkit-scrollbar {
+  display: none;
+}
+
+.note-format.is-docked {
+  position: fixed;
+  right: 0;
+  bottom: var(--note-dock-bottom, 0px);
+  left: 0;
+  z-index: var(--z-dock);
+  padding-right: max(var(--space-1), env(safe-area-inset-right));
+  padding-left: max(var(--space-1), env(safe-area-inset-left));
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.note-format-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  /* No double-tap zoom delay on the buttons people tap fastest. */
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-sheet), color var(--dur-fast) var(--ease-sheet);
+}
+
+.note-format-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.note-format-btn:active {
+  background: var(--surface-active);
+}
+
+.note-format-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.note-format-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.note-format-h {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+
+.note-format-sep {
+  width: 1px;
+  height: 24px;
+  flex: none;
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
+
+/* ---- Reading view ----
+   Comfortable long-form type: 1.75 like the editor, so switching modes
+   does not reflow the text much; spacing between blocks rather than inside
+   them; everything wraps, nothing widens the page. */
+
+.note-read {
+  min-width: 0;
+  min-height: 40vh;
+  min-height: 40dvh;
+  padding-bottom: var(--space-6);
+}
+
+.md {
+  min-width: 0;
+  color: var(--text);
+  font-size: max(16px, var(--text-md));
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre,
+.md .md-table-scroll,
+.md hr {
+  margin: 0 0 0.85em;
+}
+
+.md .md-gap {
+  height: 1.75em;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: 1.2em 0 0.45em;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-display);
+  line-height: 1.4;
+}
+
+.md h1 {
+  font-size: 1.6em;
+}
+
+.md h2 {
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.3em;
+}
+
+.md h3 {
+  font-size: 1.12em;
+}
+
+.md h4,
+.md h5,
+.md h6 {
+  font-size: 1em;
+  font-weight: var(--weight-semi);
+}
+
+.md strong {
+  font-weight: var(--weight-bold);
+}
+
+.md del {
+  color: var(--text-muted);
+}
+
+.md ul,
+.md ol {
+  padding-left: 1.6em;
+}
+
+.md li + li,
+.md li > ul,
+.md li > ol {
+  margin-top: 0.3em;
+}
+
+.md li > ul,
+.md li > ol {
+  margin-bottom: 0;
+}
+
+.md li::marker {
+  color: var(--text-muted);
+}
+
+/* Checklists: the box replaces the bullet. */
+.md li.task-list-item {
+  list-style: none;
+}
+
+.md ul.contains-task-list {
+  padding-left: 0.4em;
+}
+
+.md li.task-list-item ul.contains-task-list {
+  padding-left: 1.6em;
+}
+
+.md-task-box {
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0 0.5em 0 0;
+  vertical-align: -0.15em;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.md-task-box:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.md blockquote {
+  padding: 0.15em 0 0.15em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--text-secondary);
+}
+
+.md blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.md code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.md pre {
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  line-height: 1.6;
+}
+
+.md pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.86em;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.md hr {
+  height: 0;
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+}
+
+.md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
+}
+
+.md-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.md-link:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.md-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.md table {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+  line-height: 1.6;
+}
+
+.md th,
+.md td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.md th {
+  background: var(--surface-2);
+  font-weight: var(--weight-semi);
+}
+
+.md tr:last-child td {
+  border-bottom: 0;
+}
+
+.md th + th,
+.md td + td {
+  border-left: 1px solid var(--border);
+}
+
+.md-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 /* ---- Phones ---- */
 
 @media (max-width: 767px) {
   .note-title {
     font-size: var(--text-xl);
+  }
+
+  .md h1 {
+    font-size: 1.45em;
   }
 
   /* Back keeps its arrow; the words go, so status and actions keep room. */

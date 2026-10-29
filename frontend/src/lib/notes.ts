@@ -49,11 +49,15 @@ function normalise(text: string): string {
   return text.normalize('NFC').toLocaleLowerCase();
 }
 
-/** Every word must appear somewhere in the title or body. */
+/**
+ * Every word must appear somewhere in the title or body. The body is searched
+ * both as written and with its Markdown taken out, so "very important" finds
+ * "very **important**" and a link's address still finds a labelled link.
+ */
 export function matchesNoteSearch(note: Note, search: string): boolean {
   const words = normalise(search).split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = normalise(`${note.title}\n${note.body}`);
+  const haystack = normalise(`${note.title}\n${note.body}\n${stripMarkdown(note.body)}`);
   return words.every((word) => haystack.includes(word));
 }
 
@@ -63,10 +67,44 @@ export function compareNotes(a: Note, b: Note): number {
   return String(b.updatedAt).localeCompare(String(a.updatedAt));
 }
 
-/** The first non-empty line of the body, for a one-line preview. */
+/** The first line of the body with any text in it, Markdown removed, for a one-line preview. */
 export function notePreview(body: string): string {
-  const line = body.split('\n').find((part) => part.trim()) ?? '';
+  const line = stripMarkdown(body).split('\n').find((part) => part.trim()) ?? '';
   return line.trim().slice(0, 240);
+}
+
+/**
+ * The body as plain words: no `#`, `**`, `[ ]`, `>` or link brackets. A few
+ * regular expressions rather than the real parser, which is a lazy chunk the
+ * list should not have to load — close enough for a preview line and search,
+ * and it never needs to be exact because it never writes anything back.
+ */
+export function stripMarkdown(body: string): string {
+  return body
+    .split('\n')
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) return '';
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) return '';
+      if (/^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-')) return '';
+      return line
+        .replace(/^\s*(>\s?)+/, '')
+        .replace(/^\s*#{1,6}\s+/, '')
+        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s+/, '')
+        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+/, '')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/<((?:https?:|mailto:)[^>\s]+)>/gi, '$1')
+        /* No lookbehind: older iOS Safari cannot parse it, and a syntax error
+           here would stop the whole bundle loading. */
+        .replace(/(\*\*|__|~~)(\S(?:.*?\S)?)\1/g, '$2')
+        .replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?!\w)/g, '$1$2')
+        .replace(/(^|[^\w_])_(\S(?:[^_\n]*?\S)?)_(?!\w)/g, '$1$2')
+        .replace(/`+([^`]*)`+/g, '$1')
+        .replace(/^\s*\|(.*)\|\s*$/, '$1')
+        .replace(/\s*\|\s*/g, ' · ')
+        .replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, '$1');
+    })
+    .join('\n');
 }
 
 /** References grouped by kind, for the small chips on a list row. */

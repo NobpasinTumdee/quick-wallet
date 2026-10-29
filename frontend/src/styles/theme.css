@@ -154,6 +154,7 @@
   --z-drawer: 55; /* side drawers over the page (Goals filters, medium widths) */
   --z-fab-backdrop: 70; /* the quick-add button's own scrim */
   --z-fab: 80; /* the quick-add button and its menu */
+  --z-dock: 90; /* the note formatting bar, docked above the phone keyboard */
   --z-sheet: 100; /* dialogs and bottom sheets, stacked by +1 per level */
   --z-popover: 120; /* tooltips and menus, above whatever opened them */
   --z-toast: 130;
