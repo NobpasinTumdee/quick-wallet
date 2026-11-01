@@ -615,3 +615,22 @@ export function pastedUrl(text: string): string | null {
   if (!/^(https?:\/\/|mailto:)\S+$/i.test(url)) return null;
   return normaliseUrl(url);
 }
+
+/* ---- Blocks ---- */
+
+/**
+ * `text` on a line of its own with a blank line either side — added only
+ * where there is not one already — and the caret on the line after it.
+ */
+export function insertBlock(state: TextState, text: string): TextEdit {
+  const { value, start, end } = state;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = !before ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const trail = !after ? '\n' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  const inserted = lead + text + trail;
+  let caret = start + inserted.length;
+  if (!trail) caret += 2;
+  else if (trail === '\n' && after) caret += 1;
+  return { from: start, to: end, text: inserted, selStart: caret, selEnd: caret };
+}

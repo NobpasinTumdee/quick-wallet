@@ -25,11 +25,12 @@ export function NoteList({
 }) {
   const { t } = useTranslation();
   const { settings } = useSettings();
+  const embedLabels = { youtube: 'YouTube', picture: t('notes.embedPreviewPicture') };
 
   return (
     <ul className="note-list" role="list">
       {notes.map((note) => {
-        const preview = notePreview(note.body);
+        const preview = notePreview(note.body, embedLabels);
         const chips = countRefsByType(note.refs);
         return (
           <li key={note.id} className={cx('note-row', note.pinned && 'is-pinned')}>

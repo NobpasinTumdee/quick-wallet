@@ -11,6 +11,7 @@ import {
   ListOrdered,
   LucideIcon,
   Minus,
+  SquarePlay,
   Strikethrough,
   TextQuote,
 } from 'lucide-react';
@@ -35,7 +36,8 @@ export type FormatAction =
   | 'outdent'
   | 'quote'
   | 'divider'
-  | 'link';
+  | 'link'
+  | 'embed';
 
 type Item = { action: FormatAction; icon: LucideIcon; labelKey: TranslationKey; shortcut?: string };
 
@@ -60,6 +62,7 @@ const GROUPS: Item[][] = [
     { action: 'quote', icon: TextQuote, labelKey: 'notes.fmtQuote' },
     { action: 'divider', icon: Minus, labelKey: 'notes.fmtDivider' },
     { action: 'link', icon: Link, labelKey: 'notes.fmtLink', shortcut: 'K' },
+    { action: 'embed', icon: SquarePlay, labelKey: 'notes.fmtEmbed' },
   ],
 ];
 

@@ -24,6 +24,7 @@ import {
   cycleHeading,
   headingLevelAt,
   indentLines,
+  insertBlock,
   insertDivider,
   insertLink,
   outdentLines,
@@ -49,6 +50,7 @@ import { Note, NoteRef, NoteRefType } from '../../types';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
 import { Button, Skeleton } from '../ui';
+import { EmbedDialog } from './EmbedDialog';
 import { LinkDialog } from './LinkDialog';
 import { FormatAction, MOD_IS_META, NoteFormatBar } from './NoteFormatBar';
 import { NoteRefChips } from './NoteRefChips';
@@ -98,6 +100,8 @@ export function NoteEditor({
   const [bodyFocused, setBodyFocused] = useState(false);
   const [headingLevel, setHeadingLevel] = useState(0);
   const [link, setLink] = useState<{ start: number; end: number; text: string } | null>(null);
+  /* Where the Embed dialog's result goes, kept while the dialog has focus. */
+  const [embedAt, setEmbedAt] = useState<{ start: number; end: number } | null>(null);
 
   /* Chips need the lists of whatever kinds this note points at — and only those. */
   const wanted = useMemo(() => new Set<NoteRefType>(draft.refs.map((ref) => ref.type)), [draft.refs]);
@@ -273,6 +277,9 @@ export function NoteEditor({
         setLink({ start: state.start, end: state.end, text: selected.includes('\n') ? '' : selected.trim() });
         return undefined;
       }
+      case 'embed':
+        setEmbedAt({ start: state.start, end: state.end });
+        return undefined;
     }
   }
 
@@ -284,6 +291,16 @@ export function NoteEditor({
     if (!at || !el) return;
     const end = Math.min(at.end, el.value.length);
     applyEdit(insertLink({ value: el.value, start: Math.min(at.start, end), end }, label, url));
+  }
+
+  /** The embed goes on a line of its own, where the reading view looks for it. */
+  function insertEmbedNow(markdown: string) {
+    const at = embedAt;
+    flushSync(() => setEmbedAt(null));
+    const el = bodyRef.current;
+    if (!at || !el) return;
+    const end = Math.min(at.end, el.value.length);
+    applyEdit(insertBlock({ value: el.value, start: Math.min(at.start, end), end }, markdown));
   }
 
   function onBodyKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -556,6 +573,8 @@ export function NoteEditor({
         onInsert={insertLinkNow}
         onClose={() => setLink(null)}
       />
+
+      <EmbedDialog open={embedAt !== null} onInsert={insertEmbedNow} onClose={() => setEmbedAt(null)} />
 
       <ConfirmDialog
         open={confirmDelete}

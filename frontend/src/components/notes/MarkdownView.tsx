@@ -1,13 +1,15 @@
 import type { Element as HastElement, Nodes as HastNodes, Root as HastRoot } from 'hast';
 import type { Paragraph, Root as MdRoot, RootContent } from 'mdast';
-import { createContext, MouseEvent, ReactNode, useContext, useMemo, useRef } from 'react';
+import { createContext, MouseEvent, useContext, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown, { Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import type { Processor } from 'unified';
 
+import { classifyEmbed, Embed, shortenUrl } from '../../lib/embeds';
 import { isAllowedUrl } from '../../lib/markdownEdit';
+import { NoteEmbed, Picture } from './NoteEmbeds';
 
 /**
  * A note's body, rendered. This module is its own chunk — the parser is most
@@ -17,6 +19,9 @@ import { isAllowedUrl } from '../../lib/markdownEdit';
  * innerHTML, the HTML syntax is switched off in the parser (so `<b>` is shown
  * as the four characters it is), and only http, https and mailto addresses
  * become links or anything else that leaves the page.
+ *
+ * A link alone on its line becomes an embed — a YouTube card, a picture or a
+ * website card (see `remarkEmbeds`); in a sentence it stays a link.
  */
 export default function MarkdownView({
   source,
@@ -47,13 +52,25 @@ export default function MarkdownView({
         );
       },
       img({ src, alt }) {
-        /* Notes are text: an image is offered as a link, never loaded. */
+        /* `urlTransform` has already blanked anything but http, https and
+           mailto; Picture loads https only and links the rest. */
         const url = typeof src === 'string' ? src : '';
         if (!url || !isAllowedUrl(url)) return <span className="md-link-off">{alt}</span>;
+        return <Picture url={url} alt={alt ?? ''} />;
+      },
+      div({ node, children, className, ...rest }) {
+        const embed = node ? embedOf(node) : null;
+        if (embed) {
+          return (
+            <div {...rest} className="md-embed">
+              <NoteEmbed embed={embed} alt={String(node?.properties.dataEmbedAlt ?? '')} />
+            </div>
+          );
+        }
         return (
-          <a href={url} className="md-link" target="_blank" rel="noopener noreferrer" title={url}>
-            {alt || shortenUrl(url)}
-          </a>
+          <div {...rest} className={className}>
+            {children}
+          </div>
         );
       },
       li({ node, children, className, ...rest }) {
@@ -83,9 +100,12 @@ export default function MarkdownView({
 
   function onClick(event: MouseEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
-    /* Links and checkboxes do their own thing; text being selected to copy
-       is not a tap. */
-    if (target.closest('a, input, button')) return;
+    /* A click in the picture lightbox bubbles here through React's portal
+       but is not on the note. */
+    if (!rootRef.current?.contains(target)) return;
+    /* Links, checkboxes and embeds do their own thing; text being selected
+       to copy is not a tap. */
+    if (target.closest('a, input, button, iframe, .md-embed, .md-picture')) return;
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && rootRef.current?.contains(selection.anchorNode)) return;
     let block = target.closest<HTMLElement>('[data-src]');
@@ -107,7 +127,7 @@ export default function MarkdownView({
     <div ref={rootRef} className="md" onClick={onClick}>
       {source.trim() ? (
         <Markdown
-          remarkPlugins={[remarkNoteSyntax, remarkGfm, remarkBreaks, remarkBlankLines]}
+          remarkPlugins={[remarkNoteSyntax, remarkGfm, remarkBreaks, remarkEmbeds, remarkBlankLines]}
           rehypePlugins={[rehypeSourceOffsets]}
           urlTransform={(url) => (isAllowedUrl(url) ? url : '')}
           components={components}
@@ -209,6 +229,105 @@ function rehypeSourceOffsets() {
   };
 }
 
+/* ---- Embeds ---- */
+
+type MdNode = { type: string; children?: MdNode[]; position?: Paragraph['position']; [key: string]: unknown };
+
+/**
+ * Lifts each link that is alone on its line — a bare URL, or a picture —
+ * out of its paragraph into a block of its own, marked for the `div`
+ * component to render as an embed. The text around it stays paragraphs,
+ * positions kept, so tapping them still puts the caret in the right place.
+ * A `[label](url)` link, or a URL with words beside it, is left alone.
+ */
+function remarkEmbeds() {
+  return (tree: MdRoot) => liftEmbeds(tree as unknown as MdNode);
+}
+
+function liftEmbeds(parent: MdNode) {
+  if (!parent.children) return;
+  const out: MdNode[] = [];
+  for (const child of parent.children) {
+    if (child.type === 'paragraph') out.push(...splitParagraph(child));
+    else {
+      liftEmbeds(child);
+      out.push(child);
+    }
+  }
+  parent.children = out;
+}
+
+function splitParagraph(paragraph: MdNode): MdNode[] {
+  const lines: MdNode[][] = [[]];
+  for (const node of paragraph.children ?? []) {
+    if (node.type === 'break') lines.push([]);
+    else lines[lines.length - 1].push(node);
+  }
+  const embedOfLine = (line: MdNode[]) => {
+    const solid = line.filter((node) => !(node.type === 'text' && !String(node.value).trim()));
+    if (solid.length !== 1) return null;
+    const node = solid[0];
+    const url = String(node.url ?? '');
+    if (node.type === 'image') {
+      /* A picture by Markdown is a picture whatever its extension. */
+      return /^https:/i.test(url) ? { url, alt: String(node.alt ?? ''), image: true, node } : null;
+    }
+    if (node.type !== 'link') return null;
+    const only = node.children?.length === 1 ? node.children[0] : null;
+    if (only?.type !== 'text' || !isBareUrl(String(only.value), url)) return null;
+    return classifyEmbed(url) ? { url, alt: '', image: false, node } : null;
+  };
+  if (!lines.some((line) => embedOfLine(line))) return [paragraph];
+
+  const out: MdNode[] = [];
+  let pending: MdNode[][] = [];
+  /* remark-breaks leaves the text it splits without positions, so each
+     piece is placed from what is known: it starts where the paragraph or the
+     embed before it ended, and ends where the next embed starts. */
+  type Point = NonNullable<Paragraph['position']>['start'];
+  let cursor: Point | undefined = paragraph.position?.start;
+  const flush = (until: Point | undefined) => {
+    const kept = pending.filter((line) => line.length);
+    if (kept.length) {
+      const children = kept.flatMap((line, index) => (index ? [{ type: 'break' } as MdNode, ...line] : line));
+      const lastLine = kept[kept.length - 1];
+      const start = kept[0][0].position?.start ?? cursor;
+      const end = lastLine[lastLine.length - 1].position?.end ?? until;
+      out.push({ type: 'paragraph', children, position: start && end ? { start, end } : undefined });
+    }
+    pending = [];
+  };
+  for (const line of lines) {
+    const found = embedOfLine(line);
+    if (!found) {
+      pending.push(line);
+      continue;
+    }
+    const at = found.node.position;
+    flush(at ? { line: at.start.line - 1, column: 1, offset: (at.start.offset ?? 1) - 1 } : undefined);
+    if (at?.end.offset !== undefined) cursor = { line: at.end.line + 1, column: 1, offset: at.end.offset + 1 };
+    out.push({
+      type: 'paragraph',
+      children: [],
+      position: found.node.position,
+      data: {
+        hName: 'div',
+        hProperties: { dataEmbedUrl: found.url, dataEmbedAlt: found.alt, dataEmbedImage: found.image ? 'true' : 'false' },
+      },
+    });
+  }
+  flush(paragraph.position?.end);
+  return out;
+}
+
+/** The embed a `div` stands for, from the marks `remarkEmbeds` left on it. */
+function embedOf(node: HastElement): Embed | null {
+  const url = node.properties.dataEmbedUrl;
+  if (typeof url !== 'string' || !url) return null;
+  if (node.properties.dataEmbedImage === 'true') return { kind: 'image', url };
+  return classifyEmbed(url);
+}
+
 /* ---- Tap to caret ---- */
 
 /**
@@ -264,31 +383,4 @@ function caretInSource(source: string, block: HTMLElement, blockStart: number, x
 /** The link text is just the address (an autolinked URL or email). */
 function isBareUrl(text: string, href: string): boolean {
   return text === href || `http://${text}` === href || `https://${text}` === href || `mailto:${text}` === href;
-}
-
-/**
- * A long address made readable: the domain and the start of the path,
- * "…" for the rest. The full address stays in the tooltip.
- */
-function shortenUrl(href: string): ReactNode {
-  try {
-    const url = new URL(href);
-    if (url.protocol === 'mailto:') return decodeURIComponent(url.pathname);
-    const host = url.hostname.replace(/^www\./, '');
-    const path = decodeSafe(`${url.pathname}${url.search}${url.hash}`).replace(/\/$/, '');
-    if (!path) return host;
-    if ((host + path).length <= 34) return host + path;
-    const first = path.split(/[/?#]/).filter(Boolean)[0] ?? '';
-    return `${host}/${first.length > 16 ? first.slice(0, 16) : first}…`;
-  } catch {
-    return href.length > 40 ? `${href.slice(0, 37)}…` : href;
-  }
-}
-
-function decodeSafe(text: string): string {
-  try {
-    return decodeURI(text);
-  } catch {
-    return text;
-  }
 }

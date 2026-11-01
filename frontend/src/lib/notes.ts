@@ -1,3 +1,4 @@
+import { classifyEmbed, loneUrl } from './embeds';
 import { Route } from './router';
 import { Note, NoteRef, NoteRefType } from '../types';
 
@@ -68,8 +69,8 @@ export function compareNotes(a: Note, b: Note): number {
 }
 
 /** The first line of the body with any text in it, Markdown removed, for a one-line preview. */
-export function notePreview(body: string): string {
-  const line = stripMarkdown(body).split('\n').find((part) => part.trim()) ?? '';
+export function notePreview(body: string, labels?: EmbedLabels): string {
+  const line = stripMarkdown(body, labels).split('\n').find((part) => part.trim()) ?? '';
   return line.trim().slice(0, 240);
 }
 
@@ -79,19 +80,29 @@ export function notePreview(body: string): string {
  * list should not have to load — close enough for a preview line and search,
  * and it never needs to be exact because it never writes anything back.
  */
-export function stripMarkdown(body: string): string {
+export function stripMarkdown(body: string, labels: EmbedLabels = EMBED_LABELS): string {
+  const picture = (alt: string) => (alt.trim() ? `[${labels.picture}: ${alt.trim()}]` : `[${labels.picture}]`);
   return body
     .split('\n')
     .map((line) => {
       if (/^\s*(```|~~~)/.test(line)) return '';
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) return '';
       if (/^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-')) return '';
-      return line
+      const rest = line
         .replace(/^\s*(>\s?)+/, '')
         .replace(/^\s*#{1,6}\s+/, '')
         .replace(/^\s*([-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s+/, '')
-        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+/, '')
-        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+/, '');
+      /* A link alone on its line is an embed in the reading view; say what
+         it is rather than show the address. */
+      const lone = loneUrl(rest);
+      const embed = lone ? classifyEmbed(lone) : null;
+      if (embed) {
+        if (embed.kind === 'youtube') return `[${labels.youtube}]`;
+        return embed.kind === 'image' ? picture('') : embed.domain;
+      }
+      return rest
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_match, alt: string) => picture(alt))
         .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
         .replace(/<((?:https?:|mailto:)[^>\s]+)>/gi, '$1')
         /* No lookbehind: older iOS Safari cannot parse it, and a syntax error
@@ -106,6 +117,10 @@ export function stripMarkdown(body: string): string {
     })
     .join('\n');
 }
+
+/** What embeds are called in a preview; the list passes the translations. */
+export type EmbedLabels = { youtube: string; picture: string };
+const EMBED_LABELS: EmbedLabels = { youtube: 'YouTube', picture: 'Picture' };
 
 /** References grouped by kind, for the small chips on a list row. */
 export function countRefsByType(refs: NoteRef[]): { type: NoteRefType; count: number }[] {
