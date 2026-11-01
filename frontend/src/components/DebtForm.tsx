@@ -125,7 +125,7 @@ export function DebtForm({
         </Field>
 
         <Field label={t('debt.formApr')} hint={t('debt.formAprHint')}>
-          <DecimalInput value={apr} onChange={setApr} />
+          <DecimalInput value={apr} onChange={setApr} kind="number" decimals={2} />
         </Field>
 
         <Field label={t('debt.formMinimum')}>

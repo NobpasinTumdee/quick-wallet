@@ -7,7 +7,8 @@ import { todayKey } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { Debt, WalletBalance } from '../types';
 import { Icon } from './Icon';
-import { Alert, Button, DecimalInput, Field, Input, Modal, Select, parseDecimal } from './ui';
+import { Alert, Button, DecimalInput, Field, Input, Modal, parseDecimal } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 /**
  * Recording a payment against a debt.
@@ -141,13 +142,7 @@ export function DebtPaymentModal({
             </div>
 
             <Field label={t('debt.payFrom')} hint={t('debt.payFromHint')}>
-              <Select value={walletId} onChange={(event) => setWalletId(event.target.value)}>
-                {wallets.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} · {money(w.balance)}
-                  </option>
-                ))}
-              </Select>
+              <WalletPicker wallets={wallets} value={walletId} onChange={setWalletId} />
             </Field>
 
             <Field label={t('debt.payDate')}>

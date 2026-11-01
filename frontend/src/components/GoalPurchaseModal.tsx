@@ -2,7 +2,8 @@ import { AlertTriangle, ShoppingBag, Wallet as WalletIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Alert, Button, Field, Input, Modal, Select } from './ui';
+import { Alert, Button, Field, Input, Modal } from './ui';
+import { WalletPicker } from './WalletPicker';
 import { todayKey } from '../lib/format';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { Goal, WalletBalance } from '../types';
@@ -101,13 +102,7 @@ export function GoalPurchaseModal({
         ) : (
           <>
             <Field label={t('goals.purchaseFrom')} hint={t('goals.purchaseFromHint')}>
-              <Select value={walletId} onChange={(event) => onWalletId(event.target.value)}>
-                {wallets.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} · {money(w.balance)}
-                  </option>
-                ))}
-              </Select>
+              <WalletPicker wallets={wallets} value={walletId} onChange={onWalletId} />
             </Field>
 
             <Field label={t('goals.purchaseDate')}>

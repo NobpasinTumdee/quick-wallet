@@ -4,12 +4,13 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { todayKey } from '../lib/format';
 import { checkOverdraft } from '../lib/overdraft';
-import { walletIconText } from '../lib/walletIcons';
+import { getRecentAmounts, recentKey, rememberAmount } from '../lib/numberPad';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
 import { OverdraftWarningModal } from './OverdraftWarningModal';
 import { ReceiptScanner } from './ReceiptScanner';
 import { ReceiptScan } from '../hooks/useReceiptScanner';
+import { WalletPicker } from './WalletPicker';
 import {
   Alert,
   Button,
@@ -153,6 +154,12 @@ export function TransactionForm({
   const sourceOptions = form.type === 'transfer' ? wallets : wallets.filter((w) => w.mode === 'expense');
   const targetOptions = wallets.filter((w) => w.id !== form.walletId);
 
+  /* Up to four amounts last used for this category (or this From → To pair)
+     on this device, offered as chips on the number pad. New entries only:
+     an edit is correcting a figure, not repeating one. */
+  const recentFor = transaction ? null : recentKey(form.type, form);
+  const recents = getRecentAmounts(recentFor);
+
   function setType(type: TransactionType) {
     setForm((prev) => {
       const stillValid =
@@ -203,6 +210,7 @@ export function TransactionForm({
   async function send(payload: TransactionPayload) {
     try {
       await onSubmit(payload);
+      rememberAmount(transaction ? null : recentKey(payload.type, payload), payload.amount);
       setPending(null);
     } catch {
       /* parent shows `error`; the sheet stays open with the entry intact */
@@ -251,27 +259,26 @@ export function TransactionForm({
         </div>
 
         <Field label={t('forms.fromWallet')}>
-          <Select value={form.walletId} onChange={(e) => patch('walletId', e.target.value)} required>
-            {sourceOptions.length === 0 && <option value="">{t('forms.noEligibleWallet')}</option>}
-            {sourceOptions.map((wallet) => (
-              <option key={wallet.id} value={wallet.id}>
-                {walletIconText(wallet.icon)} {wallet.name}
-              </option>
-            ))}
-          </Select>
+          <WalletPicker
+            wallets={sourceOptions}
+            value={form.walletId}
+            onChange={(id) =>
+              setForm((prev) => ({ ...prev, walletId: id, toWalletId: prev.toWalletId === id ? '' : prev.toWalletId }))
+            }
+            placeholder={t('forms.noEligibleWallet')}
+            required
+          />
         </Field>
 
         {form.type === 'transfer' ? (
           <Field label={t('forms.toWallet')}>
-            <Select value={form.toWalletId} onChange={(e) => patch('toWalletId', e.target.value)} required>
-              <option value="">{t('forms.selectPlaceholder')}</option>
-              {targetOptions.map((wallet) => (
-                <option key={wallet.id} value={wallet.id}>
-                  {walletIconText(wallet.icon)} {wallet.name}
-                  {wallet.mode === 'investment' ? ' (investment)' : ''}
-                </option>
-              ))}
-            </Select>
+            <WalletPicker
+              wallets={targetOptions}
+              value={form.toWalletId}
+              onChange={(id) => patch('toWalletId', id)}
+              placeholder={t('forms.selectPlaceholder')}
+              required
+            />
           </Field>
         ) : (
           <Field label={t('common.category')}>
@@ -296,6 +303,7 @@ export function TransactionForm({
             placeholder="0.00"
             required
             autoFocus
+            recents={recents}
           />
         </Field>
 

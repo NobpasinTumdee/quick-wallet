@@ -2265,6 +2265,62 @@ export const en = {
     effectiveRate: 'Effective rate',
     marginalRate: 'Marginal rate',
   },
+  /* ---- The in-app number pad ---- */
+  pad: {
+    amount: 'Amount',
+    close: 'Close number pad',
+    paste: 'Paste a number',
+    pasteFailed: 'Nothing to paste: the clipboard has no number in it.',
+    keyBackspace: 'Delete last digit. Hold to clear.',
+    keyPlus: 'Plus',
+    keyMinus: 'Minus',
+    keyPoint: 'Decimal point',
+    result: '= {{value}}',
+    emptyValue: 'Empty',
+    recent: 'Recent amounts',
+    useAmount: 'Use {{amount}}',
+    next: 'Next',
+    save: 'Save',
+    done: 'Done',
+    errorNegative: 'Comes to less than zero. Amounts here can’t be negative.',
+    errorTooLarge: 'That’s more than this field can hold.',
+    errorInvalid: 'That isn’t a number this field can use.',
+    settingLabel: 'Use in-app number pad',
+    settingHint: 'On a phone, amount fields open a large keypad with + and − instead of the keyboard. Saved on this device only.',
+  },
+
+  /* ---- The hold-and-drag quick add ---- */
+  quick: {
+    menuLabel: 'Quick add',
+    colType: 'Type',
+    colWallet: 'Wallet',
+    colCategory: 'Category',
+    colFrom: 'From',
+    colTo: 'To',
+    expense: 'Expense',
+    income: 'Income',
+    transfer: 'Transfer',
+    enterAmount: 'Enter amount',
+    cancel: 'Cancel',
+    saveExpense: 'Save expense',
+    saveIncome: 'Save income',
+    saveTransfer: 'Save transfer',
+    saving: 'Saving…',
+    addedExpense: 'Expense added',
+    addedIncome: 'Income added',
+    addedTransfer: 'Transfer added',
+    fab: 'Add transaction',
+    fabGesture: 'Add transaction. Tap for the full form, or hold and drag to pick type, wallet and category.',
+    walletBalance: '{{name}}, balance {{amount}}',
+  },
+
+  /* ---- The wallet picker ---- */
+  walletPicker: {
+    title: 'Choose a wallet',
+    placeholder: 'Select a wallet…',
+    investment: 'Investment',
+    credit: 'Credit card',
+  },
 } as const;
 
 /**

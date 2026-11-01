@@ -7,7 +7,6 @@ import { SplitDraft, summariseSplits, toPayload } from '../lib/splitMath';
 import { formatDate } from '../lib/format';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, SubscriptionFrequency, WalletBalance } from '../types';
-import { walletIconText } from '../lib/walletIcons';
 import {
   Alert,
   Button,
@@ -16,11 +15,11 @@ import {
   Input,
   Modal,
   Segmented,
-  Select,
   Textarea,
   decimalToInput,
   parseDecimal,
 } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 export interface SubscriptionPayload {
   name: string;
@@ -173,14 +172,12 @@ export function SubscriptionForm({
         </Field>
 
         <Field label="Deduct from" error={walletError} hint={wallet ? `Balance ${money(wallet.balance)}` : undefined}>
-          <Select value={form.walletId} onChange={(e) => set('walletId', e.target.value)}>
-            <option value="">Select a wallet…</option>
-            {wallets.map((w) => (
-              <option key={w.id} value={w.id}>
-                {walletIconText(w.icon)} {w.name}
-              </option>
-            ))}
-          </Select>
+          <WalletPicker
+            wallets={wallets}
+            value={form.walletId}
+            onChange={(id) => set('walletId', id)}
+            placeholder="Select a wallet…"
+          />
         </Field>
 
         <Field label="Category" hint="Used on the expense, so budgets pick it up">

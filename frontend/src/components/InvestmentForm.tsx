@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import { formatMoney, formatNumber, todayKey } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { Holding, projectAverageCost } from '../lib/positions';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Investment, InvestmentStatus, WalletBalance } from '../types';
@@ -13,11 +12,11 @@ import {
   Input,
   Modal,
   Segmented,
-  Select,
   Textarea,
   decimalToInput,
   parseDecimal,
 } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 export interface InvestmentPayload {
   walletId: string;
@@ -311,19 +310,14 @@ export function InvestmentForm({
           className="span-2"
           hint={addTo ? 'Fixed: this purchase joins the position held in this wallet.' : undefined}
         >
-          <Select
+          <WalletPicker
+            wallets={wallets}
             value={form.walletId}
-            onChange={(e) => patch('walletId', e.target.value)}
+            onChange={(id) => patch('walletId', id)}
             disabled={Boolean(addTo)}
+            placeholder={wallets.length === 0 ? 'No investment wallet yet' : undefined}
             required
-          >
-            {wallets.length === 0 && <option value="">No investment wallet yet</option>}
-            {wallets.map((wallet) => (
-              <option key={wallet.id} value={wallet.id}>
-                {walletIconText(wallet.icon)} {wallet.name}
-              </option>
-            ))}
-          </Select>
+          />
         </Field>
 
         <Field
@@ -353,6 +347,8 @@ export function InvestmentForm({
             value={form.quantity}
             onChange={(raw) => patch('quantity', raw)}
             placeholder="0.00000000"
+            kind="number"
+            decimals={8}
             required
             autoFocus={Boolean(addTo)}
           />
@@ -373,6 +369,8 @@ export function InvestmentForm({
               value={form.buyPrice}
               onChange={(raw) => patch('buyPrice', raw)}
               placeholder="0.00"
+              kind="number"
+              decimals={4}
               disabled={usingOverride}
             />
             <Segmented<EntryMode>
@@ -397,7 +395,7 @@ export function InvestmentForm({
         )}
 
         <Field label={`Fees (${entryCurrency})`} hint="Commission, included in the cost basis.">
-          <DecimalInput value={form.fees} onChange={(raw) => patch('fees', raw)} placeholder="0.00" />
+          <DecimalInput value={form.fees} onChange={(raw) => patch('fees', raw)} placeholder="0.00" kind="number" decimals={2} />
         </Field>
 
         <Field label="Buy date">
@@ -418,6 +416,8 @@ export function InvestmentForm({
             value={form.totalOverride}
             onChange={(raw) => patch('totalOverride', raw)}
             placeholder="Leave blank to use the price above"
+            kind="number"
+            decimals={2}
           />
         </Field>
 
@@ -452,6 +452,8 @@ export function InvestmentForm({
               value={form.sellPrice}
               onChange={(raw) => patch('sellPrice', raw)}
               placeholder="0.00"
+              kind="number"
+              decimals={4}
               required
             />
           </Field>

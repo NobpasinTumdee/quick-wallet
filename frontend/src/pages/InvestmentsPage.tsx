@@ -1543,7 +1543,7 @@ export function InvestmentsPage() {
           }
         >
           <div className="field-with-unit">
-            <DecimalInput value={sellPrice} onChange={setSellPrice} placeholder="0.00" autoFocus />
+            <DecimalInput value={sellPrice} onChange={setSellPrice} placeholder="0.00" autoFocus kind="number" decimals={4} />
             {brokerRate > 0 && (
               <Segmented<'quote' | 'base'>
                 value={sellCurrency}

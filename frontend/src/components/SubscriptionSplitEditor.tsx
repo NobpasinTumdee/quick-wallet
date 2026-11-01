@@ -2,7 +2,8 @@ import { Plus, Users, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Button, DecimalInput, Field, Input, Select } from './ui';
+import { Button, DecimalInput, Field, Input } from './ui';
+import { WalletPicker } from './WalletPicker';
 import {
   SplitDraft,
   duplicateNames,
@@ -10,7 +11,6 @@ import {
   summariseSplits,
 } from '../lib/splitMath';
 import { cx } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
 
@@ -147,18 +147,13 @@ export function SubscriptionSplitEditor({
           because the answer is a property of the arrangement, not of any one
           payment. */}
       <Field label={t('recurring.repaymentWallet')} hint={t('recurring.repaymentWalletHint')}>
-        <Select
+        <WalletPicker
+          wallets={wallets}
           value={walletId}
           disabled={disabled}
-          onChange={(event) => onWalletId(event.target.value)}
-        >
-          <option value="">{t('recurring.repaymentWalletSame')}</option>
-          {wallets.map((wallet) => (
-            <option key={wallet.id} value={wallet.id}>
-              {walletIconText(wallet.icon)} {wallet.name}
-            </option>
-          ))}
-        </Select>
+          onChange={onWalletId}
+          emptyLabel={t('recurring.repaymentWalletSame')}
+        />
       </Field>
 
       {/* The arithmetic, stated while it can still be changed. */}

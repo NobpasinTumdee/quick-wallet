@@ -186,6 +186,8 @@ export function WatchlistForm({
             value={form.targetPrice}
             onChange={(raw) => patch('targetPrice', raw)}
             placeholder="Leave blank for no target"
+            kind="number"
+            decimals={4}
           />
         </Field>
 

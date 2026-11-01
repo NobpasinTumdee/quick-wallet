@@ -25,6 +25,7 @@ import { MobileNavConfig, resolveMobileNav, resolvePaydays } from '../lib/mobile
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
+import { useNumberPadSetting } from '../lib/numberPad';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
@@ -168,6 +169,11 @@ export function SettingsPage() {
               `useLanguage`, which also keeps the Locale field below in step. */}
           <LanguageSelector className="span-2" />
 
+          {/* Also immediate, and kept on this device only: whether amount
+              fields open the in-app number pad on a phone. Off brings back
+              the system keyboard, the safety switch if the pad misbehaves. */}
+          <NumberPadSwitch />
+
           <Field label={t('settings.locale')} hint={t('settings.localeHint')}>
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
               {['en-US', 'en-GB', 'th-TH', 'de-DE', 'fr-FR', 'es-ES', 'id-ID', 'ja-JP', 'zh-CN'].map((code) => (
@@ -213,7 +219,7 @@ export function SettingsPage() {
             label={t('settings.rateLabel', { from: currency.toUpperCase(), to: displayCurrency.toUpperCase() || currency.toUpperCase() })}
             hint={t('settings.rateHint')}
           >
-            <DecimalInput value={fxRate} onChange={setFxRate} placeholder="1" />
+            <DecimalInput value={fxRate} onChange={setFxRate} placeholder="1" kind="number" decimals={6} />
           </Field>
 
           <div className="span-2 tag-row">
@@ -408,5 +414,28 @@ export function SettingsPage() {
         </form>
       </Card>
     </>
+  );
+}
+
+function NumberPadSwitch() {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useNumberPadSetting();
+  return (
+    <div className="span-2">
+      <label className="sub-share-toggle">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={enabled}
+          aria-describedby="number-pad-hint"
+          onChange={(event) => setEnabled(event.target.checked)}
+        />
+        <span className="sub-share-track" aria-hidden="true" />
+        <span className="sub-share-label">
+          <strong>{t('pad.settingLabel')}</strong>
+          <small id="number-pad-hint">{t('pad.settingHint')}</small>
+        </span>
+      </label>
+    </div>
   );
 }

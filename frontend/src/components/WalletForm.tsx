@@ -331,6 +331,8 @@ export function WalletForm({
                 value={form.cashbackRate}
                 onChange={(raw) => patch('cashbackRate', raw)}
                 placeholder="0"
+                kind="number"
+                decimals={2}
               />
             </Field>
 

@@ -1,12 +1,20 @@
-import { ArrowDownLeft, ArrowUpRight, Delete, Plus, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useExcelDB } from '../hooks/useExcelDB';
-import { cx, formatMoney, todayKey } from '../lib/format';
+import { PadKey, applyPadKey, evaluatePad, padValueToRaw, pastedToPad, rawToPad } from '../lib/amountExpr';
+import { cx, formatCompactAmount, formatMoney, todayKey } from '../lib/format';
+import { getRecentAmounts, recentKey, rememberAmount } from '../lib/numberPad';
+import { checkOverdraft } from '../lib/overdraft';
 import { toast } from '../lib/toast';
+import type { TranslationKey } from '../locales/en';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction, TransactionType, WalletBalance } from '../types';
 import { Icon } from './Icon';
+import { NumberPadPanel, canPaste, padOptions } from './NumberPad';
+import { OverdraftWarningModal } from './OverdraftWarningModal';
+import { useOverlay } from './ui';
 import { WalletIconRenderer } from './WalletIconRenderer';
 
 /**
@@ -20,9 +28,16 @@ import { WalletIconRenderer } from './WalletIconRenderer';
  *   slide onto a wallet              → the category column appears
  *   release on a category            → the keypad opens, asking only the amount
  *
+ *   …or slide onto "Transfer"        → From, then To (never the same wallet)
+ *   release on a To wallet           → the keypad opens for the transfer
+ *
  * One continuous gesture picks type, wallet and category. The thumb never
  * lifts, nothing is confirmed, and the only thing left to type is the number
  * that actually differs between one coffee and the next.
+ *
+ * Once the third column is up, the type column folds to its icons on a narrow
+ * phone, so From and To (or Wallet and Category) keep room for their names
+ * and balances at 320px without the text getting smaller.
  *
  * ---------------------------------------------------------------------------
  * WHY POINTER EVENTS, AND WHY CAPTURE
@@ -45,7 +60,7 @@ import { WalletIconRenderer } from './WalletIconRenderer';
  * A drag is unusable with a keyboard, a screen reader, or a shaky hand. So:
  *
  *   - a plain tap (released before the hold fires) opens the full form, which
- *     is also the only route to transfers, notes and back-dating
+ *     is also the route to notes and back-dating
  *   - releasing mid-gesture leaves the menu open and tappable ("sticky"), so a
  *     mistimed release continues rather than starting over
  *   - every option is a real <button> with a click handler
@@ -60,14 +75,17 @@ const SLOP_PX = 12;
 /** Auto-scroll a column when the pointer comes this close to its edge. */
 const EDGE_PX = 32;
 
-type Step = 'type' | 'wallet' | 'category';
+/** `wallet` is the second column for every type — a transfer's From — and
+ *  `category` / `to` the third, which is also where the gesture ends. */
+type Step = 'type' | 'wallet' | 'category' | 'to';
 
 /** What the gesture has picked so far. Deeper fields clear when a shallower
  *  one changes — sliding back to "Income" must not keep an expense category. */
 interface Draft {
-  type?: Extract<TransactionType, 'expense' | 'income'>;
+  type?: TransactionType;
   walletId?: string;
   category?: string;
+  toWalletId?: string;
 }
 
 type Phase =
@@ -79,15 +97,38 @@ type Phase =
   | 'dragging'
   /** Menu open, finger lifted without landing on a leaf. Tappable. */
   | 'sticky'
-  /** A category was chosen; only the amount is left. */
+  /** A category (or a transfer's To) was chosen; only the amount is left. */
   | 'amount';
 
-const TYPE_OPTIONS: { value: 'expense' | 'income'; label: string; icon: typeof ArrowUpRight }[] = [
-  { value: 'expense', label: 'Expense', icon: ArrowUpRight },
-  { value: 'income', label: 'Income', icon: ArrowDownLeft },
+const TYPE_OPTIONS: { value: TransactionType; label: TranslationKey; icon: typeof ArrowUpRight }[] = [
+  { value: 'expense', label: 'quick.expense', icon: ArrowUpRight },
+  { value: 'income', label: 'quick.income', icon: ArrowDownLeft },
+  { value: 'transfer', label: 'quick.transfer', icon: ArrowLeftRight },
 ];
 
-const KEYPAD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'] as const;
+const SAVE_LABEL: Record<TransactionType, TranslationKey> = {
+  expense: 'quick.saveExpense',
+  income: 'quick.saveIncome',
+  transfer: 'quick.saveTransfer',
+};
+
+const ADDED_LABEL: Record<TransactionType, TranslationKey> = {
+  expense: 'quick.addedExpense',
+  income: 'quick.addedIncome',
+  transfer: 'quick.addedTransfer',
+};
+
+/** Money on the pad: two decimals, never negative. */
+const PAD_OPTIONS = padOptions('money', false);
+
+function padKeyFor(key: string): PadKey | null {
+  if (/^\d$/.test(key)) return key as PadKey;
+  if (key === '.' || key === ',') return '.';
+  if (key === '+') return '+';
+  if (key === '-') return '-';
+  if (key === 'Backspace') return 'back';
+  return null;
+}
 
 export function QuickTransactionWidget({
   wallets,
@@ -99,6 +140,7 @@ export function QuickTransactionWidget({
   wallets: WalletBalance[];
   onOpenFullForm: () => void;
 }) {
+  const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
 
@@ -109,8 +151,11 @@ export function QuickTransactionWidget({
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [draft, setDraft] = useState<Draft>({});
-  const [amount, setAmount] = useState('');
+  /** What has been keyed on the pad — "120+45" — not yet the amount. */
+  const [expr, setExpr] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Held while the overdraft warning asks: the amount it is asking about. */
+  const [pendingAmount, setPendingAmount] = useState<number | null>(null);
 
   const holdTimer = useRef<number | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
@@ -124,13 +169,27 @@ export function QuickTransactionWidget({
     phaseRef.current = next;
     setPhase(next);
   }, []);
+  /** The same, for what has been picked. */
+  const draftRef = useRef<Draft>({});
+  draftRef.current = draft;
 
-  const spendable = wallets.filter((w) => w.mode === 'expense' && !w.archived);
+  const active = wallets.filter((w) => !w.archived);
+  /* The same lists the New transaction form offers: income and expense only
+     touch expense-mode wallets; a transfer can leave from any wallet and go
+     to any other. */
+  const spendable = active.filter((w) => w.mode === 'expense');
   const categories = settings.categories.filter(Boolean);
-  /** Without both lists there is nothing to pick, so the gesture has no job. */
-  const gestureUsable = spendable.length > 0 && categories.length > 0;
+  const canLog = spendable.length > 0 && categories.length > 0;
+  const canTransfer = active.length >= 2;
+  const typeOptions = TYPE_OPTIONS.filter((option) => (option.value === 'transfer' ? canTransfer : canLog));
+  /** With nothing to pick, the gesture has no job. */
+  const gestureUsable = typeOptions.length > 0;
 
   const open = phase === 'dragging' || phase === 'sticky';
+  const showAmount = phase === 'amount';
+  const isTransfer = draft.type === 'transfer';
+  const sourceWallets = isTransfer ? active : spendable;
+  const targetWallets = active.filter((w) => w.id !== draft.walletId);
 
   const reset = useCallback(() => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
@@ -138,23 +197,18 @@ export function QuickTransactionWidget({
     origin.current = null;
     setPhaseNow('idle');
     setDraft({});
-    setAmount('');
+    setExpr('');
+    setPendingAmount(null);
   }, [setPhaseNow]);
 
   useEffect(() => () => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
   }, []);
 
-  /* Escape closes whatever is open — the one keyboard affordance a pointer
-     gesture still owes you. */
-  useEffect(() => {
-    if (phase === 'idle') return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') reset();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [phase, reset]);
+  /* On the shared overlay stack once the menu or the pad is up, so Back
+     closes it like any sheet — and a sheet opened over it (the overdraft
+     warning) closes first. */
+  const handle = useOverlay(open || showAmount, reset);
 
   /** A short tick on each level change. Silent where unsupported. */
   function pulse(): void {
@@ -173,12 +227,19 @@ export function QuickTransactionWidget({
       if (step === 'type') {
         if (current.type === value) return current;
         pulse();
-        return { type: value as Draft['type'] };
+        return { type: value as TransactionType };
       }
       if (step === 'wallet') {
         if (current.walletId === value) return current;
         pulse();
         return { type: current.type, walletId: value };
+      }
+      if (step === 'to') {
+        /* Never the wallet it leaves from — that column does not list it, and
+           this keeps a stale hit from slipping one through. */
+        if (current.toWalletId === value || current.walletId === value) return current;
+        pulse();
+        return { ...current, toWalletId: value };
       }
       if (current.category === value) return current;
       pulse();
@@ -186,11 +247,11 @@ export function QuickTransactionWidget({
     });
   }, []);
 
-  /** Category is the leaf: choosing one ends the gesture and opens the keypad. */
+  /** The third column is the leaf: choosing ends the gesture and opens the pad. */
   const commit = useCallback(
-    (category: string) => {
-      choose('category', category);
-      setAmount('');
+    (step: 'category' | 'to', value: string) => {
+      choose(step, value);
+      setExpr('');
       setPhaseNow('amount');
       navigator.vibrate?.([6, 24, 10]);
     },
@@ -282,8 +343,8 @@ export function QuickTransactionWidget({
     if (current !== 'dragging') return;
 
     const hit = optionAt(event.clientX, event.clientY);
-    if (hit?.step === 'category') {
-      commit(hit.value);
+    if (hit?.step === 'category' || (hit?.step === 'to' && hit.value !== draftRef.current.walletId)) {
+      commit(hit.step, hit.value);
       return;
     }
 
@@ -297,54 +358,141 @@ export function QuickTransactionWidget({
   /* Saving                                                              */
   /* ------------------------------------------------------------------ */
 
-  const parsedAmount = Number(amount);
-  const validAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const result = evaluatePad(expr, PAD_OPTIONS);
+  const parsedAmount = result.value ?? 0;
+  const validAmount = !result.error && parsedAmount > 0;
+  const complete = Boolean(draft.type && draft.walletId && (isTransfer ? draft.toWalletId : draft.category));
 
-  function pressKey(key: (typeof KEYPAD)[number]) {
-    setAmount((current) => {
-      if (key === 'back') return current.slice(0, -1);
-      if (key === '.') return current.includes('.') ? current : `${current || '0'}.`;
-      // Two decimal places is as fine as money gets here.
-      if (current.includes('.') && current.split('.')[1].length >= 2) return current;
-      if (current === '0') return key;
-      return current + key;
-    });
+  const sourceWallet = wallets.find((w) => w.id === draft.walletId) ?? null;
+  const targetWallet = wallets.find((w) => w.id === draft.toWalletId) ?? null;
+  /* The same check, against the same wallet, as the New transaction form: an
+     expense or a transfer that takes its source below zero (or a card past
+     its limit) asks first. Income never does. */
+  const overdraft = checkOverdraft({
+    wallet: sourceWallet,
+    type: draft.type ?? 'income',
+    amount: pendingAmount ?? parsedAmount,
+  });
+
+  const recentFor = draft.type ? recentKey(draft.type, draft) : null;
+  const recents = useMemo(() => (showAmount ? getRecentAmounts(recentFor) : []), [showAmount, recentFor]);
+
+  const press = useCallback((key: PadKey) => setExpr((current) => applyPadKey(current, key, PAD_OPTIONS)), []);
+
+  function requestSave() {
+    if (!validAmount || !complete || saving) return;
+    if (overdraft.warn) {
+      setPendingAmount(parsedAmount);
+      return;
+    }
+    void save(parsedAmount);
   }
 
-  async function save() {
-    if (!validAmount || !draft.type || !draft.walletId || !draft.category) return;
+  async function save(value: number) {
+    if (!draft.type || !draft.walletId) return;
+    const type = draft.type;
 
     setSaving(true);
-    const label = `${money(parsedAmount)} · ${draft.category}`;
+    const label =
+      type === 'transfer'
+        ? `${money(value)} · ${sourceWallet?.name ?? ''} → ${targetWallet?.name ?? ''}`
+        : `${money(value)} · ${draft.category}`;
 
     try {
       /* Optimistic: the row is in the cache before this resolves, so the sheet
          closes immediately. A failure rolls it back out and toasts — the same
-         contract the full form works under. */
+         contract the full form works under. The payload has the form's shape
+         exactly: a transfer carries its To and no category. */
       await transactions.create({
         walletId: draft.walletId,
-        toWalletId: '',
-        type: draft.type,
-        amount: parsedAmount,
-        category: draft.category,
+        toWalletId: type === 'transfer' ? (draft.toWalletId ?? '') : '',
+        type,
+        amount: value,
+        category: type === 'transfer' ? '' : (draft.category ?? ''),
         note: '',
         date: todayKey(),
       });
-      toast.success(label, draft.type === 'expense' ? 'Expense added' : 'Income added');
+      rememberAmount(recentFor, value);
+      toast.success(label, t(ADDED_LABEL[type]));
       reset();
     } catch {
       /* useExcelDB toasted it; keep the sheet open so the amount survives. */
+      setPendingAmount(null);
     } finally {
       setSaving(false);
     }
   }
 
+  async function paste() {
+    try {
+      const next = pastedToPad(await navigator.clipboard.readText(), PAD_OPTIONS);
+      if (next === null) throw new Error('not a number');
+      setExpr(next);
+    } catch {
+      toast.error(t('pad.pasteFailed'));
+    }
+  }
+
+  /* Escape closes whatever is open — the one keyboard affordance a pointer
+     gesture still owes you — and on the pad a physical keyboard types. Only
+     while this is the top overlay, so the warning above it keeps its keys. */
+  const requestSaveRef = useRef(requestSave);
+  requestSaveRef.current = requestSave;
+  useEffect(() => {
+    if (phase === 'idle') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (handle && !handle.isTop()) return;
+      if (event.key === 'Escape') {
+        reset();
+        return;
+      }
+      if (phaseRef.current !== 'amount' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const padKey = padKeyFor(event.key);
+      if (padKey) {
+        event.preventDefault();
+        press(padKey);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        requestSaveRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, reset, handle, press]);
+
   /* ------------------------------------------------------------------ */
   /* Render                                                              */
   /* ------------------------------------------------------------------ */
 
-  const walletLabel = spendable.find((w) => w.id === draft.walletId)?.name ?? '';
-  const showAmount = phase === 'amount';
+  /** The third column is up, so the type column folds to its icons. */
+  const typeCompact = Boolean(draft.walletId);
+
+  function walletOption(wallet: WalletBalance, step: 'wallet' | 'to', selected: boolean) {
+    const balance = Number(wallet.balance) || 0;
+    return (
+      <button
+        key={wallet.id}
+        type="button"
+        role="menuitem"
+        className={cx('qa-option', 'qa-option--wallet', selected && 'is-active')}
+        data-qa-step={step}
+        data-qa-value={wallet.id}
+        aria-label={t('quick.walletBalance', { name: wallet.name, amount: money(balance) })}
+        onClick={() => (step === 'to' ? commit('to', wallet.id) : choose('wallet', wallet.id))}
+      >
+        <WalletIconRenderer icon={wallet.icon} size="sm" className="qa-emoji" />
+        <span className="qa-option-text">
+          <span className="qa-option-label">{wallet.name}</span>
+          {/* The Wallets page's balance, shortened: 1.2k, -3.4k. */}
+          <span className={cx('qa-balance', balance < 0 && 'is-negative')}>
+            {formatCompactAmount(money.convert(balance), settings.locale)}
+          </span>
+        </span>
+      </button>
+    );
+  }
+
+  const typeLabel = TYPE_OPTIONS.find((option) => option.value === draft.type)?.label;
 
   return (
     <>
@@ -364,11 +512,11 @@ export function QuickTransactionWidget({
           <div
             className={cx('qa-menu', phase === 'dragging' && 'is-dragging')}
             role="menu"
-            aria-label="Quick add"
+            aria-label={t('quick.menuLabel')}
           >
-            <div className="qa-column" data-qa-column>
-              <div className="qa-column-title">Type</div>
-              {TYPE_OPTIONS.map((option) => (
+            <div className={cx('qa-column', 'qa-column--type', typeCompact && 'is-compact')} data-qa-column>
+              <div className="qa-column-title">{t('quick.colType')}</div>
+              {typeOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -376,37 +524,32 @@ export function QuickTransactionWidget({
                   className={cx('qa-option', draft.type === option.value && 'is-active')}
                   data-qa-step="type"
                   data-qa-value={option.value}
+                  aria-label={t(option.label)}
                   onClick={() => choose('type', option.value)}
                 >
                   <Icon icon={option.icon} size="sm" />
-                  {option.label}
+                  <span className="qa-type-label">{t(option.label)}</span>
                 </button>
               ))}
             </div>
 
             {draft.type && (
               <div className="qa-column" data-qa-column>
-                <div className="qa-column-title">Wallet</div>
-                {spendable.map((wallet) => (
-                  <button
-                    key={wallet.id}
-                    type="button"
-                    role="menuitem"
-                    className={cx('qa-option', draft.walletId === wallet.id && 'is-active')}
-                    data-qa-step="wallet"
-                    data-qa-value={wallet.id}
-                    onClick={() => choose('wallet', wallet.id)}
-                  >
-                    <WalletIconRenderer icon={wallet.icon} size="sm" className="qa-emoji" />
-                    <span className="qa-option-label">{wallet.name}</span>
-                  </button>
-                ))}
+                <div className="qa-column-title">{t(isTransfer ? 'quick.colFrom' : 'quick.colWallet')}</div>
+                {sourceWallets.map((wallet) => walletOption(wallet, 'wallet', draft.walletId === wallet.id))}
               </div>
             )}
 
-            {draft.walletId && (
+            {draft.walletId && isTransfer && (
               <div className="qa-column" data-qa-column>
-                <div className="qa-column-title">Category</div>
+                <div className="qa-column-title">{t('quick.colTo')}</div>
+                {targetWallets.map((wallet) => walletOption(wallet, 'to', draft.toWalletId === wallet.id))}
+              </div>
+            )}
+
+            {draft.walletId && !isTransfer && (
+              <div className="qa-column" data-qa-column>
+                <div className="qa-column-title">{t('quick.colCategory')}</div>
                 {categories.map((category) => (
                   <button
                     key={category}
@@ -415,7 +558,7 @@ export function QuickTransactionWidget({
                     className={cx('qa-option', draft.category === category && 'is-active')}
                     data-qa-step="category"
                     data-qa-value={category}
-                    onClick={() => commit(category)}
+                    onClick={() => commit('category', category)}
                   >
                     <span className="qa-option-label">{category}</span>
                   </button>
@@ -425,69 +568,55 @@ export function QuickTransactionWidget({
           </div>
         )}
 
-        {/* ---- Amount only ---- */}
-        {showAmount && (
-          <div className="qa-pad" role="dialog" aria-label="Enter amount">
-            <div className="qa-pad-head">
+        {/* ---- Amount only: the shared number pad, up at once ---- */}
+        {showAmount && draft.type && (
+          <NumberPadPanel
+            role="dialog"
+            aria-label={t('quick.enterAmount')}
+            className="qa-pad"
+            expr={expr}
+            result={result}
+            options={PAD_OPTIONS}
+            kind="money"
+            currency={money.base}
+            header={
               <div className="qa-path">
-                <span className={draft.type === 'income' ? 'text-positive' : 'text-negative'}>
-                  {draft.type}
+                <span
+                  className={
+                    draft.type === 'income' ? 'text-positive' : draft.type === 'expense' ? 'text-negative' : 'qa-path-transfer'
+                  }
+                >
+                  {typeLabel ? t(typeLabel) : ''}
                 </span>
                 <span aria-hidden="true">·</span>
-                <span>{walletLabel}</span>
-                <span aria-hidden="true">·</span>
-                <strong>{draft.category}</strong>
+                <span className="qa-path-name">{sourceWallet?.name}</span>
+                <span aria-hidden="true">{isTransfer ? '→' : '·'}</span>
+                <strong className="qa-path-name">{isTransfer ? targetWallet?.name : draft.category}</strong>
               </div>
-              <button type="button" className="qa-close" onClick={reset} aria-label="Cancel">
-                <Icon icon={X} size="sm" />
-              </button>
-            </div>
-
-            <div className="qa-amount" aria-live="polite">
-              <span className="qa-currency">{money.base}</span>
-              <span className={cx('qa-amount-value', !amount && 'is-empty')}>{amount || '0'}</span>
-            </div>
-
-            {money.converting && validAmount && (
-              <div className="qa-amount-converted">
-                ≈ {formatMoney(money.convert(parsedAmount), money.display, settings.locale)}
-              </div>
-            )}
-
-            <div className="qa-keys">
-              {KEYPAD.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={cx('qa-key', key === 'back' && 'qa-key--back')}
-                  onClick={() => pressKey(key)}
-                  aria-label={key === 'back' ? 'Delete last digit' : key}
-                >
-                  {key === 'back' ? <Icon icon={Delete} size="sm" /> : key}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              className="qa-save"
-              disabled={!validAmount || saving}
-              onClick={() => void save()}
-            >
-              {saving ? 'Saving…' : `Save ${draft.type}`}
-            </button>
-          </div>
+            }
+            footnote={
+              money.converting && validAmount
+                ? `≈ ${formatMoney(money.convert(parsedAmount), money.display, settings.locale)}`
+                : undefined
+            }
+            chips={recents}
+            onChip={(value) => setExpr(rawToPad(padValueToRaw(value, PAD_OPTIONS.decimals), PAD_OPTIONS))}
+            onKey={press}
+            onPaste={canPaste ? () => void paste() : undefined}
+            onClose={reset}
+            done={{
+              label: saving ? t('quick.saving') : t(SAVE_LABEL[draft.type]),
+              disabled: !validAmount || !complete || saving,
+              run: requestSave,
+            }}
+          />
         )}
 
         {/* ---- The button ---- */}
         <button
           type="button"
           className={cx('qa-fab', phase === 'pressing' && 'is-pressing', open && 'is-armed')}
-          aria-label={
-            gestureUsable
-              ? 'Add transaction. Tap for the full form, or hold and drag to pick type, wallet and category.'
-              : 'Add transaction'
-          }
+          aria-label={gestureUsable ? t('quick.fabGesture') : t('quick.fab')}
           aria-expanded={open}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -512,6 +641,19 @@ export function QuickTransactionWidget({
           <Icon icon={Plus} />
         </button>
       </div>
+
+      {/* Over the pad: cancelling returns to it with the amount as keyed. */}
+      <OverdraftWarningModal
+        open={pendingAmount !== null}
+        wallet={sourceWallet}
+        amount={pendingAmount ?? parsedAmount}
+        check={overdraft}
+        busy={saving}
+        onConfirm={() => {
+          if (pendingAmount !== null) void save(pendingAmount);
+        }}
+        onCancel={() => setPendingAmount(null)}
+      />
     </>
   );
 }

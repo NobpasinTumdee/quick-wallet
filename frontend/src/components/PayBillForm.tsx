@@ -22,7 +22,6 @@ import { useTranslation } from 'react-i18next';
 
 import { CardState } from '../lib/creditMath';
 import { formatDate, todayKey } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
 import {
@@ -33,10 +32,10 @@ import {
   Input,
   Modal,
   Segmented,
-  Select,
   decimalToInput,
   parseDecimal,
 } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 /**
  * The three amounts worth offering as one tap.
@@ -225,13 +224,7 @@ export function PayBillForm({
             label={t('forms.payFrom')}
             error={overdraws ? t('forms.onlyHolds', { name: source?.name ?? '', amount: money(source?.balance ?? 0) }) : undefined}
           >
-            <Select value={fromWalletId} onChange={(e) => setFromWalletId(e.target.value)}>
-              {wallets.map((wallet) => (
-                <option key={wallet.id} value={wallet.id}>
-                  {t('forms.walletOption', { icon: walletIconText(wallet.icon), name: wallet.name, amount: money(wallet.balance) })}
-                </option>
-              ))}
-            </Select>
+            <WalletPicker wallets={wallets} value={fromWalletId} onChange={setFromWalletId} />
           </Field>
 
           <Field label={t('common.date')}>

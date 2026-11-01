@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from './Icon';
-import { Alert, Button, Field, Input, Modal, Select } from './ui';
+import { Alert, Button, Field, Input, Modal } from './ui';
+import { WalletPicker } from './WalletPicker';
 import { todayKey } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { BillSplit, BillSplitShare, WalletBalance } from '../types';
 
@@ -114,13 +114,7 @@ export function RepaymentModal({
         ) : (
           <>
             <Field label={t('split.receiveInto')} hint={t('split.receiveIntoHint')}>
-              <Select value={walletId} onChange={(event) => setWalletId(event.target.value)}>
-                {wallets.map((wallet) => (
-                  <option key={wallet.id} value={wallet.id}>
-                    {walletIconText(wallet.icon)} {wallet.name} · {money(wallet.balance)}
-                  </option>
-                ))}
-              </Select>
+              <WalletPicker wallets={wallets} value={walletId} onChange={setWalletId} />
             </Field>
 
             <Field label={t('split.repaymentDate')}>

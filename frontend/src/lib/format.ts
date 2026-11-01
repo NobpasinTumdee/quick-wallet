@@ -27,6 +27,47 @@ export function formatNumber(value: number, digits = 2, locale = 'en-US'): strin
   return new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
 }
 
+const COMPACT_UNITS: [number, string][] = [
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'k'],
+];
+
+/**
+ * A short amount for tight spaces: 950, 1.2k, 10k, 125k, 1.5M, -3.4k.
+ *
+ * Under 1,000 it is the whole number. From there the leading part keeps one
+ * decimal while it is a single digit (1.5k, 1.5M) and none after (10k,
+ * 125k), and `.0` is dropped (1k, not 1.0k). Rounding that reaches the next
+ * unit moves up to it — 999,999 is "1M", never "1000k". k/M/B in every
+ * language, Thai included; only the digits and the decimal mark follow the
+ * locale. No currency: the places that use this have no room for one.
+ */
+export function formatCompactAmount(value: number, locale = 'en-US'): string {
+  if (!Number.isFinite(value)) return '0';
+  const sign = value < 0 ? '-' : '';
+  let abs = Math.abs(value);
+  const digits = (n: number, max: number) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: max, useGrouping: false }).format(n);
+
+  if (Math.round(abs) < 1000) {
+    const whole = Math.round(abs);
+    return whole === 0 ? '0' : `${sign}${digits(whole, 0)}`;
+  }
+  for (let i = COMPACT_UNITS.length - 1; i >= 0; i -= 1) {
+    const [size, suffix] = COMPACT_UNITS[i];
+    const next = COMPACT_UNITS[i - 1];
+    const scaled = abs / size;
+    const places = scaled < 9.95 ? 1 : 0;
+    const rounded = Number(scaled.toFixed(places));
+    /* 999,999 rounds to 1000k: that is 1M, so try the next unit up. */
+    if (rounded >= 1000 && next) continue;
+    return `${sign}${digits(rounded, places)}${suffix}`;
+  }
+  abs = Math.round(abs / 1e9);
+  return `${sign}${digits(abs, 0)}B`;
+}
+
 export function formatPercent(value: number, digits = 1, signed = false): string {
   if (!Number.isFinite(value)) return '0%';
   const sign = signed && value > 0 ? '+' : '';

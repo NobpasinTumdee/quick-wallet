@@ -38,7 +38,7 @@
  *                                 The one state that blocks submission.
  */
 
-import { Check, ChevronDown, Plus, Wallet as WalletIcon, X } from 'lucide-react';
+import { Check, ChevronDown, Plus, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -54,7 +54,6 @@ import {
 } from '../lib/splitMath';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { BillSplit, WalletBalance } from '../types';
-import { walletIconText } from '../lib/walletIcons';
 import { Icon } from './Icon';
 import {
   Alert,
@@ -64,10 +63,10 @@ import {
   Input,
   Modal,
   Segmented,
-  Select,
   Textarea,
   parseDecimal,
 } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 /** Ids only have to be unique within one open sheet, never persisted. */
 let seq = 0;
@@ -340,21 +339,13 @@ export function BillSplitterForm({
               maxLength={120}
             />
 
-            <label className="split-wallet-pill">
-              <Icon icon={WalletIcon} size="sm" />
-              <Select
-                value={walletId}
-                onChange={(e) => setWalletId(e.target.value)}
-                aria-label={t('split.payFromWallet')}
-              >
-                {wallets.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {walletIconText(w.icon)} {w.name}
-                  </option>
-                ))}
-              </Select>
-              <Icon icon={ChevronDown} size="sm" />
-            </label>
+            <WalletPicker
+              wallets={wallets}
+              value={walletId}
+              onChange={setWalletId}
+              aria-label={t('split.payFromWallet')}
+              className="split-wallet-picker"
+            />
           </section>
 
           {/* ---- Who ---- */}

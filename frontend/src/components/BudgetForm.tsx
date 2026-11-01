@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { formatPeriod } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Budget, BudgetMode, BudgetScope, WalletBalance } from '../types';
 import {
@@ -16,6 +15,7 @@ import {
   decimalToInput,
   parseDecimal,
 } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 export interface BudgetPayload {
   period: string;
@@ -175,16 +175,12 @@ export function BudgetForm({
 
         {form.scope === 'wallet' && (
           <Field label="Wallet" className="span-2">
-            <Select value={form.targetId} onChange={(e) => patch('targetId', e.target.value)}>
-              <option value="">Select a wallet…</option>
-              {wallets
-                .filter((w) => w.mode === 'expense')
-                .map((wallet) => (
-                  <option key={wallet.id} value={wallet.id}>
-                    {walletIconText(wallet.icon)} {wallet.name}
-                  </option>
-                ))}
-            </Select>
+            <WalletPicker
+              wallets={wallets.filter((w) => w.mode === 'expense')}
+              value={form.targetId}
+              onChange={(id) => patch('targetId', id)}
+              placeholder="Select a wallet…"
+            />
           </Field>
         )}
 
@@ -210,6 +206,8 @@ export function BudgetForm({
             value={form.value}
             onChange={(raw) => patch('value', raw)}
             placeholder={form.mode === 'percent' ? '40' : '0.00'}
+            kind={form.mode === 'percent' ? 'number' : 'money'}
+            decimals={2}
             required
           />
         </Field>

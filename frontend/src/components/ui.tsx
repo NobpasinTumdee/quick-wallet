@@ -17,9 +17,12 @@ import {
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-import { cx } from '../lib/format';
+import { evaluatePad, padValueToRaw } from '../lib/amountExpr';
+import { cx, formatNumber } from '../lib/format';
+import { useNumberPadMode } from '../lib/numberPad';
 import { OverlayHandle, pushOverlay, updateOverlayClose } from '../lib/overlayStack';
 import { Icon } from './Icon';
+import { AmountPadField, PadKind, padOptions } from './NumberPad';
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -168,6 +171,9 @@ export function DecimalInput({
   value,
   onChange,
   allowNegative = false,
+  kind = 'money',
+  decimals,
+  recents,
   className,
   ...rest
 }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
@@ -175,30 +181,141 @@ export function DecimalInput({
   value: string;
   onChange: (raw: string) => void;
   allowNegative?: boolean;
+  /** Money shows the currency and stops at 2 decimals on the number pad;
+   *  a plain number (a rate, a share count) does neither. */
+  kind?: PadKind;
+  /** Decimal places the number pad allows; defaults by `kind`. */
+  decimals?: number;
+  /** Amounts offered as one-tap chips on the number pad. */
+  recents?: number[];
 }) {
+  /* On a touch phone, with the device setting on, the field opens the in-app
+     number pad and the system keyboard never appears. Everywhere else it is
+     the text input it always was. */
+  const padMode = useNumberPadMode();
+  if (padMode) {
+    return (
+      <AmountPadField
+        value={value}
+        onChange={onChange}
+        allowNegative={allowNegative}
+        kind={kind}
+        decimals={decimals}
+        recents={recents}
+        placeholder={rest.placeholder}
+        disabled={rest.disabled}
+        required={rest.required}
+        className={className}
+        id={rest.id}
+        aria-label={rest['aria-label']}
+        aria-describedby={rest['aria-describedby']}
+        aria-invalid={rest['aria-invalid'] as boolean | undefined}
+      />
+    );
+  }
   return (
-    <input
+    <TypedDecimalInput
       {...rest}
-      type="text"
-      inputMode="decimal"
-      autoComplete="off"
       value={value}
-      className={cx('control', 'control--numeric', className)}
-      onChange={(event) => {
-        let next = event.target.value;
-        // Accept a comma as the decimal separator — many keyboards default to it.
-        next = next.replace(/,/g, '.');
-        // Keep digits, at most one dot, and a single leading minus.
-        next = allowNegative ? next.replace(/[^0-9.-]/g, '') : next.replace(/[^0-9.]/g, '');
-        const negative = allowNegative && next.startsWith('-');
-        next = next.replace(/-/g, '');
-        const firstDot = next.indexOf('.');
-        if (firstDot !== -1) {
-          next = next.slice(0, firstDot + 1) + next.slice(firstDot + 1).replace(/\./g, '');
-        }
-        onChange(negative ? `-${next}` : next);
-      }}
+      onChange={onChange}
+      allowNegative={allowNegative}
+      kind={kind}
+      decimals={decimals}
+      className={className}
     />
+  );
+}
+
+/**
+ * The keyboard version. It also takes a sum — "120+45" — showing "= 165"
+ * under it while the form receives 165, the same number the pad would give.
+ * Without an operator it behaves exactly as it always has.
+ */
+function TypedDecimalInput({
+  value,
+  onChange,
+  allowNegative,
+  kind,
+  decimals,
+  className,
+  onBlur,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
+  value: string;
+  onChange: (raw: string) => void;
+  allowNegative: boolean;
+  kind: PadKind;
+  decimals?: number;
+}) {
+  const { t } = useTranslation();
+  /* What is in the box, which differs from `value` only while a sum is typed. */
+  const [text, setText] = useState(value);
+  const emitted = useRef(value);
+  useEffect(() => {
+    if (value !== emitted.current) {
+      emitted.current = value;
+      setText(value);
+    }
+  }, [value]);
+
+  const options = padOptions(kind, allowNegative, decimals ?? 20);
+  const isSum = /\d[+-]/.test(text);
+  const sum = isSum ? evaluatePad(text, options) : null;
+
+  function emit(raw: string) {
+    emitted.current = raw;
+    onChange(raw);
+  }
+
+  return (
+    <>
+      <input
+        {...rest}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={text}
+        className={cx('control', 'control--numeric', className)}
+        onChange={(event) => {
+          let next = event.target.value;
+          // Accept a comma as the decimal separator — many keyboards default to it.
+          next = next.replace(/,/g, '.').replace(/[−–]/g, '-');
+          // Keep digits, dots, and + / − (a leading minus only where negatives are allowed).
+          next = next.replace(/[^0-9.+-]/g, '');
+          if (!allowNegative) next = next.replace(/^-+/, '');
+          if (/\d[+-]/.test(next)) {
+            setText(next);
+            const result = evaluatePad(next, options);
+            emit(result.error || result.value === null ? '' : padValueToRaw(result.value, options.decimals));
+            return;
+          }
+          // A single number: at most one dot, and a single leading minus.
+          const negative = allowNegative && next.startsWith('-');
+          next = next.replace(/[+-]/g, '');
+          const firstDot = next.indexOf('.');
+          if (firstDot !== -1) {
+            next = next.slice(0, firstDot + 1) + next.slice(firstDot + 1).replace(/\./g, '');
+          }
+          next = negative ? `-${next}` : next;
+          setText(next);
+          emit(next);
+        }}
+        onBlur={(event) => {
+          /* Leaving the field turns a finished sum into its answer. */
+          if (isSum && sum && !sum.error && sum.value !== null) setText(padValueToRaw(sum.value, options.decimals));
+          onBlur?.(event);
+        }}
+      />
+      {sum && (
+        <span className={cx('amount-sum-hint', sum.error && 'is-error')} aria-live="polite">
+          {sum.error
+            ? t(sum.error === 'negative' ? 'pad.errorNegative' : sum.error === 'tooLarge' ? 'pad.errorTooLarge' : 'pad.errorInvalid')
+            : sum.value !== null
+              ? t('pad.result', { value: formatNumber(sum.value, options.decimals) })
+              : null}
+        </span>
+      )}
+    </>
   );
 }
 

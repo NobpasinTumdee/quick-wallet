@@ -20,11 +20,11 @@ import { useTranslation } from 'react-i18next';
 import { TranslationKey } from '../locales';
 
 import { cx } from '../lib/format';
-import { walletIconText } from '../lib/walletIcons';
 import { DatePreset, EMPTY_FILTERS, TxFilters, activeFilters } from '../lib/txFilters';
 import { TransactionType, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import { Badge, Button, DecimalInput, Field, Input, Select } from './ui';
+import { WalletPicker } from './WalletPicker';
 
 /**
  * The Activity filter drawer.
@@ -256,17 +256,12 @@ export function TransactionFilters({
 
             <div className="filter-pair">
               <Field label={t('common.wallet')}>
-                <Select
+                <WalletPicker
+                  wallets={wallets}
                   value={filters.walletId}
-                  onChange={(event) => onChange({ walletId: event.target.value })}
-                >
-                  <option value="">{t('activity.filterAllWallets')}</option>
-                  {wallets.map((wallet) => (
-                    <option key={wallet.id} value={wallet.id}>
-                      {walletIconText(wallet.icon)} {wallet.name}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(walletId) => onChange({ walletId })}
+                  emptyLabel={t('activity.filterAllWallets')}
+                />
               </Field>
 
               <Field label={t('common.type')}>
