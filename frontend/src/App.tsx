@@ -1,10 +1,13 @@
 import { Gate } from './components/Gate';
 import { Toaster } from './components/Toaster';
+import { useMobileLayoutRootClass } from './lib/mobileLayout';
 import { AuthProvider } from './state/AuthContext';
 import { SettingsProvider } from './state/SettingsContext';
 import { ThemeProvider } from './state/ThemeContext';
 
 export default function App() {
+  /* The phone layout's root class, from this device's choice — see lib/mobileLayout.ts. */
+  useMobileLayoutRootClass();
   return (
     <AuthProvider>
       {/* Settings live inside auth: they're scoped per user. */}

@@ -483,6 +483,74 @@
   --ring: 0 0 0 3px var(--accent-ring);
 }
 
+/* ==========================================================================
+   Mobile layout "New" tokens
+   --------------------------------------------------------------------------
+   Used only under `:root.ui-mobile-v2` inside the phone breakpoint (see the
+   end of app.css). Derived from the primitives like everything above, so all
+   themes carry them. Each colour starts as a plain existing variable and is
+   upgraded to its `color-mix()` form only where the browser supports it.
+   Text on these surfaces stays var(--text) / var(--accent-contrast): the
+   hero is mostly --bg, so it reads in pastel themes where white on a full
+   accent would not. Checked against every theme by contrast script.
+   ========================================================================== */
+:root {
+  --m2-radius-xl: 28px;
+  --m2-radius-lg: 22px;
+  --m2-radius-md: 16px;
+  /* The floating tab bar's gap to the screen edge: the home bar, or 8px. */
+  --m2-bar-lift: max(var(--space-2), env(safe-area-inset-bottom, 0px));
+
+  --m2-sheet-bg: var(--surface);
+  --m2-tile-bg: var(--surface-2);
+  --m2-card-border: var(--border);
+  --m2-hero-bg: var(--bg-deep);
+  /* The accent as a fill under --accent-contrast text: the month pill when
+     away from this month, the picked month, the bank card. */
+  --m2-accent-strong: var(--accent);
+  --m2-bankcard-bg: var(--accent);
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  :root {
+    /* Tints are capped by contrast: 6% is the most accent a tile can take
+       before muted text on it drops below 4.5:1 (or below what it gets on
+       the classic surface) in some theme — light is the tightest. */
+    --m2-tile-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    --m2-card-border: color-mix(in srgb, var(--border) 60%, transparent);
+    /* 12% keeps --text and --text-secondary at 4.5:1 (or their classic
+       ratio on --bg) in every theme — solarized is the tightest. Muted and
+       faint text would not survive any tint in several themes, so the Home
+       hero sets its small labels in --text-secondary (see app.css). */
+    --m2-hero-bg: linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent) 12%, var(--bg)) 0%,
+      color-mix(in srgb, var(--accent) 4%, var(--bg)) 100%
+    );
+    /* Leans from the accent towards --text, i.e. away from --accent-contrast
+       (the text that sits on it), so it always beats the plain accent. 84%
+       is the most accent it can keep and still give that text 4.5:1 in every
+       built-in theme (the tightest: cocoa, dracula, pine at 86%) — measured
+       per theme; see the nord override below. */
+    --m2-accent-strong: color-mix(in srgb, var(--accent) 84%, var(--text));
+    /* The bank card runs from there further towards --text (84% → ~66%),
+       so the whole card only gains on the 4.5:1 at its start. */
+    --m2-bankcard-bg: linear-gradient(
+      140deg,
+      var(--m2-accent-strong) 0%,
+      color-mix(in srgb, var(--m2-accent-strong) 78%, var(--text)) 100%
+    );
+  }
+
+  /* Nord with a custom accent (Settings → accent colour, which overrides the
+     theme's) can leave its contrast colour only 2.7:1 from the accent — the
+     green #15873d does. 62% (and ~48% at the card's far end) brings that back
+     over 4.5:1, and for nord's own accent it only adds contrast. */
+  :root[data-theme='nord'] {
+    --m2-accent-strong: color-mix(in srgb, var(--accent) 62%, var(--text));
+  }
+}
+
 /* ---- Follow the OS until an explicit choice is stored ---- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {

@@ -1046,6 +1046,10 @@ export const th: TranslationSchema = {
   },
 
   settings: {
+    mobileLayout: 'รูปแบบบนมือถือ',
+    mobileLayoutHint: 'หน้าตาของแอปบนโทรศัพท์ บันทึกไว้เฉพาะในอุปกรณ์นี้ ไม่มีผลกับหน้าจอขนาดใหญ่',
+    mobileLayoutClassic: 'แบบเดิม',
+    mobileLayoutNew: 'แบบใหม่',
     liveQuotesOn: ' · เปิดใช้ราคาเรียลไทม์แล้ว',
     liveQuotesOff: ' · ไม่มี API key ระบบจะใช้ราคาจำลอง',
     envHint: 'กำหนด <1>{{provider}}</1> และ <3>{{key}}</3> ในไฟล์ <5>{{file}}</5> แล้วรีสตาร์ทเซิร์ฟเวอร์',
@@ -2114,6 +2118,25 @@ export const th: TranslationSchema = {
     effectiveRate: 'อัตราภาษีที่แท้จริง',
     marginalRate: 'อัตราภาษีขั้นสูงสุด',
   },
+  home: {
+    greetingMorning: 'สวัสดีตอนเช้า',
+    greetingAfternoon: 'สวัสดีตอนบ่าย',
+    greetingEvening: 'สวัสดีตอนเย็น',
+    greetingMorningName: 'สวัสดีตอนเช้า {{name}}',
+    greetingAfternoonName: 'สวัสดีตอนบ่าย {{name}}',
+    greetingEveningName: 'สวัสดีตอนเย็น {{name}}',
+    quickAdd: 'เพิ่มรายการ',
+  },
+
+  period: {
+    open: 'เลือกเดือน กำลังแสดง {{month}}',
+    pickTitle: 'เลือกเดือน',
+    thisMonth: 'เดือนนี้',
+    backToToday: 'กลับไปเดือนนี้',
+    previousYear: 'ปีก่อนหน้า',
+    nextYear: 'ปีถัดไป',
+  },
+
   pad: {
     amount: 'จำนวนเงิน',
     close: 'ปิดแป้นตัวเลข',

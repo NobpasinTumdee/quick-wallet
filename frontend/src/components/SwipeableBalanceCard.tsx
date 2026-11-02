@@ -60,6 +60,8 @@ export function SwipeableBalanceCard({
   label,
   actions,
   children,
+  splitDecimals = false,
+  currencyChip,
 }: {
   views: BalanceView[];
   /** The heading above the figure — the same for every view. */
@@ -68,6 +70,11 @@ export function SwipeableBalanceCard({
   actions?: ReactNode;
   /** Meta below the carousel: badges, the tax CTA. */
   children?: ReactNode;
+  /** New phone layout: the decimals set smaller and lighter. Styling only —
+   *  the text, and what a screen reader reads, is unchanged. */
+  splitDecimals?: boolean;
+  /** New phone layout: a small currency tag beside the figure. */
+  currencyChip?: string;
 }) {
   const { t } = useTranslation();
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -146,7 +153,12 @@ export function SwipeableBalanceCard({
             {view.pending ? (
               <span className="balance-value-pending" aria-label={t('common.loading')} />
             ) : (
-              <span className={cx('hero-value', view.muted && 'is-historical')}>{view.amount}</span>
+              <HeroFigure
+                className={cx('hero-value', view.muted && 'is-historical')}
+                amount={view.amount}
+                splitDecimals={splitDecimals}
+                currencyChip={currencyChip}
+              />
             )}
             {view.note && <span className="balance-note">{view.note}</span>}
           </section>
@@ -183,5 +195,56 @@ export function SwipeableBalanceCard({
 
       {children}
     </div>
+  );
+}
+
+/**
+ * The headline figure. Classic renders the one span it always has; the new
+ * phone layout sets the decimals smaller and puts a currency tag beside the
+ * figure — outside it, because the figure's text is a clipped gradient and
+ * anything inside would inherit the transparent fill.
+ */
+function HeroFigure({
+  className,
+  amount,
+  splitDecimals,
+  currencyChip,
+}: {
+  className: string;
+  amount: string;
+  splitDecimals: boolean;
+  currencyChip?: string;
+}) {
+  if (!splitDecimals && !currencyChip) return <span className={className}>{amount}</span>;
+  /* When the chip carries the currency code, the figure drops it rather than
+     saying "THB" twice ("-THB 700.00" → "-700.00"). A symbol ("฿") stays. */
+  const shown =
+    currencyChip && amount.includes(currencyChip)
+      ? amount.replace(currencyChip, '').trim().replace(/^([-−+])\s+/, '$1')
+      : amount;
+  /* Only a trailing one- or two-digit fraction is split off, whichever mark
+     the locale uses, so a figure with no decimals ("¥1,234") stays whole. */
+  const match = splitDecimals ? /^(.*?\d)([.,]\d{1,2})(\D*)$/.exec(shown) : null;
+  return (
+    <span className="hero-figure">
+      {/* Read once, whole, as the formatter wrote it. */}
+      <span className="sr-only">{amount}</span>
+      <span className={className} aria-hidden="true">
+        {match ? (
+          <>
+            {match[1]}
+            <span className="hero-decimals">{match[2]}</span>
+            {match[3]}
+          </>
+        ) : (
+          shown
+        )}
+      </span>
+      {currencyChip && (
+        <span className="hero-currency-chip" aria-hidden="true">
+          {currencyChip}
+        </span>
+      )}
+    </span>
   );
 }

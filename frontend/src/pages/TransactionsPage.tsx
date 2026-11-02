@@ -10,7 +10,8 @@ import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { cx, formatDate, formatPeriod } from '../lib/format';
+import { cx, formatDate, formatPeriod, todayKey } from '../lib/format';
+import { useMobileV2 } from '../lib/mobileLayout';
 import { EMPTY_FILTERS, TxFilters, fetchScope, filterTransactions } from '../lib/txFilters';
 import { RecordedAt } from '../components/RecordedAt';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -80,6 +81,8 @@ export function TransactionsPage({ period }: { period: string }) {
      in the DOM, and this list can be five thousand rows — see the note in
      `useMediaQuery`. */
   const desktop = useMediaQuery(DESKTOP_QUERY);
+  /* The new phone layout groups the tiles by day. */
+  const mobileV2 = useMobileV2();
 
   const visible = useMemo(
     () => filterTransactions(transactions.items, filters),
@@ -113,6 +116,102 @@ export function TransactionsPage({ period }: { period: string }) {
   }
 
   const confirmDelete = useConfirm<Transaction>();
+
+  /* One activity row — the same in both phone layouts; the new one only
+     groups them by day. */
+  const renderTile = (tx: Transaction) => {
+    const primary =
+      tx.type === 'transfer'
+        ? t('activity.transferRoute', {
+            from: walletName(tx.walletId),
+            to: walletName(tx.toWalletId),
+          })
+        : tx.note || tx.category || t('activity.untitledEntry');
+
+    return (
+      <li key={tx.id} className={cx('tx-tile', isOptimistic(tx) && 'is-pending')}>
+        <button
+          type="button"
+          className="tx-tile-main"
+          onClick={() => {
+            setEditing(tx);
+            setFormOpen(true);
+          }}
+        >
+          {/* Direction, not a category glyph: the app has no icon per
+              category, and inventing one would be decoration. This
+              carries the same meaning as the old type badge in a
+              quarter of the width. */}
+          <span className={cx('tx-mark', `is-${tx.type}`)} aria-hidden="true">
+            <Icon
+              icon={
+                tx.type === 'income'
+                  ? ArrowDownLeft
+                  : tx.type === 'expense'
+                    ? ArrowUpRight
+                    : ArrowLeftRight
+              }
+              size="sm"
+            />
+          </span>
+
+          <span className="tx-body">
+            <span className="tx-title">{primary}</span>
+            <span className="tx-meta">
+              <span>{formatDate(tx.date, settings.locale)}</span>
+              <span className="tx-meta-sep" aria-hidden="true">·</span>
+              <span className="truncate">{walletName(tx.walletId)}</span>
+              {/* Desktop has room for the category the mobile tile
+                  folds into the title. */}
+              {tx.type !== 'transfer' && tx.category && (!mobileV2 || tx.note) && (
+                <span className="tx-meta-category">{tx.category}</span>
+              )}
+            </span>
+          </span>
+
+          <span className="tx-trailing">
+            <span
+              className={cx(
+                'tx-amount',
+                tx.type === 'income' && 'text-positive',
+                tx.type === 'expense' && 'text-negative',
+              )}
+            >
+              {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}
+              {money(tx.amount)}
+            </span>
+            <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="tx-remove"
+          aria-label={t('activity.deleteEntry', { amount: money(tx.amount) })}
+          onClick={() => confirmDelete.ask(tx)}
+        >
+          ✕
+        </button>
+      </li>
+    );
+  };
+
+  /* "Today", "Yesterday", else "Sat, 31 Oct" (plus the year when it is not
+     this year). */
+  const dayLabel = (date: string) => {
+    const today = todayKey();
+    if (date === today) return t('activity.datePresetToday');
+    if (date === shiftDay(today, -1)) return t('activity.datePresetYesterday');
+    const value = new Date(`${date}T00:00:00`);
+    if (Number.isNaN(value.getTime())) return formatDate(date, settings.locale);
+    return value.toLocaleDateString(settings.locale, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      ...(date.slice(0, 4) === today.slice(0, 4) ? {} : { year: 'numeric' }),
+    });
+  };
+
 
   function exportCsv() {
     /* Raw values, not formatted ones: a spreadsheet wants a number it can sum
@@ -192,7 +291,7 @@ export function TransactionsPage({ period }: { period: string }) {
         />
       </Card>
 
-      <Card padded={false}>
+      <Card padded={false} className={mobileV2 ? 'tx-card-v2' : undefined}>
         {transactions.mutationError && (
           <div style={{ padding: 'var(--space-4) var(--space-4) 0' }}>
             <Alert tone="error" onDismiss={transactions.clearMutationError}>
@@ -328,84 +427,22 @@ export function TransactionsPage({ period }: { period: string }) {
              to stay legible at the right. Delete keeps its own button, because
              a destructive action reached by the same gesture as the common one
              is how rows get deleted by accident. */
-          <ul className="tx-list">
-            {visible.map((tx) => {
-              const primary =
-                tx.type === 'transfer'
-                  ? t('activity.transferRoute', {
-                      from: walletName(tx.walletId),
-                      to: walletName(tx.toWalletId),
-                    })
-                  : tx.note || tx.category || t('activity.untitledEntry');
-
-              return (
-                <li key={tx.id} className={cx('tx-tile', isOptimistic(tx) && 'is-pending')}>
-                  <button
-                    type="button"
-                    className="tx-tile-main"
-                    onClick={() => {
-                      setEditing(tx);
-                      setFormOpen(true);
-                    }}
-                  >
-                    {/* Direction, not a category glyph: the app has no icon per
-                        category, and inventing one would be decoration. This
-                        carries the same meaning as the old type badge in a
-                        quarter of the width. */}
-                    <span className={cx('tx-mark', `is-${tx.type}`)} aria-hidden="true">
-                      <Icon
-                        icon={
-                          tx.type === 'income'
-                            ? ArrowDownLeft
-                            : tx.type === 'expense'
-                              ? ArrowUpRight
-                              : ArrowLeftRight
-                        }
-                        size="sm"
-                      />
-                    </span>
-
-                    <span className="tx-body">
-                      <span className="tx-title">{primary}</span>
-                      <span className="tx-meta">
-                        <span>{formatDate(tx.date, settings.locale)}</span>
-                        <span className="tx-meta-sep" aria-hidden="true">·</span>
-                        <span className="truncate">{walletName(tx.walletId)}</span>
-                        {/* Desktop has room for the category the mobile tile
-                            folds into the title. */}
-                        {tx.type !== 'transfer' && tx.category && (
-                          <span className="tx-meta-category">{tx.category}</span>
-                        )}
-                      </span>
-                    </span>
-
-                    <span className="tx-trailing">
-                      <span
-                        className={cx(
-                          'tx-amount',
-                          tx.type === 'income' && 'text-positive',
-                          tx.type === 'expense' && 'text-negative',
-                        )}
-                      >
-                        {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}
-                        {money(tx.amount)}
-                      </span>
-                      <RecordedAt createdAt={tx.createdAt} locale={settings.locale} />
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="tx-remove"
-                    aria-label={t('activity.deleteEntry', { amount: money(tx.amount) })}
-                    onClick={() => confirmDelete.ask(tx)}
-                  >
-                    ✕
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          mobileV2 ? (
+            /* New phone layout: the same tiles, grouped under a sticky header
+               per day. Each tile still shows its own date. */
+            <div className="tx-groups">
+              {groupByDate(visible).map((group) => (
+                <section key={group.key} className="tx-group">
+                  <h3 className="tx-group-head">
+                    {dayLabel(group.date)}
+                  </h3>
+                  <ul className="tx-list">{group.rows.map(renderTile)}</ul>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <ul className="tx-list">{visible.map(renderTile)}</ul>
+          )
           )
         )}
       </Card>
@@ -440,4 +477,23 @@ export function TransactionsPage({ period }: { period: string }) {
 
     </>
   );
+}
+
+/** Consecutive rows that share a date, in the list's own order. */
+function groupByDate(rows: Transaction[]): { key: string; date: string; rows: Transaction[] }[] {
+  const groups: { key: string; date: string; rows: Transaction[] }[] = [];
+  for (const tx of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last.date === tx.date) last.rows.push(tx);
+    else groups.push({ key: `${tx.date}-${groups.length}`, date: tx.date, rows: [tx] });
+  }
+  return groups;
+}
+
+/** "YYYY-MM-DD" shifted by whole days, in local time. */
+function shiftDay(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00`);
+  value.setDate(value.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
 }

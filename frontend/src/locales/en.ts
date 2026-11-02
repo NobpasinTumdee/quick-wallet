@@ -1080,6 +1080,10 @@ export const en = {
   },
 
   settings: {
+    mobileLayout: 'Mobile layout',
+    mobileLayoutHint: 'How the app looks on a phone. Saved on this device only; no effect on larger screens.',
+    mobileLayoutClassic: 'Classic',
+    mobileLayoutNew: 'New',
     liveQuotesOn: ' · live quotes enabled',
     liveQuotesOff: ' · no API key, prices are simulated',
     envHint: 'Set <1>{{provider}}</1> and <3>{{key}}</3> in <5>{{file}}</5>, then restart the dev server.',
@@ -2265,6 +2269,27 @@ export const en = {
     effectiveRate: 'Effective rate',
     marginalRate: 'Marginal rate',
   },
+  /* ---- Home in the new phone layout ---- */
+  home: {
+    greetingMorning: 'Good morning',
+    greetingAfternoon: 'Good afternoon',
+    greetingEvening: 'Good evening',
+    greetingMorningName: 'Good morning, {{name}}',
+    greetingAfternoonName: 'Good afternoon, {{name}}',
+    greetingEveningName: 'Good evening, {{name}}',
+    quickAdd: 'Add a transaction',
+  },
+
+  /* ---- The month pill (new phone layout) ---- */
+  period: {
+    open: 'Choose month. Showing {{month}}',
+    pickTitle: 'Choose a month',
+    thisMonth: 'This month',
+    backToToday: 'Back to this month',
+    previousYear: 'Previous year',
+    nextYear: 'Next year',
+  },
+
   /* ---- The in-app number pad ---- */
   pad: {
     amount: 'Amount',

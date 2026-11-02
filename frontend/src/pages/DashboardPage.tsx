@@ -1,5 +1,8 @@
 import {
+  ArrowDown,
+  ArrowLeftRight,
   ArrowRight,
+  ArrowUp,
   Calculator,
   ChartNoAxesCombined,
   Globe,
@@ -13,6 +16,7 @@ import { Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
+import { TileAmount } from '../components/TileAmount';
 import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { FinancialInboxWidget } from '../components/FinancialInboxWidget';
@@ -24,10 +28,13 @@ import { useStockQuotes } from '../hooks/useStockQuotes';
 import { BalanceContextId, balanceContexts, historicalContexts } from '../lib/balanceContexts';
 import { periodRange } from '../lib/cashflow';
 import { formatPercent, formatPeriod, formatDate, cx } from '../lib/format';
+import { useMobileV2 } from '../lib/mobileLayout';
 import { positionKeyOf } from '../lib/positions';
 import { Route } from '../lib/router';
+import type { TranslationKey } from '../locales/en';
+import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Goal, Investment, Transaction, WalletBalance } from '../types';
+import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 
@@ -46,10 +53,32 @@ const TaxCalculatorModal = lazyWithRetry(() =>
 /** How far back the cash-flow chart looks. One year of scrollable history. */
 const HISTORY_MONTHS = 12;
 
-export function DashboardPage({ period, onNavigate }: { period: string; onNavigate: (route: Route) => void }) {
+/** The new phone layout's quick-add buttons, in the form's own order. */
+const QUICK_TYPES: { type: TransactionType; label: TranslationKey; icon: typeof ArrowDown }[] = [
+  { type: 'expense', label: 'forms.typeExpense', icon: ArrowDown },
+  { type: 'income', label: 'forms.typeIncome', icon: ArrowUp },
+  { type: 'transfer', label: 'forms.typeTransfer', icon: ArrowLeftRight },
+];
+
+export function DashboardPage({
+  period,
+  onNavigate,
+  onQuickAdd,
+}: {
+  period: string;
+  onNavigate: (route: Route) => void;
+  /** Opens the shell's New transaction form with this type already picked —
+   *  the same form, path and validation the "+" button's tap opens. Used by
+   *  the new phone layout's Expense / Income / Transfer buttons. */
+  onQuickAdd?: (type: TransactionType) => void;
+}) {
   const { settings } = useSettings();
   const { locale } = settings;
   const format = useMoneyFormatter();
+  /* The new phone layout: hero header, quick-add buttons, the content sheet.
+     False on desktop and in Classic, which render exactly as before. */
+  const mobileV2 = useMobileV2();
+  const { user } = useAuth();
 
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
     '/api/dashboard',
@@ -243,17 +272,318 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
         </div>
       </div>
       <span className={cx('list-item-amount', wallet.balance < 0 && 'text-negative')}>
-        {money(wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance)}
+        {mobileV2 ? (
+          <TileAmount
+            text={money(wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance)}
+            code={format.display}
+          />
+        ) : (
+          money(wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance)
+        )}
       </span>
     </div>
   );
 
+  /* Built once and placed by layout: inside the hero in Classic and on
+     desktop, at the top of the content sheet in the new phone layout. */
+  const metrics = (
+    <div className="hero-metrics">
+      <div className="metric">
+        <span className="section-label">{t('dashboard.cashOnHand')}</span>
+        <span className="metric-value">{money(cashBalance, true)}</span>
+        <span className="metric-hint">
+          {hasDebt ? t('dashboard.afterCards', { amount: money(safeToSpend, true) }) : t('dashboard.cashWallets')}
+        </span>
+      </div>
+      {hasDebt && (
+        <div className="metric metric--negative">
+          <span className="section-label">{t('dashboard.cardDebt')}</span>
+          <span className="metric-value text-negative">{money(creditDebt, true)}</span>
+          <span className="metric-hint">
+            {data.creditLimit > 0
+              ? t('dashboard.limitUsed', { percent: formatPercent(data.creditUtilization, 0) })
+              : t('dashboard.alreadySubtracted')}
+          </span>
+        </div>
+      )}
+      <div className="metric metric--positive">
+        <span className="section-label">{t('dashboard.income')}</span>
+        <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>
+        <span className="metric-hint">{t('common.thisMonth')}</span>
+      </div>
+      <div className="metric metric--negative">
+        <span className="section-label">{t('dashboard.spent')}</span>
+        <span className="metric-value text-negative">{money(data.monthExpense, true)}</span>
+        <span className="metric-hint">
+          {t('dashboard.categoryCount', { count: data.categoryBreakdown.length })}
+        </span>
+      </div>
+      <div className="metric metric--accent">
+        <span className="section-label">{t('dashboard.savedLabel')}</span>
+        <span className="metric-value">{money(data.monthNet, true)}</span>
+        <span className="metric-hint">{t('dashboard.savingsRate', { percent: formatPercent(data.savingsRate) })}</span>
+      </div>
+      {hasPositions && (
+        <div className={cx('metric', portfolio.totalPnl >= 0 ? 'metric--positive' : 'metric--negative')}>
+          <span className="section-label">{t('dashboard.unrealised')}</span>
+          <span
+            className={cx('metric-value', portfolio.totalPnl >= 0 ? 'text-positive' : 'text-negative')}
+          >
+            {formatPercent(portfolio.totalPnlPercent, 2, true)}
+          </span>
+          <span className="metric-hint">{format(portfolio.totalPnl, { signed: true })}</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const bento = (
+    <>
+    {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
+    <div className="bento">
+      <Card
+        className="bento-item--wide"
+        title={t('dashboard.budgetProgress')}
+        subtitle={formatPeriod(period, locale)}
+        actions={
+          <Button size="sm" onClick={() => onNavigate('budgets')}>
+            {t('common.manage')}
+          </Button>
+        }
+        padded={data.budgets.length === 0}
+      >
+        {data.budgets.length === 0 ? (
+          <EmptyState
+            icon={<Icon icon={Target} size="xl" />}
+            title={t('dashboard.noBudgetsTitle')}
+            description={t('dashboard.noBudgetsBody')}
+            action={
+              <Button variant="primary" size="sm" onClick={() => onNavigate('budgets')}>
+                {t('dashboard.createBudget')}
+              </Button>
+            }
+          />
+        ) : (
+          <div className="list">
+            {data.budgets.slice(0, 5).map((budget) => (
+              <div key={budget.id} className="budget-item">
+                <div className="budget-head">
+                  <span className="budget-name truncate">
+                    {budget.targetLabel || t('dashboard.allSpending')}
+                    {budget.mode === 'percent' && <Badge tone="accent">{budget.value}%</Badge>}
+                  </span>
+                  <span className="budget-numbers">
+                    {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
+                  </span>
+                </div>
+                <ProgressBar
+                  percent={budget.percentUsed}
+                  tone={budget.status}
+                  label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
+                />
+                <div className="budget-foot">
+                  <span>{formatPercent(budget.percentUsed)} used</span>
+                  <span className={budget.remaining < 0 ? 'text-negative' : ''}>
+                    {budget.remaining < 0
+                      ? t('dashboard.budgetOver', { amount: money(Math.abs(budget.remaining)) })
+                      : t('dashboard.budgetLeft', { amount: money(budget.remaining) })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Wallets split by mode — the two halves of the app, side by side. */}
+      <Card
+        className="bento-item--narrow"
+        title={t('dashboard.walletsTitle')}
+        actions={
+          <Button size="sm" onClick={() => onNavigate('wallets')}>
+            {t('common.manage')}
+          </Button>
+        }
+        padded={false}
+      >
+        {spendWallets.length > 0 && (
+          <>
+            <div className="list-group-label">
+              <span className="section-label">{t('dashboard.spending')}</span>
+              <span className="section-label">{money(data.liquidBalance, true)}</span>
+            </div>
+            <div className={cx('list', mobileV2 && 'home-wallet-grid')}>{spendWallets.map(walletRow)}</div>
+          </>
+        )}
+
+        {investWallets.length > 0 && (
+          <>
+            <div className="list-group-label">
+              <span className="section-label">{t('dashboard.investing')}</span>
+              <span className="section-label">
+                {money(data.investmentCash + data.investedCost, true)}
+              </span>
+            </div>
+            <div className={cx('list', mobileV2 && 'home-wallet-grid')}>{investWallets.map(walletRow)}</div>
+          </>
+        )}
+      </Card>
+
+      {/* Twelve months of paired bars. At half width each month gets ~40px,
+          which is why the component scrolls horizontally; given the full row
+          it mostly does not have to. */}
+      <Suspense
+        fallback={<div className="card bento-item--full ischart-placeholder" aria-hidden="true" />}
+      >
+        <IncomeSpendingChart
+          className="bento-item--full"
+          transactions={history.items}
+          trend={data.trend}
+          period={period}
+          months={HISTORY_MONTHS}
+          loading={history.initialLoading}
+          stale={history.isValidating}
+        />
+      </Suspense>
+
+
+      <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
+        {data.categoryBreakdown.length === 0 ? (
+          <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
+        ) : (
+          <div className="stack stack--tight">
+            {data.categoryBreakdown.slice(0, 7).map((row, index) => (
+              <div key={row.category} className="share-row">
+                <span className="truncate">{row.category}</span>
+                <span className="share-track">
+                  <span
+                    className="share-fill"
+                    style={{ width: `${row.share}%`, animationDelay: `${index * 55}ms` }}
+                  />
+                </span>
+                <span className="numeric text-muted">{money(row.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+
+      {/* Half width so it pairs with "Where it went" — dense packing lifts it
+          into that row's empty half rather than leaving one there. */}
+      <Card
+        className="bento-item--half"
+        title={t('dashboard.recentTitle')}
+        actions={
+          <Button size="sm" onClick={() => onNavigate('transactions')}>
+            {t('common.seeAll')}
+          </Button>
+        }
+        padded={false}
+      >
+        {data.recentTransactions.length === 0 ? (
+          <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.noTransactionsTitle')} description={t('dashboard.noTransactionsBody')} />
+        ) : (
+          <div className="list">
+            {data.recentTransactions.map((tx) => {
+              const wallet = data.wallets.find((w) => w.id === tx.walletId);
+              const target = data.wallets.find((w) => w.id === tx.toWalletId);
+              const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '';
+              return (
+                <div key={tx.id} className="list-item">
+                  <span
+                    className="avatar"
+                    aria-hidden="true"
+                    style={
+                      tx.type === 'income'
+                        ? { background: 'var(--positive-soft)', color: 'var(--positive)' }
+                        : tx.type === 'expense'
+                          ? { background: 'var(--negative-soft)', color: 'var(--negative)' }
+                          : undefined
+                    }
+                  >
+                    {tx.type === 'income' ? '↑' : tx.type === 'expense' ? '↓' : '⇄'}
+                  </span>
+                  <div className="list-item-main">
+                    <div className="list-item-title truncate">
+                      {tx.type === 'transfer' ? `${wallet?.name ?? '?'} → ${target?.name ?? '?'}` : tx.category}
+                    </div>
+                    <div className="list-item-sub">
+                      {formatDate(tx.date, locale)}
+                      {/* Inline here rather than on its own line: this list is
+                          four rows in a half-width card, and a third line per
+                          row would cost more than the time is worth. */}
+                      <RecordedAt createdAt={tx.createdAt} locale={locale} variant="inline" />
+                      {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
+                    </div>
+                  </div>
+                  <span
+                    className={cx(
+                      'list-item-amount',
+                      tx.type === 'income' && 'text-positive',
+                      tx.type === 'expense' && 'text-negative',
+                    )}
+                  >
+                    {sign}
+                    {money(tx.amount)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* Directly under the balance: the inbox is the other half of "where do
+        I stand" — what the balances do not know about yet. */}
+      <FinancialInboxWidget wallets={data.wallets} />
+
+      {/* ---- Gateway to /analytics ----
+          Full width and last, so it reads as "there is more, through here"
+          rather than competing with the figures above it.
+
+          It carries real weight on a phone: the gesture arc is capped at five
+          items and Analytics did not make the cut, so this card is the only
+          way onto that screen below 1000px. A whole card rather than a button
+          for the same reason — it has to be findable, not just present. */}
+      <button
+        type="button"
+        className="card bento-item--full analytics-cta"
+        onClick={() => onNavigate('analytics')}
+      >
+        <span className="analytics-cta-mark" aria-hidden="true">
+          <Icon icon={ChartNoAxesCombined} />
+        </span>
+        <span className="analytics-cta-body">
+          <span className="analytics-cta-title">{t('analytics.title')}</span>
+          <span className="analytics-cta-sub">{t('analytics.subtitle')}</span>
+        </span>
+        <Icon icon={ArrowRight} size="sm" className="analytics-cta-arrow" />
+      </button>
+    </div>
+    </>
+  );
+
+  /* "Good evening, Nob" — or just "Good evening" without a name. */
+  const hour = new Date().getHours();
+  const greetingPart = hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
+  const displayName = user?.displayName?.trim();
+
   return (
     <>
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
-      <section className="hero">
+      <section className={cx('hero', mobileV2 && 'home-hero')}>
+        {mobileV2 && (
+          <p className="home-greeting">
+            {displayName
+              ? t(`home.greeting${greetingPart}Name` as const, { name: displayName })
+              : t(`home.greeting${greetingPart}` as const)}
+          </p>
+        )}
         <div className="hero-primary">
           <SwipeableBalanceCard
+            splitDecimals={mobileV2}
+            currencyChip={mobileV2 ? format.display : undefined}
             label={
               showingHistorical
                 ? t('dashboard.endOfMonthBalance', { month: formatPeriod(period, locale) })
@@ -339,278 +669,35 @@ export function DashboardPage({ period, onNavigate }: { period: string; onNaviga
           </SwipeableBalanceCard>
         </div>
 
-        <div className="hero-metrics">
-          <div className="metric">
-            <span className="section-label">{t('dashboard.cashOnHand')}</span>
-            <span className="metric-value">{money(cashBalance, true)}</span>
-            <span className="metric-hint">
-              {hasDebt ? t('dashboard.afterCards', { amount: money(safeToSpend, true) }) : t('dashboard.cashWallets')}
-            </span>
-          </div>
-          {hasDebt && (
-            <div className="metric metric--negative">
-              <span className="section-label">{t('dashboard.cardDebt')}</span>
-              <span className="metric-value text-negative">{money(creditDebt, true)}</span>
-              <span className="metric-hint">
-                {data.creditLimit > 0
-                  ? t('dashboard.limitUsed', { percent: formatPercent(data.creditUtilization, 0) })
-                  : t('dashboard.alreadySubtracted')}
-              </span>
-            </div>
-          )}
-          <div className="metric metric--positive">
-            <span className="section-label">{t('dashboard.income')}</span>
-            <span className="metric-value text-positive">{money(data.monthIncome, true)}</span>
-            <span className="metric-hint">{t('common.thisMonth')}</span>
-          </div>
-          <div className="metric metric--negative">
-            <span className="section-label">{t('dashboard.spent')}</span>
-            <span className="metric-value text-negative">{money(data.monthExpense, true)}</span>
-            <span className="metric-hint">
-              {t('dashboard.categoryCount', { count: data.categoryBreakdown.length })}
-            </span>
-          </div>
-          <div className="metric metric--accent">
-            <span className="section-label">{t('dashboard.savedLabel')}</span>
-            <span className="metric-value">{money(data.monthNet, true)}</span>
-            <span className="metric-hint">{t('dashboard.savingsRate', { percent: formatPercent(data.savingsRate) })}</span>
-          </div>
-          {hasPositions && (
-            <div className={cx('metric', portfolio.totalPnl >= 0 ? 'metric--positive' : 'metric--negative')}>
-              <span className="section-label">{t('dashboard.unrealised')}</span>
-              <span
-                className={cx('metric-value', portfolio.totalPnl >= 0 ? 'text-positive' : 'text-negative')}
+        {mobileV2 && onQuickAdd && (
+          <div className="home-actions" role="group" aria-label={t('home.quickAdd')}>
+            {QUICK_TYPES.map((option) => (
+              <button
+                key={option.type}
+                type="button"
+                className={cx('home-action', `is-${option.type}`)}
+                onClick={() => onQuickAdd(option.type)}
               >
-                {formatPercent(portfolio.totalPnlPercent, 2, true)}
-              </span>
-              <span className="metric-hint">{format(portfolio.totalPnl, { signed: true })}</span>
-            </div>
-          )}
-        </div>
+                <Icon icon={option.icon} size="sm" />
+                {t(option.label)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!mobileV2 && metrics}
       </section>
 
-      {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
-      <div className="bento">
-        <Card
-          className="bento-item--wide"
-          title={t('dashboard.budgetProgress')}
-          subtitle={formatPeriod(period, locale)}
-          actions={
-            <Button size="sm" onClick={() => onNavigate('budgets')}>
-              {t('common.manage')}
-            </Button>
-          }
-          padded={data.budgets.length === 0}
-        >
-          {data.budgets.length === 0 ? (
-            <EmptyState
-              icon={<Icon icon={Target} size="xl" />}
-              title={t('dashboard.noBudgetsTitle')}
-              description={t('dashboard.noBudgetsBody')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => onNavigate('budgets')}>
-                  {t('dashboard.createBudget')}
-                </Button>
-              }
-            />
-          ) : (
-            <div className="list">
-              {data.budgets.slice(0, 5).map((budget) => (
-                <div key={budget.id} className="budget-item">
-                  <div className="budget-head">
-                    <span className="budget-name truncate">
-                      {budget.targetLabel || t('dashboard.allSpending')}
-                      {budget.mode === 'percent' && <Badge tone="accent">{budget.value}%</Badge>}
-                    </span>
-                    <span className="budget-numbers">
-                      {money(budget.spent)} <span className="text-faint">/ {money(budget.limit)}</span>
-                    </span>
-                  </div>
-                  <ProgressBar
-                    percent={budget.percentUsed}
-                    tone={budget.status}
-                    label={t('dashboard.budgetUsed', { label: budget.targetLabel, percent: formatPercent(budget.percentUsed) })}
-                  />
-                  <div className="budget-foot">
-                    <span>{formatPercent(budget.percentUsed)} used</span>
-                    <span className={budget.remaining < 0 ? 'text-negative' : ''}>
-                      {budget.remaining < 0
-                        ? t('dashboard.budgetOver', { amount: money(Math.abs(budget.remaining)) })
-                        : t('dashboard.budgetLeft', { amount: money(budget.remaining) })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Wallets split by mode — the two halves of the app, side by side. */}
-        <Card
-          className="bento-item--narrow"
-          title={t('dashboard.walletsTitle')}
-          actions={
-            <Button size="sm" onClick={() => onNavigate('wallets')}>
-              {t('common.manage')}
-            </Button>
-          }
-          padded={false}
-        >
-          {spendWallets.length > 0 && (
-            <>
-              <div className="list-group-label">
-                <span className="section-label">{t('dashboard.spending')}</span>
-                <span className="section-label">{money(data.liquidBalance, true)}</span>
-              </div>
-              <div className="list">{spendWallets.map(walletRow)}</div>
-            </>
-          )}
-
-          {investWallets.length > 0 && (
-            <>
-              <div className="list-group-label">
-                <span className="section-label">{t('dashboard.investing')}</span>
-                <span className="section-label">
-                  {money(data.investmentCash + data.investedCost, true)}
-                </span>
-              </div>
-              <div className="list">{investWallets.map(walletRow)}</div>
-            </>
-          )}
-        </Card>
-
-        {/* Twelve months of paired bars. At half width each month gets ~40px,
-            which is why the component scrolls horizontally; given the full row
-            it mostly does not have to. */}
-        <Suspense
-          fallback={<div className="card bento-item--full ischart-placeholder" aria-hidden="true" />}
-        >
-          <IncomeSpendingChart
-            className="bento-item--full"
-            transactions={history.items}
-            trend={data.trend}
-            period={period}
-            months={HISTORY_MONTHS}
-            loading={history.initialLoading}
-            stale={history.isValidating}
-          />
-        </Suspense>
-
-
-        <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
-          {data.categoryBreakdown.length === 0 ? (
-            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
-          ) : (
-            <div className="stack stack--tight">
-              {data.categoryBreakdown.slice(0, 7).map((row, index) => (
-                <div key={row.category} className="share-row">
-                  <span className="truncate">{row.category}</span>
-                  <span className="share-track">
-                    <span
-                      className="share-fill"
-                      style={{ width: `${row.share}%`, animationDelay: `${index * 55}ms` }}
-                    />
-                  </span>
-                  <span className="numeric text-muted">{money(row.amount)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-
-        {/* Half width so it pairs with "Where it went" — dense packing lifts it
-            into that row's empty half rather than leaving one there. */}
-        <Card
-          className="bento-item--half"
-          title={t('dashboard.recentTitle')}
-          actions={
-            <Button size="sm" onClick={() => onNavigate('transactions')}>
-              {t('common.seeAll')}
-            </Button>
-          }
-          padded={false}
-        >
-          {data.recentTransactions.length === 0 ? (
-            <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.noTransactionsTitle')} description={t('dashboard.noTransactionsBody')} />
-          ) : (
-            <div className="list">
-              {data.recentTransactions.map((tx) => {
-                const wallet = data.wallets.find((w) => w.id === tx.walletId);
-                const target = data.wallets.find((w) => w.id === tx.toWalletId);
-                const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '';
-                return (
-                  <div key={tx.id} className="list-item">
-                    <span
-                      className="avatar"
-                      aria-hidden="true"
-                      style={
-                        tx.type === 'income'
-                          ? { background: 'var(--positive-soft)', color: 'var(--positive)' }
-                          : tx.type === 'expense'
-                            ? { background: 'var(--negative-soft)', color: 'var(--negative)' }
-                            : undefined
-                      }
-                    >
-                      {tx.type === 'income' ? '↑' : tx.type === 'expense' ? '↓' : '⇄'}
-                    </span>
-                    <div className="list-item-main">
-                      <div className="list-item-title truncate">
-                        {tx.type === 'transfer' ? `${wallet?.name ?? '?'} → ${target?.name ?? '?'}` : tx.category}
-                      </div>
-                      <div className="list-item-sub">
-                        {formatDate(tx.date, locale)}
-                        {/* Inline here rather than on its own line: this list is
-                            four rows in a half-width card, and a third line per
-                            row would cost more than the time is worth. */}
-                        <RecordedAt createdAt={tx.createdAt} locale={locale} variant="inline" />
-                        {tx.note ? ` · ${tx.note}` : wallet ? ` · ${wallet.name}` : ''}
-                      </div>
-                    </div>
-                    <span
-                      className={cx(
-                        'list-item-amount',
-                        tx.type === 'income' && 'text-positive',
-                        tx.type === 'expense' && 'text-negative',
-                      )}
-                    >
-                      {sign}
-                      {money(tx.amount)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        {/* Directly under the balance: the inbox is the other half of "where do
-          I stand" — what the balances do not know about yet. */}
-        <FinancialInboxWidget wallets={data.wallets} />
-
-        {/* ---- Gateway to /analytics ----
-            Full width and last, so it reads as "there is more, through here"
-            rather than competing with the figures above it.
-
-            It carries real weight on a phone: the gesture arc is capped at five
-            items and Analytics did not make the cut, so this card is the only
-            way onto that screen below 1000px. A whole card rather than a button
-            for the same reason — it has to be findable, not just present. */}
-        <button
-          type="button"
-          className="card bento-item--full analytics-cta"
-          onClick={() => onNavigate('analytics')}
-        >
-          <span className="analytics-cta-mark" aria-hidden="true">
-            <Icon icon={ChartNoAxesCombined} />
-          </span>
-          <span className="analytics-cta-body">
-            <span className="analytics-cta-title">{t('analytics.title')}</span>
-            <span className="analytics-cta-sub">{t('analytics.subtitle')}</span>
-          </span>
-          <Icon icon={ArrowRight} size="sm" className="analytics-cta-arrow" />
-        </button>
-      </div>
+      {mobileV2 ? (
+        /* The content sheet: rounded top corners over the hero's foot, the
+           metrics first, then every panel in the same order as always. */
+        <div className="home-sheet">
+          {metrics}
+          {bento}
+        </div>
+      ) : (
+        bento
+      )}
 
       {/* The chunk is only fetched once the button is pressed, and the
           component itself holds no subscription and issues no request until

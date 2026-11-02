@@ -1,8 +1,10 @@
+import { LogOut } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
 import { CategorySettings } from '../components/CategorySettings';
+import { Icon } from '../components/Icon';
 import { MobileNavSettings } from '../components/MobileNavSettings';
 import { PaydaySettings } from '../components/PaydaySettings';
 import { ThemeSettings } from '../components/ThemeSettings';
@@ -15,6 +17,7 @@ import {
   Field,
   Input,
   RefreshButton,
+  Segmented,
   Select,
   decimalToInput,
   parseDecimal,
@@ -25,6 +28,7 @@ import { MobileNavConfig, resolveMobileNav, resolvePaydays } from '../lib/mobile
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
+import { MobileLayout, useMobileLayout, useMobileV2 } from '../lib/mobileLayout';
 import { useNumberPadSetting } from '../lib/numberPad';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
@@ -173,6 +177,9 @@ export function SettingsPage() {
               fields open the in-app number pad on a phone. Off brings back
               the system keyboard, the safety switch if the pad misbehaves. */}
           <NumberPadSwitch />
+
+          {/* The same kind of setting: immediate, per device, phone only. */}
+          <MobileLayoutSetting />
 
           <Field label={t('settings.locale')} hint={t('settings.localeHint')}>
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
@@ -413,7 +420,24 @@ export function SettingsPage() {
           </div>
         </form>
       </Card>
+
+      {/* The new phone layout moves Sign out off the top bar to here. Same
+          call, no confirm, exactly as the top-bar button had. */}
+      <SignOutRow />
     </>
+  );
+}
+
+function SignOutRow() {
+  const { t } = useTranslation();
+  const { logout } = useAuth();
+  const mobileV2 = useMobileV2();
+  if (!mobileV2) return null;
+  return (
+    <button type="button" className="settings-signout" onClick={logout}>
+      <Icon icon={LogOut} size="sm" />
+      {t('nav.signOut')}
+    </button>
   );
 }
 
@@ -437,5 +461,23 @@ function NumberPadSwitch() {
         </span>
       </label>
     </div>
+  );
+}
+
+function MobileLayoutSetting() {
+  const { t } = useTranslation();
+  const [layout, setLayout] = useMobileLayout();
+  return (
+    <Field label={t('settings.mobileLayout')} hint={t('settings.mobileLayoutHint')} className="span-2">
+      <Segmented<MobileLayout>
+        value={layout}
+        ariaLabel={t('settings.mobileLayout')}
+        onChange={setLayout}
+        options={[
+          { value: 'classic', label: t('settings.mobileLayoutClassic') },
+          { value: 'new', label: t('settings.mobileLayoutNew') },
+        ]}
+      />
+    </Field>
   );
 }

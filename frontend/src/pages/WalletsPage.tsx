@@ -1,23 +1,27 @@
-import { Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { Trash2, Wallet } from 'lucide-react';
+import { KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PasswordConfirmModal } from '../components/PasswordConfirmModal';
 import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
 import { Icon } from '../components/Icon';
+import { TileAmount } from '../components/TileAmount';
 import { WalletGridSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { ApiError } from '../api/client';
 import { isOptimistic } from '../hooks/useExcelDB';
 import { useWallets } from '../hooks/useWallets';
 import { cx } from '../lib/format';
+import { useMobileV2 } from '../lib/mobileLayout';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
 
 export function WalletsPage() {
   const { t } = useTranslation();
   const money = useMoneyFormatter();
+  /* The new phone layout's bank cards; false on desktop and in Classic. */
+  const mobileV2 = useMobileV2();
   const [showArchived, setShowArchived] = useState(false);
 
   const wallets = useWallets();
@@ -120,6 +124,138 @@ export function WalletsPage() {
     setFormOpen(true);
   }
 
+  /* Shared by both layouts. A card's balance is stored negative like every
+     other debt, but "Balance -฿5,000" is not how anyone thinks about a card:
+     it is flipped for reading only — nothing downstream sees the change. */
+  const balanceLabel = (wallet: WalletBalance) =>
+    wallet.type === 'CREDIT'
+      ? t('wallets.owed')
+      : wallet.mode === 'investment'
+        ? t('wallets.cash')
+        : t('common.balance');
+  const balanceShown = (wallet: WalletBalance) =>
+    wallet.type === 'CREDIT' ? Math.max(0, -wallet.balance) : wallet.balance;
+
+  const walletActions = (wallet: WalletBalance) => (
+    <>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => {
+          setEditing(wallet);
+          wallets.clearMutationError();
+          setFormOpen(true);
+        }}
+      >
+        {t('common.edit')}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => void wallets.update(wallet.id, { archived: !wallet.archived })}
+      >
+        {wallet.archived ? t('common.restore') : t('common.archive')}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => askToDelete(wallet)}>
+        {t('common.delete')}
+      </Button>
+    </>
+  );
+
+  /**
+   * The new phone layout: the wallet as a bank card — name, kind and the
+   * headline balance on the theme's accent — then the rest as detail rows and
+   * the same three actions as full-size buttons. Every figure and action the
+   * classic card has, nothing behind a tap.
+   */
+  const walletCardV2 = (wallet: WalletBalance) => (
+    <article
+      key={wallet.id}
+      className={cx(
+        'wallet-card wallet-card--v2',
+        wallet.archived && 'is-archived',
+        isOptimistic(wallet) && 'is-pending',
+      )}
+    >
+      <div className="wallet-bankcard">
+        <header className="wallet-bankcard-top">
+          <WalletIconRenderer icon={wallet.icon} color={wallet.color} className="avatar" />
+          <div className="wallet-bankcard-id">
+            <span className="wallet-card-name truncate">{wallet.name}</span>
+            <span className="wallet-bankcard-sub truncate">
+              {wallet.type === 'CREDIT' ? t('wallets.creditCard') : wallet.kind} · {wallet.currency}
+            </span>
+          </div>
+          {wallet.archived && <Badge>{t('wallets.archived')}</Badge>}
+        </header>
+        <div className="wallet-bankcard-balance">
+          <span className="wallet-bankcard-label">{balanceLabel(wallet)}</span>
+          <span className={cx('wallet-bankcard-value', wallet.balance < 0 && 'is-negative')}>
+            <TileAmount text={money(balanceShown(wallet))} code={money.display} />
+          </span>
+        </div>
+      </div>
+
+      <dl className="wallet-rows">
+        {wallet.mode === 'investment' ? (
+          <div className="wallet-row">
+            <dt>{t('wallets.invested')}</dt>
+            <dd>{money(wallet.investedCost)}</dd>
+          </div>
+        ) : (
+          <div className="wallet-row">
+            <dt>{t('wallets.activity')}</dt>
+            <dd>{wallet.transactionCount}</dd>
+          </div>
+        )}
+        {wallet.note && (
+          <div className="wallet-row wallet-row--note">
+            <dt>{t('common.note')}</dt>
+            <dd>
+              <WalletNote text={wallet.note} />
+            </dd>
+          </div>
+        )}
+        <div className="wallet-row wallet-row--muted">
+          <dt>{t('wallets.openedWith', { amount: money(wallet.openingBalance, { compact: true }) })}</dt>
+        </div>
+      </dl>
+
+      {/* Edit and Archive side by side; Delete apart, as a quieter outlined
+          icon, so it is not the button a thumb lands on by accident. Same
+          handlers and the same confirmation as the classic card. */}
+      <div className="wallet-actions">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setEditing(wallet);
+            wallets.clearMutationError();
+            setFormOpen(true);
+          }}
+        >
+          {t('common.edit')}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => void wallets.update(wallet.id, { archived: !wallet.archived })}
+        >
+          {wallet.archived ? t('common.restore') : t('common.archive')}
+        </Button>
+        <button
+          type="button"
+          className="wallet-delete"
+          aria-label={t('common.delete')}
+          title={t('common.delete')}
+          onClick={() => askToDelete(wallet)}
+        >
+          <Icon icon={Trash2} size="sm" />
+        </button>
+      </div>
+    </article>
+  );
+
   /** One wallet, as a card in the mode's grid. */
   const walletCard = (wallet: WalletBalance) => (
     <article
@@ -142,15 +278,9 @@ export function WalletsPage() {
           {/* A card's balance is stored negative like every other debt, but
               "Balance -฿5,000" is not how anyone thinks about a card. Flipped
               here for reading only — nothing downstream sees the change. */}
-          <span className="section-label">
-            {wallet.type === 'CREDIT'
-              ? t('wallets.owed')
-              : wallet.mode === 'investment'
-                ? t('wallets.cash')
-                : t('common.balance')}
-          </span>
+          <span className="section-label">{balanceLabel(wallet)}</span>
           <span className={cx('metric-value', wallet.balance < 0 && 'text-negative')}>
-            {money(wallet.type === 'CREDIT' ? Math.max(0, -wallet.balance) : wallet.balance)}
+            {money(balanceShown(wallet))}
           </span>
         </div>
         {wallet.mode === 'investment' ? (
@@ -173,27 +303,7 @@ export function WalletsPage() {
           {t('wallets.openedWith', { amount: money(wallet.openingBalance, { compact: true }) })}
         </span>
         <div className="row-actions">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setEditing(wallet);
-              wallets.clearMutationError();
-              setFormOpen(true);
-            }}
-          >
-            {t('common.edit')}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void wallets.update(wallet.id, { archived: !wallet.archived })}
-          >
-            {wallet.archived ? t('common.restore') : t('common.archive')}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => askToDelete(wallet)}>
-            {t('common.delete')}
-          </Button>
+          {walletActions(wallet)}
         </div>
       </footer>
     </article>
@@ -227,7 +337,7 @@ export function WalletsPage() {
           </Button>
         </div>
       ) : (
-        <div className="wallet-grid">{items.map(walletCard)}</div>
+        <div className="wallet-grid">{items.map(mobileV2 ? walletCardV2 : walletCard)}</div>
       )}
     </section>
   );
@@ -353,5 +463,51 @@ export function WalletsPage() {
         onClose={closeDelete}
       />
     </>
+  );
+}
+
+/**
+ * A wallet's note in the new phone layout: two lines with "…", and — only when
+ * it is actually longer than that — a tap (or Enter / Space) to show it all.
+ * The same element throughout, so the measurement never loses its target.
+ */
+function WalletNote({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [clamped, setClamped] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || open) return;
+    const check = () => setClamped(element.scrollHeight > element.clientHeight + 1);
+    check();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(check) : null;
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [open, text]);
+
+  const toggles = clamped || open;
+  const toggle = () => setOpen((value) => !value);
+  return (
+    <span
+      ref={ref}
+      className={cx('wallet-note-text', open && 'is-open', toggles && 'is-toggle')}
+      role={toggles ? 'button' : undefined}
+      tabIndex={toggles ? 0 : undefined}
+      aria-expanded={toggles ? open : undefined}
+      onClick={toggles ? toggle : undefined}
+      onKeyDown={
+        toggles
+          ? (event: KeyboardEvent<HTMLSpanElement>) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggle();
+              }
+            }
+          : undefined
+      }
+    >
+      {text}
+    </span>
   );
 }

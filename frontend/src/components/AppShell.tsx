@@ -19,7 +19,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { Suspense, useCallback, useMemo, useState } from 'react';
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -29,6 +29,7 @@ import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/use
 import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
+import { useMobileV2, useTopbarHeightVar } from '../lib/mobileLayout';
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
@@ -50,10 +51,11 @@ import { TransactionsPage } from '../pages/TransactionsPage';
 import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DbHealth, Transaction, WalletBalance } from '../types';
+import { DbHealth, Transaction, TransactionType, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { GestureNavWidget, Shortcut } from './GestureNavWidget';
+import { PeriodPill } from './PeriodPill';
 import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
@@ -347,6 +349,12 @@ export function AppShell() {
   const { settings, reload: reloadSettings } = useSettings();
   const money = useMoneyFormatter();
   const [period, setPeriod] = useState(currentPeriod());
+  /* The new phone layout: a compact month pill instead of the stepper row,
+     and Sign out moved to the foot of Settings. False on desktop and in
+     Classic, which render exactly as before. */
+  const mobileV2 = useMobileV2();
+  const topbarRef = useRef<HTMLElement | null>(null);
+  useTopbarHeightVar(topbarRef, mobileV2);
 
   /* A new screen starts at the top. Keyed on the route alone, so stepping the
      month picker — which changes `period`, not the route — leaves the reader
@@ -392,6 +400,8 @@ export function AppShell() {
   const [railed, , toggleRail] = useStoredBoolean('quick-wallet.sidebar-railed', false);
 
   const [quickFormOpen, setQuickFormOpen] = useState(false);
+  /** The type Home's quick-add buttons preset; none from the "+" tap. */
+  const [quickFormType, setQuickFormType] = useState<TransactionType | undefined>(undefined);
   const quickWallets = useExcelDB<WalletBalance>('wallets');
   const quickTransactions = useExcelDB<Transaction>('transactions', undefined, { enabled: false });
 
@@ -525,18 +535,36 @@ export function AppShell() {
       </aside>
 
       <div className="main">
-        <header className="topbar">
+        <header className="topbar" ref={topbarRef}>
           {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
           <Logo size={30} className="topbar-logo" label={t('auth.appName')} />
           <div className="topbar-title">
-            <h1>{t(active.labelKey)}</h1>
-            <span>
-              {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
-              {formatPeriod(period, settings.locale)}
-            </span>
+            {mobileV2 && showPeriodPicker ? (
+              /* Title and currency share the first line, so the month pill
+                 and its way back to this month have the second to themselves. */
+              <>
+                <div className="topbar-headline">
+                  <h1>{t(active.labelKey)}</h1>
+                  <span className="topbar-currency">
+                    {money.converting ? `${money.base} → ${money.display}` : money.base}
+                  </span>
+                </div>
+                <div className="topbar-sub">
+                  <PeriodPill period={period} locale={settings.locale} onChange={setPeriod} />
+                </div>
+              </>
+            ) : (
+              <h1>{t(active.labelKey)}</h1>
+            )}
+            {mobileV2 && showPeriodPicker ? null : (
+              <span>
+                {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
+                {formatPeriod(period, settings.locale)}
+              </span>
+            )}
           </div>
           <div className="topbar-tools">
-            {showPeriodPicker && (
+            {showPeriodPicker && !mobileV2 && (
               /* Three controls grouped so they read as a single month stepper. */
               <div className="period-nav">
                 <Button
@@ -587,16 +615,18 @@ export function AppShell() {
                 than added to the gesture arc because that menu commits on
                 release, and an action you cannot undo in one tap has no place
                 somewhere a slip of the thumb confirms it. */}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="topbar-signout"
-              aria-label={t('nav.signOut')}
-              title={t('nav.signOut')}
-              onClick={logout}
-            >
-              <Icon icon={LogOut} size="sm" />
-            </Button>
+            {!mobileV2 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="topbar-signout"
+                aria-label={t('nav.signOut')}
+                title={t('nav.signOut')}
+                onClick={logout}
+              >
+                <Icon icon={LogOut} size="sm" />
+              </Button>
+            )}
           </div>
         </header>
 
@@ -605,7 +635,16 @@ export function AppShell() {
         <main className={cx('page', route === 'deep-analytics' && 'page--wide')}>
           <DbStatusBanner />
 
-          {route === 'dashboard' && <DashboardPage period={period} onNavigate={go} />}
+          {route === 'dashboard' && (
+            <DashboardPage
+              period={period}
+              onNavigate={go}
+              onQuickAdd={(type) => {
+                setQuickFormType(type);
+                setQuickFormOpen(true);
+              }}
+            />
+          )}
           {route === 'wallets' && <WalletsPage />}
           {route === 'cards' && <CreditCardsPage />}
           {route === 'transactions' && <TransactionsPage period={period} />}
@@ -638,12 +677,16 @@ export function AppShell() {
 
       <QuickTransactionWidget
         wallets={quickWallets.items}
-        onOpenFullForm={() => setQuickFormOpen(true)}
+        onOpenFullForm={() => {
+          setQuickFormType(undefined);
+          setQuickFormOpen(true);
+        }}
       />
 
       <TransactionForm
         open={quickFormOpen}
         wallets={quickWallets.items.filter((w) => !w.archived)}
+        prefill={quickFormType ? { type: quickFormType } : undefined}
         busy={quickTransactions.mutating}
         error={quickTransactions.mutationError}
         onClose={() => {
