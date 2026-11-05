@@ -245,6 +245,13 @@ export function TransactionForm({
           </div>
         )}
 
+        {/* Where an existing row came from, when a widget or shortcut added it. */}
+        {transaction?.source?.startsWith('widget:') && (
+          <p className="span-2 field-hint">
+            {t('widgets.addedFrom', { name: transaction.source.slice('widget:'.length) })}
+          </p>
+        )}
+
         <div className="span-2">
           <Segmented<TransactionType>
             value={form.type}

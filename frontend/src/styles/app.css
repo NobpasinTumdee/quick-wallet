@@ -15904,3 +15904,253 @@ line.arate-zero {
   outline: none;
   box-shadow: var(--ring);
 }
+
+/* ---- Settings → Widgets & shortcuts ----
+   Token list, the token form's wallet lists, copy boxes and the setup steps.
+   Theme tokens only. Every long value (tokens, URLs, formulas) wraps inside
+   its box, so nothing scrolls the page sideways at 320px. */
+.widget-how {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.widget-how p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+}
+
+.widget-tokens {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.widget-token {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.widget-token.is-inactive {
+  opacity: 0.72;
+}
+
+.widget-token-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.widget-token-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.widget-token-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.widget-token-meta dt {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.widget-token-meta dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.widget-token-meta code {
+  font-family: var(--font-mono);
+}
+
+.widget-token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The token form's wallet lists. */
+.widget-wallets {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.widget-wallet-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.widget-wallet-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.widget-wallet-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.widget-checks {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.widget-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.widget-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.widget-check small {
+  display: block;
+}
+
+/* Copy boxes. */
+.copy-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.copy-field-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.copy-field-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.copy-field--secret .copy-field-row {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+}
+
+.copy-field-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  user-select: all;
+}
+
+.copy-field-value.is-multiline {
+  white-space: pre-wrap;
+  word-break: normal;
+}
+
+.copy-field-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.copy-field-btn:hover {
+  color: var(--accent);
+}
+
+.copy-field-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.widget-copy-grid {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Setup steps. */
+.widget-guide {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.widget-steps {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.widget-steps > li {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.widget-steps > li > span {
+  color: var(--text-secondary);
+}
+
+.widget-steps .btn {
+  justify-self: start;
+}
+
+@media (max-width: 767px) {
+  /* 16px inputs stay; only the meta grid drops to one column. */
+  .widget-token-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .widget-token {
+    padding: var(--space-3);
+  }
+}

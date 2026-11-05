@@ -139,6 +139,52 @@ export interface Transaction {
   installmentGroupId: string;
   /** "3/10". Empty when the row is not part of a plan. */
   installmentIndex: string;
+  /** "widget:<token name>" for a row added from a home-screen widget or
+   *  shortcut. Empty, or absent on an older Code.gs, for everything else. */
+  source?: string;
+}
+
+/* ---- Home-screen widget tokens ---- */
+
+export type WidgetScope = 'read' | 'readwrite';
+export type WidgetTokenAction = 'expense' | 'income' | 'transfer';
+
+/** A widget token as the app sees it. The secret itself is never stored. */
+export interface WidgetToken {
+  id: string;
+  name: string;
+  scope: WidgetScope;
+  /** "qw_ab12" — enough to tell tokens apart. */
+  prefix: string;
+  walletIds: string[];
+  writeWalletIds: string[];
+  allowedActions: WidgetTokenAction[];
+  hideAmounts: boolean;
+  totalMode: 'all' | 'selected';
+  createdAt: string;
+  lastUsedAt: string;
+  lastUsedAction: string;
+  expiresAt: string;
+  revokedAt: string;
+  status: 'active' | 'expired' | 'revoked';
+}
+
+/** What create and regenerate answer with: the only time the secret is seen. */
+export interface WidgetTokenSecret {
+  token: WidgetToken;
+  secret: string;
+}
+
+export interface WidgetTokenPayload {
+  name: string;
+  scope?: WidgetScope;
+  walletIds: string[];
+  writeWalletIds?: string[];
+  allowedActions?: WidgetTokenAction[];
+  hideAmounts: boolean;
+  totalMode: 'all' | 'selected';
+  /** 0 = never. Only sent when the expiry is being set or changed. */
+  expiresInDays?: 0 | 30 | 90 | 365;
 }
 
 /** What `transactions.installment` answers with — the whole plan at once. */

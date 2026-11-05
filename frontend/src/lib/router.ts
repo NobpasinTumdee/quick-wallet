@@ -32,6 +32,9 @@ export const ROUTES = [
      bar from this list in order, and a new screen must not change anyone's
      phone layout by appearing early in it. */
   'notes',
+  /* Home-screen widget tokens and setup, reached from Settings and More.
+     After notes for the same reason notes is last. */
+  'widgets',
 ] as const;
 
 /**

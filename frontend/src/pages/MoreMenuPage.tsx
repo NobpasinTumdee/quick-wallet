@@ -10,6 +10,7 @@ import {
   Receipt,
   Repeat2,
   Settings,
+  Smartphone,
   Target,
   TrendingUp,
   Wallet,
@@ -145,6 +146,7 @@ const SECTIONS: MenuSection[] = [
     hintKey: 'more.sectionAppHint',
     entries: [
       { route: 'settings', labelKey: 'nav.settings', descriptionKey: 'more.settings', icon: Settings },
+      { route: 'widgets', labelKey: 'nav.widgets', descriptionKey: 'more.widgets', icon: Smartphone },
     ],
   },
 ];

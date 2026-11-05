@@ -1,0 +1,36 @@
+{
+  "name": "Quick Wallet",
+  "short_name": "Quick Wallet",
+  "description": "Personal finance and investment tracker.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d1220",
+  "theme_color": "#0d1220",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "logo-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add expense · เพิ่มรายจ่าย",
+      "short_name": "Expense",
+      "url": "./?quick=expense",
+      "icons": [{ "src": "logo-128.png", "sizes": "128x128", "type": "image/png" }]
+    },
+    {
+      "name": "Add income · เพิ่มรายรับ",
+      "short_name": "Income",
+      "url": "./?quick=income",
+      "icons": [{ "src": "logo-128.png", "sizes": "128x128", "type": "image/png" }]
+    },
+    {
+      "name": "Transfer · โอนเงิน",
+      "short_name": "Transfer",
+      "url": "./?quick=transfer",
+      "icons": [{ "src": "logo-128.png", "sizes": "128x128", "type": "image/png" }]
+    }
+  ]
+}

@@ -18,8 +18,9 @@ import {
   TrendingUp,
   Wallet,
   type LucideIcon,
+  Smartphone,
 } from 'lucide-react';
-import { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -29,6 +30,7 @@ import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/use
 import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
+import { QuickLink, hasQuickLinkParams, parseQuickLink, resolveQuickLink, stripQuickLink } from '../lib/quickLink';
 import { useMobileV2, useTopbarHeightVar } from '../lib/mobileLayout';
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
@@ -51,7 +53,7 @@ import { TransactionsPage } from '../pages/TransactionsPage';
 import { WalletsPage } from '../pages/WalletsPage';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DbHealth, Transaction, TransactionType, WalletBalance } from '../types';
+import { DbHealth, Transaction, WalletBalance } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { GestureNavWidget, Shortcut } from './GestureNavWidget';
@@ -161,6 +163,16 @@ const DEEP_ITEM: NavItem = {
 };
 
 /**
+ * Widgets & shortcuts. A sub-page of Settings, outside NAV for the same
+ * reason Settings is; reached from the Settings screen and the More menu.
+ */
+const WIDGETS_ITEM: NavItem = {
+  route: 'widgets',
+  labelKey: NAV_LABEL_KEYS.widgets,
+  icon: Smartphone,
+};
+
+/**
  * The explorer page — the heaviest screen in the app and the least visited,
  * so it is the one screen not bundled with the shell. Every other page here is
  * a static import because it is cheap and likely; this one pays for its own
@@ -168,6 +180,8 @@ const DEEP_ITEM: NavItem = {
  * `bundlecheck.mjs` fails the build if a static import ever pulls it back in.
  */
 const DeepAnalyticsPage = lazyWithRetry(() => import('../pages/DeepAnalyticsPage'));
+/* Rarely opened and self-contained, so it is its own chunk too. */
+const WidgetsPage = lazyWithRetry(() => import('../pages/WidgetsPage'));
 
 /**
  * How the routes split on a phone.
@@ -222,7 +236,7 @@ function initialsOf(name: string | undefined): string {
 
 /** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
-  return [...NAV, SETTINGS_ITEM, MORE_ITEM, DEEP_ITEM].find((item) => item.route === route) ?? NAV[0];
+  return [...NAV, SETTINGS_ITEM, MORE_ITEM, DEEP_ITEM, WIDGETS_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
 
 /**
@@ -319,6 +333,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
      prefix matches every `?source=` variant in the cache. */
   'deep-analytics': ['/api/analytics/raw-data'],
   notes: ['/api/notes'],
+  widgets: ['/api/widgetTokens', '/api/wallets'],
   notFound: [],
 };
 
@@ -400,9 +415,37 @@ export function AppShell() {
   const [railed, , toggleRail] = useStoredBoolean('quick-wallet.sidebar-railed', false);
 
   const [quickFormOpen, setQuickFormOpen] = useState(false);
-  /** The type Home's quick-add buttons preset; none from the "+" tap. */
-  const [quickFormType, setQuickFormType] = useState<TransactionType | undefined>(undefined);
+  /** What Home's quick-add buttons or a `?quick=` link preset; none from the "+" tap. */
+  const [quickPrefill, setQuickPrefill] = useState<Partial<TransactionPayload> | undefined>(undefined);
   const quickWallets = useExcelDB<WalletBalance>('wallets');
+
+  /* ---- Deep links from widgets and the app-icon shortcuts ----
+     `?quick=expense|income|transfer&wallet=…&to=…`, read once. The shell only
+     mounts when signed in, so a signed-out visitor signs in first and lands
+     here with the link still in the address bar. The parameters are removed
+     at once, so a refresh never reopens the form. The form waits for the
+     wallet list, because it seeds its default wallet from it on open. */
+  /* Read without side effects: StrictMode runs this initializer twice, and
+     both runs must still see the link. The address bar is cleaned in the
+     effect below. */
+  const [pendingLink] = useState<QuickLink | null>(() => parseQuickLink(window.location.search));
+  useEffect(() => {
+    if (hasQuickLinkParams(window.location.search)) {
+      window.history.replaceState(window.history.state, '', stripQuickLink(window.location.href));
+    }
+  }, []);
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (!pendingLink || linkHandled.current || quickWallets.initialLoading) return;
+    linkHandled.current = true;
+    const link = resolveQuickLink(pendingLink, quickWallets.items);
+    setQuickPrefill({
+      type: link.type,
+      ...(link.walletId ? { walletId: link.walletId } : {}),
+      ...(link.toWalletId ? { toWalletId: link.toWalletId } : {}),
+    });
+    setQuickFormOpen(true);
+  }, [pendingLink, quickWallets.initialLoading, quickWallets.items]);
   const quickTransactions = useExcelDB<Transaction>('transactions', undefined, { enabled: false });
 
   function saveQuickTransaction(payload: TransactionPayload) {
@@ -640,7 +683,7 @@ export function AppShell() {
               period={period}
               onNavigate={go}
               onQuickAdd={(type) => {
-                setQuickFormType(type);
+                setQuickPrefill({ type });
                 setQuickFormOpen(true);
               }}
             />
@@ -671,6 +714,11 @@ export function AppShell() {
               <DeepAnalyticsPage onNavigate={go} />
             </Suspense>
           )}
+          {route === 'widgets' && (
+            <Suspense fallback={<div className="deep-loading-page" role="status" aria-label={t('common.loading')} />}>
+              <WidgetsPage />
+            </Suspense>
+          )}
           {route === 'notFound' && <NotFoundPage onNavigate={go} />}
         </main>
       </div>
@@ -678,7 +726,7 @@ export function AppShell() {
       <QuickTransactionWidget
         wallets={quickWallets.items}
         onOpenFullForm={() => {
-          setQuickFormType(undefined);
+          setQuickPrefill(undefined);
           setQuickFormOpen(true);
         }}
       />
@@ -686,7 +734,7 @@ export function AppShell() {
       <TransactionForm
         open={quickFormOpen}
         wallets={quickWallets.items.filter((w) => !w.archived)}
-        prefill={quickFormType ? { type: quickFormType } : undefined}
+        prefill={quickPrefill}
         busy={quickTransactions.mutating}
         error={quickTransactions.mutationError}
         onClose={() => {

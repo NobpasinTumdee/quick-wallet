@@ -140,7 +140,12 @@ var SHEETS = {
       /* "3/10" — human-readable on purpose, because this column is read in the
          sheet as often as it is read by code, and a bare index would need the
          group's length fetched to mean anything. */
-      { key: 'installmentIndex', header: 'Installment Index', type: 'string' }
+      { key: 'installmentIndex', header: 'Installment Index', type: 'string' },
+      /* Where a row came from when it was not typed into the app:
+         "widget:<token name>" for a home-screen widget or shortcut. Empty for
+         every row the app writes. Text, so a token name starting with "=" or
+         "+" is stored as typed. Appended last for the positional writes. */
+      { key: 'source', header: 'Source', type: 'text' }
     ]
   },
   Investments: {
@@ -556,6 +561,33 @@ var SHEETS = {
          were wrong for anyone paid fortnightly. */
       { key: 'paydays', header: 'Paydays', type: 'jsonlist' }
     ]
+  },
+  /* Home-screen widget tokens — see "Home-screen widgets" below. Holds a
+     SHA-256 of each token, never the token. Created on the first token
+     (ensureSheet_) or by createMissingSheets(). */
+  ApiTokens: {
+    key: 'id',
+    columns: [
+      { key: 'id', header: 'ID', type: 'string' },
+      { key: 'userId', header: 'User ID', type: 'string' },
+      { key: 'name', header: 'Name', type: 'text' },
+      /* 'read' or 'readwrite'. Fixed at creation. */
+      { key: 'scope', header: 'Scope', type: 'string' },
+      { key: 'tokenHash', header: 'Token Hash (SHA-256)', type: 'string' },
+      { key: 'prefix', header: 'Prefix', type: 'text' },
+      /* Wallets the widget shows, in display order. */
+      { key: 'walletIds', header: 'Wallet IDs', type: 'jsonlist' },
+      { key: 'writeWalletIds', header: 'Write Wallet IDs', type: 'jsonlist' },
+      { key: 'allowedActions', header: 'Allowed Actions', type: 'jsonlist' },
+      { key: 'hideAmounts', header: 'Hide Amounts', type: 'boolean' },
+      /* 'all' = Home's total, 'selected' = only the shown wallets. */
+      { key: 'totalMode', header: 'Total Mode', type: 'string' },
+      { key: 'createdAt', header: 'Created At', type: 'date' },
+      { key: 'lastUsedAt', header: 'Last Used At', type: 'date' },
+      { key: 'lastUsedAction', header: 'Last Used Action', type: 'string' },
+      { key: 'expiresAt', header: 'Expires At', type: 'date' },
+      { key: 'revokedAt', header: 'Revoked At', type: 'date' }
+    ]
   }
 };
 
@@ -570,15 +602,27 @@ var DEFAULT_CATEGORIES = [
  * ========================================================================= */
 
 function doGet(e) {
+  var params = (e && e.parameter) || {};
+  var action = params.action || 'health';
+  /* Home-screen widgets: flat replies — see "Home-screen widgets" below. */
+  if (isWidgetAction_(action)) {
+    return handleWidget_(function () {
+      return dispatch_(action, 'GET', params, {}, params.token || '');
+    });
+  }
   return handle_(function () {
-    var params = (e && e.parameter) || {};
-    var action = params.action || 'health';
     return dispatch_(action, 'GET', params, {}, params.token || '');
   });
 }
 
 function doPost(e) {
-  return handle_(function () {
+  var widget = false;
+  try {
+    widget = isWidgetAction_(JSON.parse(e.postData.contents).action);
+  } catch (err) {
+    /* Not JSON: the normal path below reports it. */
+  }
+  return (widget ? handleWidget_ : handle_)(function () {
     if (!e || !e.postData || !e.postData.contents) {
       throw apiError_('Request body is missing', 400, 'BAD_REQUEST');
     }
@@ -594,7 +638,9 @@ function doPost(e) {
     var action = envelope.action || '';
     var method = (envelope.method || 'POST').toUpperCase();
     var query = envelope.query || {};
-    var body = envelope.body || {};
+    /* A widget shortcut may send its fields flat, beside "action" and
+       "token", which keeps the Shortcuts and HTTP Shortcuts guides short. */
+    var body = envelope.body || (isWidgetAction_(action) ? envelope : {});
     var token = envelope.token || '';
 
     if (!action) throw apiError_('Missing "action"', 400, 'BAD_REQUEST');
@@ -754,6 +800,22 @@ function dispatch_(action, method, query, body, token) {
        script lock — a slow sheet read here cannot block a write elsewhere. */
     'analytics.getRawData': function () { return analyticsRawData_(requireAuth_(token), query); },
     'dashboard.periods': function () { return dashboardPeriods_(requireAuth_(token)); },
+
+    /* Home-screen widgets and shortcuts. Authenticated by a widget token, not
+       a session; answered flat by handleWidget_. widget.add runs under the
+       script lock below like every other write, and refuses GET. */
+    'widget': function () { return widgetRead_(widgetAuth_(token), query); },
+    'widget.options': function () { return widgetOptions_(widgetAuth_(token), query); },
+    'widget.add': function () {
+      if (method === 'GET') throw apiError_('Send widget.add as a POST', 405, 'METHOD_NOT_ALLOWED');
+      return widgetAdd_(widgetAuth_(token), body);
+    },
+    /* Managing those tokens: the signed-in app only. */
+    'widgetTokens.list': function () { return widgetTokensList_(requireAuth_(token)); },
+    'widgetTokens.create': function () { return widgetTokensCreate_(requireAuth_(token), body); },
+    'widgetTokens.update': function () { return widgetTokensUpdate_(requireAuth_(token), query, body); },
+    'widgetTokens.regenerate': function () { return widgetTokensRegenerate_(requireAuth_(token), query); },
+    'widgetTokens.revoke': function () { return widgetTokensRevoke_(requireAuth_(token), query); },
 
     /* The old backend buffered writes in memory; Sheets writes land immediately,
        so this stays only so the Settings screen's button keeps working. */
@@ -2289,7 +2351,8 @@ function transactionsList_(user, query) {
   });
 }
 
-function transactionsCreate_(user, body) {
+/** `source` is set by the server only (a widget write); never read from the body. */
+function transactionsCreate_(user, body, source) {
   var parsed = parseTransaction_(user.id, body);
   var tx = {
     id: uuid_(), userId: user.id,
@@ -2297,7 +2360,8 @@ function transactionsCreate_(user, body) {
     amount: parsed.amount, category: parsed.category, note: parsed.note, date: parsed.date,
     createdAt: new Date().toISOString(),
     installmentGroupId: parsed.installmentGroupId,
-    installmentIndex: parsed.installmentIndex
+    installmentIndex: parsed.installmentIndex,
+    source: source || ''
   };
   insertRow_('Transactions', tx);
   return tx;
@@ -5650,6 +5714,827 @@ function health_() {
     fileLocked: false,
     rowCounts: rowCounts
   };
+}
+
+/* =========================================================================
+ * Home-screen widgets: access tokens and the widget endpoints
+ * =========================================================================
+ * A phone widget or shortcut cannot sign in, so it carries a long random
+ * token the user creates in the app (Settings → Widgets & shortcuts).
+ *
+ *   read        `widget` and `widget.options`: the chosen wallets' balances
+ *               and the total. Never transactions, notes or anything else.
+ *   readwrite   also `widget.add`: one income, expense or transfer, only for
+ *               the wallets and actions picked for that token.
+ *
+ * WHAT IS STORED
+ * Only a SHA-256 of the token plus a 7-character prefix for display. The
+ * plain token is returned once, by create or regenerate, and never again.
+ * Tokens are `qw_` + 32 bytes from two getUuid() calls, base64url: a v4 uuid
+ * carries 122 random bits, so a token has about 244 bits of randomness.
+ *
+ * WHO CAN MANAGE THEM
+ * Only a signed-in app session: `widgetTokens.*` goes through requireAuth_,
+ * which a widget token can never pass (it has no signed "payload.sig" shape).
+ *
+ * WHAT A WIDGET CALL GETS BACK
+ * The widget actions answer with a flat body, `{ ok: true, v: 1, … }`, not
+ * the `{ ok, data }` envelope the app uses, so KWGT formulas and Shortcuts
+ * read `.total` instead of `.data.total`. Errors keep the usual shape. An
+ * unknown, revoked or expired token gets one identical answer, so the reply
+ * never tells anyone which tokens exist.
+ *
+ * READS NEVER WRITE OFTEN
+ * Reads take no lock. `lastUsedAt` is written at most once per
+ * WIDGET_LAST_USED_EVERY_S per token, gated by CacheService, so a widget that
+ * refreshes every few minutes cannot keep the sheet busy.
+ */
+
+var WIDGET_TOKEN_MAX_ACTIVE = 10;
+var WIDGET_MAX_WALLETS = 12;
+/** Wallet slots the flat KWGT keys always carry, filled or empty. */
+var WIDGET_FLAT_SLOTS = 8;
+var WIDGET_ACTIONS = ['expense', 'income', 'transfer'];
+var WIDGET_SCOPES = ['read', 'readwrite'];
+var WIDGET_TOTAL_MODES = ['all', 'selected'];
+var WIDGET_EXPIRY_DAYS = [0, 30, 90, 365];
+var WIDGET_AMOUNT_MAX = 10000000;
+var WIDGET_RATE_WINDOW_S = 600;
+var WIDGET_READ_LIMIT = 120;
+var WIDGET_WRITE_LIMIT = 20;
+var WIDGET_LAST_USED_EVERY_S = 45 * 60;
+var WIDGET_IDEMPOTENCY_S = 6 * 60 * 60;
+var WIDGET_MASK = '•••';
+
+/** True for the actions answered in the flat widget shape. */
+function isWidgetAction_(action) {
+  return action === 'widget' || action === 'widget.options' || action === 'widget.add';
+}
+
+/**
+ * The widget twin of handle_(): same try/catch, flat body. A 5xx never
+ * carries its message, which could name a sheet or a line of this file.
+ */
+function handleWidget_(fn) {
+  var payload;
+  try {
+    payload = fn();
+    payload.ok = true;
+    payload.v = 1;
+  } catch (err) {
+    var status = err && err.__status ? err.__status : 500;
+    var code = err && err.__code ? err.__code : 'INTERNAL_ERROR';
+    var internal = status >= 500 && code !== 'BUSY';
+    payload = {
+      ok: false,
+      v: 1,
+      status: status,
+      code: internal ? 'SERVER_ERROR' : code,
+      error: internal ? 'Server error, try again later' : (err && err.message) || 'Request failed'
+    };
+    console.error(err && err.stack ? err.stack : err);
+  }
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+/* ---- Token secrets ---- */
+
+function newWidgetSecret_() {
+  var hex = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  var bytes = [];
+  for (var i = 0; i < hex.length; i += 2) {
+    var b = parseInt(hex.substr(i, 2), 16);
+    bytes.push(b > 127 ? b - 256 : b);
+  }
+  return 'qw_' + Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, '');
+}
+
+function widgetTokenHash_(secret) {
+  return bytesToHex_(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, secret, Utilities.Charset.UTF_8)
+  );
+}
+
+/** The one answer for every token that does not work, whatever the reason. */
+function widgetDenied_() {
+  return apiError_('Token is not valid', 401, 'TOKEN_INVALID');
+}
+
+function widgetTokenStatus_(row) {
+  if (row.revokedAt) return 'revoked';
+  if (row.expiresAt && Date.parse(row.expiresAt) <= Date.now()) return 'expired';
+  return 'active';
+}
+
+/** Resolves a widget token to its row and user, or throws widgetDenied_. */
+function widgetAuth_(secret) {
+  var raw = String(secret || '').trim();
+  if (!/^qw_[A-Za-z0-9_-]{40,64}$/.test(raw)) throw widgetDenied_();
+  if (!spreadsheet_().getSheetByName('ApiTokens')) throw widgetDenied_();
+
+  var hash = widgetTokenHash_(raw);
+  var found = null;
+  // Every row is compared, so the time taken does not depend on where it is.
+  readTable_('ApiTokens').forEach(function (row) {
+    if (timingSafeEqual_(String(row.tokenHash || ''), hash)) found = row;
+  });
+  if (!found || widgetTokenStatus_(found) !== 'active') throw widgetDenied_();
+
+  var user = findById_('Users', found.userId);
+  if (!user || user.active === false) throw widgetDenied_();
+  return { row: found, user: user };
+}
+
+/** Fixed-window counter per token, in CacheService. */
+function widgetRateLimit_(tokenId, kind, limit) {
+  var cache = CacheService.getScriptCache();
+  var bucket = Math.floor(Date.now() / (WIDGET_RATE_WINDOW_S * 1000));
+  var key = 'wrl:' + kind + ':' + tokenId + ':' + bucket;
+  var count = Number(cache.get(key)) || 0;
+  if (count >= limit) {
+    throw apiError_('Too many requests, try again in a few minutes', 429, 'RATE_LIMIT');
+  }
+  cache.put(key, String(count + 1), WIDGET_RATE_WINDOW_S + 60);
+}
+
+/**
+ * Records when a token was last used. A read writes at most once per window
+ * and only if the lock is free at once; a write already holds the lock.
+ */
+function widgetTouch_(row, action, holdsLock) {
+  var cache = CacheService.getScriptCache();
+  var key = 'wlu:' + row.id;
+  if (!holdsLock && cache.get(key)) return;
+  cache.put(key, '1', WIDGET_LAST_USED_EVERY_S);
+
+  var lock = null;
+  if (!holdsLock) {
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(1500)) return;
+  }
+  try {
+    updateRow_('ApiTokens', row.id, {
+      lastUsedAt: new Date().toISOString(),
+      lastUsedAction: action
+    });
+  } catch (err) {
+    console.error(err && err.stack ? err.stack : err);
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/* ---- Formatting ----
+   widgetFormatMoney_ and widgetCompactAmount_ copy formatMoney and
+   formatCompactAmount in frontend/src/lib/format.ts line for line. The test
+   frontend/tests/widgetFormat.test.mjs runs both on the same table of
+   numbers and fails on any difference — change them together. */
+
+function widgetFormatMoney_(value, currency, locale, options) {
+  currency = currency || 'USD';
+  locale = locale || 'en-US';
+  options = options || {};
+  var amount = isFinite(value) ? Number(value) : 0;
+  try {
+    var formatted = new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
+      notation: options.compact && Math.abs(amount) >= 10000 ? 'compact' : 'standard',
+      maximumFractionDigits: options.compact && Math.abs(amount) >= 10000 ? 1 : 2
+    }).format(Math.abs(amount));
+    var sign = amount < 0 ? '-' : options.signed && amount > 0 ? '+' : '';
+    return sign + formatted;
+  } catch (err) {
+    return (amount < 0 ? '-' : '') + Math.abs(amount).toFixed(2) + ' ' + currency;
+  }
+}
+
+var WIDGET_COMPACT_UNITS = [[1e9, 'B'], [1e6, 'M'], [1e3, 'k']];
+
+function widgetCompactAmount_(value, locale) {
+  locale = locale || 'en-US';
+  if (typeof value !== 'number' || !isFinite(value)) return '0';
+  var sign = value < 0 ? '-' : '';
+  var abs = Math.abs(value);
+  var digits = function (n, max) {
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: max, useGrouping: false }).format(n);
+  };
+
+  if (Math.round(abs) < 1000) {
+    var whole = Math.round(abs);
+    return whole === 0 ? '0' : sign + digits(whole, 0);
+  }
+  for (var i = WIDGET_COMPACT_UNITS.length - 1; i >= 0; i -= 1) {
+    var size = WIDGET_COMPACT_UNITS[i][0];
+    var suffix = WIDGET_COMPACT_UNITS[i][1];
+    var next = WIDGET_COMPACT_UNITS[i - 1];
+    var scaled = abs / size;
+    var places = scaled < 9.95 ? 1 : 0;
+    var rounded = Number(scaled.toFixed(places));
+    if (rounded >= 1000 && next) continue;
+    return sign + digits(rounded, places) + suffix;
+  }
+  abs = Math.round(abs / 1e9);
+  return sign + digits(abs, 0) + 'B';
+}
+
+/** Currency, rate and locale exactly as the app's useMoneyFormatter has them. */
+function widgetMoneyContext_(userId, langParam) {
+  var settings = getSettingsRow_(userId) || defaultSettings_(userId);
+  var base = settings.currency || 'USD';
+  var display = settings.displayCurrency || base;
+  var rate = display !== base && settings.fxRate > 0 ? settings.fxRate : 1;
+  var locale = settings.locale || 'en-US';
+  var lang = String(langParam || '').toLowerCase();
+  if (lang !== 'th' && lang !== 'en') lang = /^th/i.test(locale) ? 'th' : 'en';
+  return {
+    currency: display,
+    rate: rate,
+    locale: locale,
+    lang: lang,
+    categories: settings.categories && settings.categories.length
+      ? settings.categories
+      : DEFAULT_CATEGORIES.slice()
+  };
+}
+
+function widgetTotalNote_(lang) {
+  return lang === 'th' ? 'รวม (ต้นทุนหุ้น)' : 'Total (stocks at cost)';
+}
+
+/** Today as YYYY-MM-DD in the script's time zone, `offsetDays` away. */
+function widgetDateKey_(offsetDays) {
+  var when = new Date(Date.now() + (offsetDays || 0) * 86400000);
+  return Utilities.formatDate(when, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+/* ---- Read: `widget` ---- */
+
+function widgetRead_(auth, query) {
+  var row = auth.row;
+  widgetRateLimit_(row.id, 'r', WIDGET_READ_LIMIT);
+
+  var ctx = widgetMoneyContext_(auth.user.id, query && query.lang);
+  var hide = row.hideAmounts === true;
+  var all = computeWalletBalances_(auth.user.id).filter(function (w) { return !w.archived; });
+  var byId = {};
+  all.forEach(function (w) { byId[w.id] = w; });
+
+  var shown = [];
+  (row.walletIds || []).forEach(function (id) {
+    if (byId[id] && shown.indexOf(byId[id]) === -1) shown.push(byId[id]);
+  });
+
+  /* `all` is Home's net worth before live quotes: every live wallet's
+     balance plus what its holdings cost. */
+  var scope = row.totalMode === 'selected' ? shown : all;
+  var totalBase = 0;
+  var holdsStocks = false;
+  scope.forEach(function (w) {
+    totalBase += w.balance + w.investedCost;
+    if (w.investedCost > 0) holdsStocks = true;
+  });
+  var total = money_(totalBase * ctx.rate);
+
+  var money = function (n) { return hide ? WIDGET_MASK : widgetFormatMoney_(n, ctx.currency, ctx.locale); };
+  var short = function (n) { return hide ? WIDGET_MASK : widgetCompactAmount_(n, ctx.locale); };
+
+  var wallets = shown.map(function (w) {
+    var balance = money_(w.balance * ctx.rate);
+    return {
+      id: w.id,
+      name: w.name,
+      type: w.kind,
+      credit: w.type === 'CREDIT',
+      investment: w.mode === 'investment',
+      balance: hide ? null : balance,
+      text: money(balance),
+      short: short(balance),
+      negative: hide ? false : balance < 0
+    };
+  });
+
+  var now = new Date();
+  var payload = {
+    updatedAt: now.toISOString(),
+    updatedTime: Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm'),
+    currency: ctx.currency,
+    lang: ctx.lang,
+    totalMode: row.totalMode === 'selected' ? 'selected' : 'all',
+    hideAmounts: hide,
+    total: hide ? null : total,
+    totalText: money(total),
+    totalShort: short(total),
+    totalNote: holdsStocks ? widgetTotalNote_(ctx.lang) : '',
+    wallets: wallets
+  };
+
+  /* KWGT reads flat paths more easily than arrays: `$wg(gv(url), json, .flat.w1name)$`.
+     Every slot is always present, so an unused one is empty, not an error. */
+  var flat = {
+    count: String(wallets.length),
+    total: payload.totalText,
+    totalShort: payload.totalShort,
+    totalNote: payload.totalNote,
+    updated: payload.updatedTime
+  };
+  for (var i = 0; i < WIDGET_FLAT_SLOTS; i += 1) {
+    var w = wallets[i];
+    var n = i + 1;
+    flat['w' + n + 'name'] = w ? w.name : '';
+    flat['w' + n + 'text'] = w ? w.text : '';
+    flat['w' + n + 'short'] = w ? w.short : '';
+    flat['w' + n + 'neg'] = w && w.negative ? '1' : '0';
+  }
+  payload.flat = flat;
+
+  widgetTouch_(row, 'read', false);
+  return payload;
+}
+
+/* ---- Read: `widget.options` (for the shortcut pickers) ----
+   Only the wallets this token may show or write to. Never the full list. */
+
+function widgetOptions_(auth, query) {
+  var row = auth.row;
+  widgetRateLimit_(row.id, 'r', WIDGET_READ_LIMIT);
+
+  var ctx = widgetMoneyContext_(auth.user.id, query && query.lang);
+  var writable = row.scope === 'readwrite' ? (row.writeWalletIds || []) : [];
+  var ids = [];
+  (row.walletIds || []).concat(writable).forEach(function (id) {
+    if (ids.indexOf(id) === -1) ids.push(id);
+  });
+
+  var byId = {};
+  computeWalletBalances_(auth.user.id).forEach(function (w) {
+    if (!w.archived) byId[w.id] = w;
+  });
+
+  var wallets = [];
+  ids.forEach(function (id) {
+    var w = byId[id];
+    if (!w) return;
+    wallets.push({
+      id: w.id,
+      name: w.name,
+      type: w.kind,
+      credit: w.type === 'CREDIT',
+      investment: w.mode === 'investment',
+      show: (row.walletIds || []).indexOf(id) !== -1,
+      write: writable.indexOf(id) !== -1
+    });
+  });
+
+  widgetTouch_(row, 'options', false);
+  return {
+    scope: row.scope,
+    actions: row.scope === 'readwrite' ? (row.allowedActions || []).slice() : [],
+    wallets: wallets,
+    writeWallets: wallets.filter(function (w) { return w.write; }).map(function (w) { return w.name; }),
+    categories: row.scope === 'readwrite' ? ctx.categories.slice() : [],
+    today: widgetDateKey_(0)
+  };
+}
+
+/* ---- Write: `widget.add` ---- */
+
+function widgetAmount_(value) {
+  var n = typeof value === 'number' ? value : Number(String(value === undefined || value === null ? '' : value).replace(/[, ]/g, ''));
+  if (!isFinite(n) || n <= 0) throw bad_('"amount" must be a number greater than zero', 'BAD_AMOUNT');
+  if (n > WIDGET_AMOUNT_MAX) throw bad_('"amount" must be at most ' + WIDGET_AMOUNT_MAX, 'BAD_AMOUNT');
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) {
+    throw bad_('"amount" can have at most 2 decimals', 'BAD_AMOUNT');
+  }
+  return money_(n);
+}
+
+function widgetDate_(value) {
+  var today = widgetDateKey_(0);
+  if (value === undefined || value === null || String(value).trim() === '') return today;
+  var raw = String(value).trim();
+  var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  var probe = match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
+  if (!probe || probe.getUTCDate() !== Number(match[3]) || probe.getUTCMonth() !== Number(match[2]) - 1) {
+    throw bad_('"date" must be YYYY-MM-DD', 'BAD_DATE');
+  }
+  if (raw > widgetDateKey_(1)) throw bad_('"date" can be at most one day ahead', 'BAD_DATE');
+  if (raw < widgetDateKey_(-366)) throw bad_('"date" can be at most a year back', 'BAD_DATE');
+  return raw;
+}
+
+function widgetCategory_(value, categories) {
+  var wanted = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+  if (!wanted) {
+    for (var i = 0; i < categories.length; i += 1) {
+      if (String(categories[i]).toLowerCase() === 'other') return categories[i];
+    }
+    return categories[0] || 'Other';
+  }
+  for (var j = 0; j < categories.length; j += 1) {
+    if (String(categories[j]).toLowerCase() === wanted) return categories[j];
+  }
+  throw bad_('Unknown category', 'BAD_CATEGORY');
+}
+
+function widgetBalancesReply_(userId, walletIds, ctx, hide) {
+  var reply = {};
+  var overdraft = false;
+  computeWalletBalances_(userId).forEach(function (w) {
+    if (walletIds.indexOf(w.id) === -1) return;
+    var balance = money_(w.balance * ctx.rate);
+    if (w.type !== 'CREDIT' && w.balance < 0) overdraft = true;
+    reply[w.id] = {
+      name: w.name,
+      balance: hide ? null : balance,
+      text: hide ? WIDGET_MASK : widgetFormatMoney_(balance, ctx.currency, ctx.locale)
+    };
+  });
+  return { balances: reply, overdraft: overdraft };
+}
+
+/** Runs inside dispatch_'s script lock, so the idempotency check cannot race. */
+function widgetAdd_(auth, body) {
+  var row = auth.row;
+  if (row.scope !== 'readwrite') throw apiError_('This token is read only', 403, 'READ_ONLY_TOKEN');
+  widgetRateLimit_(row.id, 'w', WIDGET_WRITE_LIMIT);
+
+  var clientId = String(body.clientId === undefined || body.clientId === null ? '' : body.clientId).trim();
+  if (!/^[A-Za-z0-9._:-]{8,64}$/.test(clientId)) {
+    throw bad_('"clientId" is required: 8-64 letters, digits, "-" or "_"', 'BAD_CLIENT_ID');
+  }
+
+  var ctx = widgetMoneyContext_(auth.user.id, body.lang);
+  var hide = row.hideAmounts === true;
+  var cache = CacheService.getScriptCache();
+  var idemKey = 'wid:' + row.id + ':' + clientId;
+  var prior = cache.get(idemKey);
+  if (prior) {
+    var seen = JSON.parse(prior);
+    var again = widgetBalancesReply_(auth.user.id, seen.walletIds, ctx, hide);
+    var dup = { id: seen.id, duplicate: true, newBalances: again.balances };
+    if (again.overdraft) dup.warning = 'overdraft';
+    return dup;
+  }
+
+  var type = String(body.type === undefined || body.type === null ? '' : body.type).trim().toLowerCase();
+  if (WIDGET_ACTIONS.indexOf(type) === -1) throw bad_('"type" must be expense, income or transfer', 'BAD_TYPE');
+  if ((row.allowedActions || []).indexOf(type) === -1) {
+    throw apiError_('This token cannot add a ' + type, 403, 'ACTION_NOT_ALLOWED');
+  }
+
+  var amount = widgetAmount_(body.amount);
+  var allowed = row.writeWalletIds || [];
+  var walletId = String(body.walletId || '').trim();
+  if (!walletId || allowed.indexOf(walletId) === -1) {
+    throw apiError_('This token cannot write to that wallet', 403, 'WALLET_NOT_ALLOWED');
+  }
+  var toWalletId = '';
+  if (type === 'transfer') {
+    toWalletId = String(body.toWalletId || '').trim();
+    if (!toWalletId || allowed.indexOf(toWalletId) === -1) {
+      throw apiError_('This token cannot write to that wallet', 403, 'WALLET_NOT_ALLOWED');
+    }
+    if (toWalletId === walletId) throw bad_('A transfer needs two different wallets', 'SAME_WALLET');
+  }
+
+  var note = String(body.note === undefined || body.note === null ? '' : body.note).trim();
+  if (note.length > 300) throw bad_('"note" must be 300 characters or fewer', 'BAD_NOTE');
+
+  widgetEnsureSourceColumn_();
+
+  /* The same create the app uses: parseTransaction_ re-checks ownership,
+     wallet modes and the transfer rules, and nothing is duplicated here. */
+  var tx = transactionsCreate_(auth.user, {
+    type: type,
+    amount: amount,
+    walletId: walletId,
+    toWalletId: toWalletId,
+    category: type === 'transfer' ? '' : widgetCategory_(body.category, ctx.categories),
+    note: note,
+    date: widgetDate_(body.date)
+  }, 'widget:' + row.name);
+
+  var touched = toWalletId ? [walletId, toWalletId] : [walletId];
+  cache.put(idemKey, JSON.stringify({ id: tx.id, walletIds: touched }), WIDGET_IDEMPOTENCY_S);
+  widgetTouch_(row, 'add:' + type, true);
+
+  var after = widgetBalancesReply_(auth.user.id, touched, ctx, hide);
+  var reply = { id: tx.id, duplicate: false, type: type, amount: amount, date: tx.date, newBalances: after.balances };
+  if (after.overdraft) reply.warning = 'overdraft';
+  return reply;
+}
+
+/* ---- Managing tokens (signed-in app only) ---- */
+
+function publicWidgetToken_(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    scope: row.scope,
+    prefix: row.prefix,
+    walletIds: (row.walletIds || []).slice(),
+    writeWalletIds: (row.writeWalletIds || []).slice(),
+    allowedActions: (row.allowedActions || []).slice(),
+    hideAmounts: row.hideAmounts === true,
+    totalMode: row.totalMode === 'selected' ? 'selected' : 'all',
+    createdAt: row.createdAt,
+    lastUsedAt: row.lastUsedAt,
+    lastUsedAction: row.lastUsedAction,
+    expiresAt: row.expiresAt,
+    revokedAt: row.revokedAt,
+    status: widgetTokenStatus_(row)
+  };
+}
+
+function widgetTokenRows_(userId) {
+  if (!spreadsheet_().getSheetByName('ApiTokens')) return [];
+  return userRows_('ApiTokens', userId);
+}
+
+function ownedWidgetToken_(user, query) {
+  var id = str_(query.id, 'id');
+  var row = findById_('ApiTokens', id);
+  if (!row || row.userId !== user.id) throw apiError_('Token not found', 404, 'NOT_FOUND');
+  return row;
+}
+
+function widgetWalletList_(user, value, field, max) {
+  if (value === undefined || value === null) return [];
+  if (Object.prototype.toString.call(value) !== '[object Array]') {
+    throw bad_('"' + field + '" must be a list of wallet ids');
+  }
+  var owned = {};
+  userRows_('Wallets', user.id).forEach(function (w) { if (!w.archived) owned[w.id] = true; });
+  var out = [];
+  value.forEach(function (id) {
+    var s = String(id || '').trim();
+    if (!owned[s]) throw bad_('"' + field + '" has a wallet that is not yours or is archived', 'BAD_WALLET');
+    if (out.indexOf(s) === -1) out.push(s);
+  });
+  if (out.length > max) throw bad_('"' + field + '" can hold at most ' + max + ' wallets');
+  return out;
+}
+
+/** The editable part of a token. Scope is fixed at creation. */
+function parseWidgetConfig_(user, body, scope, existing) {
+  var has = function (k) { return body[k] !== undefined; };
+  var patch = {};
+
+  if (!existing || has('name')) patch.name = str_(body.name, 'name', { max: 40 });
+  if (!existing || has('walletIds')) {
+    patch.walletIds = widgetWalletList_(user, body.walletIds || [], 'walletIds', WIDGET_MAX_WALLETS);
+  }
+  if (scope === 'readwrite') {
+    if (!existing || has('writeWalletIds')) {
+      patch.writeWalletIds = widgetWalletList_(user, body.writeWalletIds || [], 'writeWalletIds', WIDGET_MAX_WALLETS);
+      if (!patch.writeWalletIds.length) throw bad_('Pick at least one wallet this token can write to');
+    }
+    if (!existing || has('allowedActions')) {
+      var actions = [];
+      (body.allowedActions || []).forEach(function (a) {
+        var s = oneOf_(a, 'allowedActions', WIDGET_ACTIONS);
+        if (actions.indexOf(s) === -1) actions.push(s);
+      });
+      if (!actions.length) throw bad_('Pick at least one action this token can add');
+      patch.allowedActions = actions;
+    }
+  } else if (!existing) {
+    patch.writeWalletIds = [];
+    patch.allowedActions = [];
+  }
+  if (!existing || has('hideAmounts')) patch.hideAmounts = bool_(body.hideAmounts, false);
+  if (!existing || has('totalMode')) patch.totalMode = oneOf_(body.totalMode, 'totalMode', WIDGET_TOTAL_MODES, 'all');
+  if (!existing || has('expiresInDays')) {
+    var days = Math.round(Number(body.expiresInDays) || 0);
+    if (WIDGET_EXPIRY_DAYS.indexOf(days) === -1) throw bad_('"expiresInDays" must be 0, 30, 90 or 365');
+    patch.expiresAt = days ? new Date(Date.now() + days * 86400000).toISOString() : '';
+  }
+  return patch;
+}
+
+function widgetTokensList_(user) {
+  return widgetTokenRows_(user.id)
+    .map(publicWidgetToken_)
+    .sort(function (a, b) {
+      var rank = { active: 0, expired: 1, revoked: 2 };
+      return rank[a.status] - rank[b.status] || String(b.createdAt).localeCompare(String(a.createdAt));
+    });
+}
+
+/**
+ * Adds any schema column missing from an existing sheet's header row, placed
+ * directly after the last non-empty header. Rows are written by position, so
+ * the header must sit exactly where the writes land: a widget row written
+ * before the Source header exists puts its value in the next column, after
+ * which getLastColumn()+1 (what createMissingSheets uses) would put the header
+ * one column too far right. Called before any widget write, so that order can
+ * never happen. Returns the headers it added.
+ */
+function ensureColumns_(name) {
+  var sheet = spreadsheet_().getSheetByName(name);
+  if (!sheet) return [];
+  var width = Math.max(1, sheet.getLastColumn());
+  var row = sheet.getRange(1, 1, 1, width).getValues()[0];
+  var existing = row.map(function (h) { return String(h || '').trim().toLowerCase(); });
+  var last = 0;
+  existing.forEach(function (h, i) { if (h) last = i + 1; });
+  var missing = schema_(name).columns
+    .map(function (col) { return col.header; })
+    .filter(function (header) { return existing.indexOf(header.toLowerCase()) === -1; });
+  if (missing.length) {
+    sheet.getRange(1, last + 1, 1, missing.length).setValues([missing]);
+    invalidate_(name);
+    Logger.log('Added columns to ' + name + ': ' + missing.join(', '));
+  }
+  return missing;
+}
+
+/** ensureColumns_('Transactions'), checked at most once per 6 hours. */
+function widgetEnsureSourceColumn_() {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('qw:cols:Transactions')) return;
+  ensureColumns_('Transactions');
+  cache.put('qw:cols:Transactions', '1', WIDGET_IDEMPOTENCY_S);
+}
+
+function widgetTokensCreate_(user, body) {
+  var scope = oneOf_(body.scope, 'scope', WIDGET_SCOPES);
+  var active = widgetTokenRows_(user.id).filter(function (r) { return widgetTokenStatus_(r) === 'active'; });
+  if (active.length >= WIDGET_TOKEN_MAX_ACTIVE) {
+    throw bad_('You can have at most ' + WIDGET_TOKEN_MAX_ACTIVE + ' active tokens. Revoke one first.', 'TOO_MANY_TOKENS');
+  }
+  var config = parseWidgetConfig_(user, body, scope, null);
+  var secret = newWidgetSecret_();
+  ensureSheet_('ApiTokens');
+  ensureColumns_('Transactions');
+
+  var row = {
+    id: uuid_(),
+    userId: user.id,
+    name: config.name,
+    scope: scope,
+    tokenHash: widgetTokenHash_(secret),
+    prefix: secret.slice(0, 7),
+    walletIds: config.walletIds,
+    writeWalletIds: config.writeWalletIds,
+    allowedActions: config.allowedActions,
+    hideAmounts: config.hideAmounts,
+    totalMode: config.totalMode,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: '',
+    lastUsedAction: '',
+    expiresAt: config.expiresAt,
+    revokedAt: ''
+  };
+  insertRow_('ApiTokens', row);
+  return { token: publicWidgetToken_(row), secret: secret };
+}
+
+function widgetTokensUpdate_(user, query, body) {
+  var row = ownedWidgetToken_(user, query);
+  if (row.revokedAt) throw bad_('A revoked token cannot be edited', 'TOKEN_REVOKED');
+  var patch = parseWidgetConfig_(user, body, row.scope, row);
+  return publicWidgetToken_(updateRow_('ApiTokens', row.id, patch));
+}
+
+/** A new secret for the same token; the old one stops working at once. */
+function widgetTokensRegenerate_(user, query) {
+  var row = ownedWidgetToken_(user, query);
+  if (row.revokedAt) throw bad_('A revoked token cannot be regenerated', 'TOKEN_REVOKED');
+  if (widgetTokenStatus_(row) === 'expired') {
+    throw bad_('This token has expired. Edit its expiry first, then regenerate.', 'TOKEN_EXPIRED');
+  }
+  var secret = newWidgetSecret_();
+  var updated = updateRow_('ApiTokens', row.id, {
+    tokenHash: widgetTokenHash_(secret),
+    prefix: secret.slice(0, 7),
+    lastUsedAt: '',
+    lastUsedAction: ''
+  });
+  return { token: publicWidgetToken_(updated), secret: secret };
+}
+
+function widgetTokensRevoke_(user, query) {
+  var row = ownedWidgetToken_(user, query);
+  if (row.revokedAt) return publicWidgetToken_(row);
+  return publicWidgetToken_(updateRow_('ApiTokens', row.id, { revokedAt: new Date().toISOString() }));
+}
+
+/**
+ * End-to-end check of the widget tokens on the real sheet. Run from the
+ * editor after redeploying, then View → Logs. Uses the first active user and
+ * their first spending wallet, goes through the same entry path a phone does
+ * (dispatch_ inside handleWidget_), and removes every row it wrote.
+ */
+function testWidgetTokens() {
+  var user = readTable_('Users').filter(function (u) { return u.active !== false; })[0];
+  if (!user) { Logger.log('testWidgetTokens: no active user'); return; }
+  var wallets = userRows_('Wallets', user.id).filter(function (w) {
+    return !w.archived && w.mode !== 'investment';
+  });
+  if (!wallets.length) { Logger.log('testWidgetTokens: the user has no spending wallet'); return; }
+  var wallet = wallets[0];
+  var other = userRows_('Wallets', user.id).filter(function (w) { return !w.archived && w.id !== wallet.id; })[0];
+
+  var call = function (action, method, query, body, token) {
+    var out = handleWidget_(function () { return dispatch_(action, method, query || {}, body || {}, token); });
+    return JSON.parse(out.getContent());
+  };
+  var failures = [];
+  var check = function (label, ok, detail) {
+    Logger.log((ok ? 'PASS ' : 'FAIL ') + label + (ok ? '' : ' -> ' + JSON.stringify(detail)));
+    if (!ok) failures.push(label);
+  };
+
+  var tokenIds = [];
+  var txIds = [];
+  try {
+    var rw = widgetTokensCreate_(user, {
+      name: 'testWidgetTokens rw', scope: 'readwrite', walletIds: [wallet.id],
+      writeWalletIds: [wallet.id], allowedActions: ['expense'], expiresInDays: 0
+    });
+    var ro = widgetTokensCreate_(user, { name: 'testWidgetTokens ro', scope: 'read', walletIds: [wallet.id] });
+    tokenIds.push(rw.token.id, ro.token.id);
+    check('create returns qw_ secrets', /^qw_/.test(rw.secret) && /^qw_/.test(ro.secret), rw.token);
+    check('only the hash is stored', findById_('ApiTokens', rw.token.id).tokenHash !== rw.secret, '');
+
+    var read = call('widget', 'GET', {}, {}, ro.secret);
+    check('read works', read.ok && read.wallets.length === 1 && read.wallets[0].id === wallet.id, read);
+    check('read has flat keys', read.ok && read.flat.w1name === wallet.name && read.flat.w8name === '', read.flat);
+
+    var options = call('widget.options', 'GET', {}, {}, rw.secret);
+    check('options lists only this token\'s wallets', options.ok && options.wallets.length === 1, options);
+
+    var clientId = 'test-' + uuid_();
+    var add = call('widget.add', 'POST', {}, {
+      type: 'expense', amount: 1.23, walletId: wallet.id, note: 'testWidgetTokens', clientId: clientId
+    }, rw.secret);
+    if (add.ok) txIds.push(add.id);
+    check('write works', add.ok && add.duplicate === false, add);
+    var stored = add.ok ? findById_('Transactions', add.id) : null;
+    check('write is tagged with its source', stored && stored.source === 'widget:testWidgetTokens rw', stored);
+
+    var again = call('widget.add', 'POST', {}, {
+      type: 'expense', amount: 1.23, walletId: wallet.id, note: 'testWidgetTokens', clientId: clientId
+    }, rw.secret);
+    check('a retried write is not added twice', again.ok && again.duplicate === true && again.id === add.id, again);
+
+    var viaGet = call('widget.add', 'GET', {}, {
+      type: 'expense', amount: 1, walletId: wallet.id, clientId: 'test-' + uuid_()
+    }, rw.secret);
+    check('write over GET is refused', !viaGet.ok, viaGet);
+
+    var badAmount = call('widget.add', 'POST', {}, {
+      type: 'expense', amount: 1.234, walletId: wallet.id, clientId: 'test-' + uuid_()
+    }, rw.secret);
+    check('3 decimals are refused', !badAmount.ok && badAmount.code === 'BAD_AMOUNT', badAmount);
+
+    var badAction = call('widget.add', 'POST', {}, {
+      type: 'income', amount: 1, walletId: wallet.id, clientId: 'test-' + uuid_()
+    }, rw.secret);
+    check('an action outside the token is refused', !badAction.ok && badAction.code === 'ACTION_NOT_ALLOWED', badAction);
+
+    if (other) {
+      var badWallet = call('widget.add', 'POST', {}, {
+        type: 'expense', amount: 1, walletId: other.id, clientId: 'test-' + uuid_()
+      }, rw.secret);
+      check('a wallet outside the token is refused', !badWallet.ok && badWallet.code === 'WALLET_NOT_ALLOWED', badWallet);
+    }
+
+    var roWrite = call('widget.add', 'POST', {}, {
+      type: 'expense', amount: 1, walletId: wallet.id, clientId: 'test-' + uuid_()
+    }, ro.secret);
+    check('a read-only token cannot write', !roWrite.ok && roWrite.code === 'READ_ONLY_TOKEN', roWrite);
+
+    var unknown = call('widget', 'GET', {}, {}, newWidgetSecret_());
+    widgetTokensRevoke_(user, { id: rw.token.id });
+    var revokedRead = call('widget', 'GET', {}, {}, rw.secret);
+    var revokedWrite = call('widget.add', 'POST', {}, {
+      type: 'expense', amount: 1, walletId: wallet.id, clientId: 'test-' + uuid_()
+    }, rw.secret);
+    check('a revoked token cannot read', !revokedRead.ok && revokedRead.code === 'TOKEN_INVALID', revokedRead);
+    check('a revoked token cannot write', !revokedWrite.ok && revokedWrite.code === 'TOKEN_INVALID', revokedWrite);
+    check('revoked and unknown tokens look the same',
+      JSON.stringify(unknown) === JSON.stringify(revokedRead), [unknown, revokedRead]);
+
+    var managed = call('widgetTokens.list', 'GET', {}, {}, ro.secret);
+    check('a widget token cannot manage tokens', !managed.ok, managed);
+  } catch (err) {
+    failures.push('threw: ' + (err && err.message));
+    Logger.log('FAIL threw: ' + (err && err.stack ? err.stack : err));
+  } finally {
+    if (txIds.length) {
+      deleteWhere_('Transactions', function (t) { return txIds.indexOf(t.id) !== -1; });
+    }
+    if (tokenIds.length) {
+      deleteWhere_('ApiTokens', function (t) { return tokenIds.indexOf(t.id) !== -1; });
+    }
+  }
+  Logger.log(failures.length ? 'testWidgetTokens FAILED: ' + failures.join('; ') : 'testWidgetTokens: all checks passed, test rows removed.');
+  return failures;
 }
 
 /* =========================================================================

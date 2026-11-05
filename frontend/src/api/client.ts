@@ -27,6 +27,11 @@
 const GAS_URL = (import.meta.env.VITE_GAS_WEB_APP_URL ?? '').trim();
 const TOKEN_KEY = 'quick-wallet.token';
 
+/** The Apps Script /exec URL, for the widget setup screen. '' when unset. */
+export function apiBaseUrl(): string {
+  return GAS_URL;
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;

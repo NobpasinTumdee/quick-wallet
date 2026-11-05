@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { LogOut, Smartphone } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
@@ -25,6 +25,7 @@ import {
 import { useExcelQuery } from '../hooks/useExcelDB';
 import { cx, formatDate, formatMoney } from '../lib/format';
 import { MobileNavConfig, resolveMobileNav, resolvePaydays } from '../lib/mobileNav';
+import { navigate } from '../lib/router';
 import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
@@ -385,6 +386,17 @@ export function SettingsPage() {
         value={resolvePaydays(settings.paydays)}
         onChange={savePaydays}
         busy={navBusy}
+      />
+
+      <Card
+        title={t('widgets.title')}
+        subtitle={t('widgets.settingsCardBody')}
+        actions={
+          <Button onClick={() => navigate('widgets')}>
+            <Icon icon={Smartphone} size="sm" />
+            {t('widgets.settingsCardAction')}
+          </Button>
+        }
       />
 
       <Card
