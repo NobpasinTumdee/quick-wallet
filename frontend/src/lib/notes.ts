@@ -1,6 +1,7 @@
 import { classifyEmbed, loneUrl } from './embeds';
-import { Route } from './router';
-import { Note, NoteRef, NoteRefType } from '../types';
+import { NOTE_COLOR_ALT, TOGGLE_CLOSE, TOGGLE_OPEN } from './noteFormat';
+import type { Route } from './router';
+import type { Note, NoteRef, NoteRefType } from '../types';
 
 /**
  * Pure helpers for Notes. The limits mirror NOTE_TITLE_MAX, NOTE_BODY_MAX and
@@ -88,11 +89,17 @@ export function stripMarkdown(body: string, labels: EmbedLabels = EMBED_LABELS):
       if (/^\s*(```|~~~)/.test(line)) return '';
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) return '';
       if (/^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-')) return '';
+      /* A toggle's fences: its title is the words worth keeping. */
+      const toggle = TOGGLE_OPEN.exec(line);
+      if (toggle) return toggle[1] ?? '';
+      if (TOGGLE_CLOSE.test(line)) return '';
       const rest = line
         .replace(/^\s*(>\s?)+/, '')
         .replace(/^\s*#{1,6}\s+/, '')
         .replace(/^\s*([-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s+/, '')
-        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+/, '');
+        .replace(/^\s*([-*+]|\d{1,9}[.)])\s+/, '')
+        /* `> [!NOTE]` is a callout's label, not words. */
+        .replace(/^\[!(note|tip|important|warning|caution)\]\s*$/i, '');
       /* A link alone on its line is an embed in the reading view; say what
          it is rather than show the address. */
       const lone = loneUrl(rest);
@@ -102,6 +109,11 @@ export function stripMarkdown(body: string, labels: EmbedLabels = EMBED_LABELS):
         return embed.kind === 'image' ? picture('') : embed.domain;
       }
       return rest
+        /* Colour, highlight and underline marks, before links take the brackets. */
+        .replace(COLOR_MARK, '$1')
+        .replace(HIGHLIGHT_TAG, '==')
+        .replace(/==(?=\S)(.*?\S)==/g, '$1')
+        .replace(/\+\+(?=\S)(.*?\S)\+\+/g, '$1')
         .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_match, alt: string) => picture(alt))
         .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
         .replace(/<((?:https?:|mailto:)[^>\s]+)>/gi, '$1')
@@ -113,10 +125,13 @@ export function stripMarkdown(body: string, labels: EmbedLabels = EMBED_LABELS):
         .replace(/`+([^`]*)`+/g, '$1')
         .replace(/^\s*\|(.*)\|\s*$/, '$1')
         .replace(/\s*\|\s*/g, ' · ')
-        .replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, '$1');
+        .replace(/\\([\\`*_{}[\]()#+\-.!|~>=])/g, '$1');
     })
     .join('\n');
 }
+
+const COLOR_MARK = new RegExp(`\\[([^\\[\\]\\n]*)\\]\\{(?:${NOTE_COLOR_ALT})\\}`, 'g');
+const HIGHLIGHT_TAG = new RegExp(`==\\[(?:${NOTE_COLOR_ALT})\\]`, 'g');
 
 /** What embeds are called in a preview; the list passes the translations. */
 export type EmbedLabels = { youtube: string; picture: string };

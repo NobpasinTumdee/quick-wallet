@@ -1360,3 +1360,971 @@
     animation: none;
   }
 }
+
+/* =====================================================================
+   Notes editor, second round: colours, callouts, toggles, contents, note
+   links, the reworked formatting bar and its panels, the slash menu,
+   display preferences, focus mode and print.
+   Every colour comes from the theme: the --note-* hues in theme.css are
+   mixed with each theme's own --text and --surface, which is what keeps
+   them readable in all 44 themes.
+   ===================================================================== */
+
+/* ---- Inline colour, highlight, underline ---- */
+
+.md .md-hl {
+  padding: 0.05em 0.15em;
+  border-radius: 3px;
+  color: var(--text);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.md .md-hl-red { background: var(--note-hl-red); }
+.md .md-hl-orange { background: var(--note-hl-orange); }
+.md .md-hl-yellow { background: var(--note-hl-yellow); }
+.md .md-hl-green { background: var(--note-hl-green); }
+.md .md-hl-blue { background: var(--note-hl-blue); }
+.md .md-hl-purple { background: var(--note-hl-purple); }
+.md .md-hl-pink { background: var(--note-hl-pink); }
+.md .md-hl-gray { background: var(--note-hl-gray); }
+
+.md .md-c-red { color: var(--note-text-red); }
+.md .md-c-orange { color: var(--note-text-orange); }
+.md .md-c-yellow { color: var(--note-text-yellow); }
+.md .md-c-green { color: var(--note-text-green); }
+.md .md-c-blue { color: var(--note-text-blue); }
+.md .md-c-purple { color: var(--note-text-purple); }
+.md .md-c-pink { color: var(--note-text-pink); }
+.md .md-c-gray { color: var(--note-text-gray); }
+
+.md .md-u {
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+/* ---- Callouts ----
+   The type shows in the icon and the left edge; the text stays the theme's
+   own text colour on a faint tint, so it reads as well as the rest. */
+
+.md .md-callout {
+  --callout: var(--note-blue);
+  margin: 0 0 0.85em;
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--callout);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--callout) 9%, var(--surface));
+}
+
+.md .md-callout-tip { --callout: var(--note-green); }
+.md .md-callout-important { --callout: var(--note-purple); }
+.md .md-callout-warning { --callout: var(--note-orange); }
+.md .md-callout-caution { --callout: var(--note-red); }
+
+.md .md-callout > :last-child {
+  margin-bottom: 0;
+}
+
+.md-callout-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 0.25em;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+
+.md-callout-title svg {
+  flex: none;
+  color: var(--callout);
+}
+
+/* ---- Toggle blocks ---- */
+
+.md .md-toggle {
+  margin: 0 0 0.85em;
+}
+
+.md .md-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-1);
+  margin-inline-start: calc(var(--space-1) * -1);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  list-style: none;
+  touch-action: manipulation;
+}
+
+.md .md-toggle-title::-webkit-details-marker {
+  display: none;
+}
+
+.md .md-toggle-title::before {
+  content: '';
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  margin: 0 0.25em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease-sheet);
+}
+
+.md .md-toggle[open] > .md-toggle-title::before {
+  transform: rotate(45deg);
+}
+
+.md .md-toggle-title:hover {
+  background: var(--surface-3);
+}
+
+.md .md-toggle-title:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.md .md-toggle-body {
+  margin-inline-start: 0.35em;
+  padding-inline-start: 1.4em;
+  border-inline-start: 2px solid var(--border);
+}
+
+.md .md-toggle-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---- Contents ---- */
+
+.md .md-toc {
+  margin: 0 0 1.2em;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+}
+
+.md .md-toc > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  color: var(--text-secondary);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.md .md-toc > summary::-webkit-details-marker {
+  display: none;
+}
+
+.md .md-toc ol {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.md .md-toc li {
+  margin: 0;
+}
+
+.md .md-toc button {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.md .md-toc button:hover {
+  background: var(--surface-3);
+}
+
+.md .md-toc button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.md [id^='h-'] {
+  scroll-margin-top: calc(var(--header-height) + var(--note-toolbar-h, 50px) + var(--space-4));
+}
+
+/* ---- Links to other notes ---- */
+
+.md .md-note-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  padding: 0 0.3em;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+}
+
+.md .md-note-link svg {
+  flex: none;
+  align-self: center;
+}
+
+.md a.md-note-link:hover {
+  text-decoration: underline;
+}
+
+.md a.md-note-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.md .md-note-link.is-missing {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  text-decoration: line-through;
+  cursor: default;
+}
+
+/* ---- The formatting bar ---- */
+
+.note-format-btn {
+  position: relative;
+}
+
+.note-format-btn[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.note-format-btn[aria-disabled='true']:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.note-format-btn.is-open {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+/* The colour the button puts on, under its icon. */
+.note-format-swatch {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--swatch);
+  transform: translateX(-50%);
+}
+
+.note-format-swatch.is-highlight {
+  height: 4px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.note-format.is-phone {
+  gap: 0;
+  padding-right: max(2px, env(safe-area-inset-right));
+  padding-left: max(2px, env(safe-area-inset-left));
+  overflow: hidden;
+}
+
+.note-format-row {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.note-format-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- Tool panels: palette, More, Aa, +, table, menus ---- */
+
+.tool-panel {
+  position: fixed;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  max-width: 100%;
+}
+
+.tool-panel.is-wide .tool-list {
+  min-width: 0;
+}
+
+.tool-row,
+.tool-tile,
+.tool-back,
+.tool-remove {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tool-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-row > svg,
+.tool-tile > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.tool-row:hover,
+.tool-tile:hover,
+.tool-back:hover,
+.tool-remove:hover {
+  background: var(--surface-3);
+}
+
+.tool-row:focus-visible,
+.tool-tile:focus-visible,
+.tool-back:focus-visible,
+.tool-remove:focus-visible,
+.tool-swatch:focus-visible,
+.tool-seg-btn:focus-visible,
+.tool-table-cell:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tool-row.is-active,
+.tool-tile.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tool-row[aria-disabled='true'],
+.tool-tile[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tool-row-more {
+  transform: rotate(-90deg);
+}
+
+.tool-row.is-callout-note svg { color: var(--note-blue); }
+.tool-row.is-callout-tip svg { color: var(--note-green); }
+.tool-row.is-callout-important svg { color: var(--note-purple); }
+.tool-row.is-callout-warning svg { color: var(--note-orange); }
+.tool-row.is-callout-caution svg { color: var(--note-red); }
+
+.tool-back {
+  color: var(--text-secondary);
+}
+
+.tool-heading {
+  margin: var(--space-2) var(--space-2) 2px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The phone's Aa and + panels: a grid of labelled tiles. */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 2px;
+}
+
+.tool-tile {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  padding: var(--space-1);
+  text-align: center;
+}
+
+.tool-tile-label {
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tool-tile-text {
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+
+.tool-row .tool-tile-label {
+  font-size: inherit;
+}
+
+/* Palette */
+.tool-palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tool-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 44px);
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+}
+
+.tool-swatch {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--swatch);
+  font: inherit;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tool-swatch.is-highlight {
+  background: var(--swatch);
+  color: var(--text);
+}
+
+.tool-swatch.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tool-remove {
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+/* Table size */
+.tool-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1);
+}
+
+.tool-table-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-table-row {
+  display: flex;
+  gap: 2px;
+}
+
+.tool-table-cell {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tool-table-cell.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tool-table-size,
+.tool-table-hint {
+  margin: 0;
+  text-align: center;
+}
+
+.tool-table-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Segments and the switch, in the note's ⋯ menu */
+.tool-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 2px var(--space-2);
+}
+
+.tool-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.tool-seg-btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool-seg-btn.is-active {
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+
+.tool-switch small {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tool-switch-track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border-strong);
+  transition: background-color var(--dur-fast) var(--ease-sheet);
+}
+
+.tool-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform var(--dur-fast) var(--ease-sheet);
+}
+
+.tool-switch.is-on .tool-switch-track {
+  background: var(--accent);
+}
+
+.tool-switch.is-on .tool-switch-track::after {
+  transform: translateX(14px);
+}
+
+.note-menu {
+  min-width: 240px;
+}
+
+/* The ⋯ button made the note toolbar one button longer: on the narrowest
+   phones the gaps give way so the save status keeps its words. */
+@media (max-width: 379px) {
+  .note-toolbar {
+    gap: var(--space-1);
+  }
+
+  .note-toolbar-actions {
+    gap: 0;
+  }
+
+  .note-status {
+    gap: 6px;
+  }
+}
+
+/* Width is a desktop choice: a phone is as wide as it is. */
+@media (max-width: 767px) {
+  .note-menu-width {
+    display: none;
+  }
+}
+
+/* ---- Slash menu ---- */
+
+.slash-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  padding: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.slash-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.slash-item > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.slash-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.slash-item.is-active > svg {
+  color: var(--accent);
+}
+
+.slash-sub {
+  color: var(--text-muted);
+}
+
+.slash-item.is-active .slash-sub {
+  color: inherit;
+}
+
+.slash-empty {
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--text-muted);
+}
+
+/* ---- Link dialog: notes ---- */
+
+.link-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(50vh, 360px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.link-notes-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.link-notes-item > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.link-notes-item > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.link-notes-item:hover {
+  background: var(--surface-3);
+}
+
+.link-notes-item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.link-notes-empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ---- Words and reading time ---- */
+
+.note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0 var(--space-3);
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.note-meta:empty {
+  display: none;
+}
+
+.note-meta .note-counter {
+  margin: 0;
+}
+
+.note-stats {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+/* ---- Display preferences ---- */
+
+.note-editor.note-size-s .note-body,
+.note-editor.note-size-s .md {
+  font-size: 16px;
+}
+
+/* A mouse has no zoom-on-focus to avoid, so small can be smaller there. */
+@media (pointer: fine) {
+  .note-editor.note-size-s .note-body,
+  .note-editor.note-size-s .md {
+    font-size: 15px;
+  }
+}
+
+.note-editor.note-size-l .note-body,
+.note-editor.note-size-l .md {
+  font-size: max(19px, var(--text-lg));
+}
+
+@media (min-width: 768px) {
+  .note-editor.is-wide {
+    max-width: 1080px;
+  }
+}
+
+/* ---- Focus mode: only the note while writing ---- */
+
+html.note-focus {
+  --header-height: 0px;
+}
+
+html.note-focus .sidebar,
+html.note-focus .topbar,
+html.note-focus .tabbar,
+html.note-focus .gnav,
+html.note-focus .qa {
+  display: none !important;
+}
+
+html.note-focus .shell {
+  grid-template-columns: 1fr;
+}
+
+html.note-focus .main {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.note-focus-exit {
+  position: fixed;
+  top: max(var(--space-2), env(safe-area-inset-top));
+  right: max(var(--space-2), env(safe-area-inset-right));
+  z-index: var(--z-dock);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.note-focus-exit:hover {
+  color: var(--text);
+}
+
+.note-focus-exit:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* On a phone the note's own toolbar is at the top, so the exit sits at the
+   right edge above the formatting bar instead, as an icon. */
+@media (max-width: 767px) {
+  .note-focus-exit {
+    top: auto;
+    bottom: calc(var(--note-dock-bottom, 0px) + 64px + env(safe-area-inset-bottom, 0px));
+    justify-content: center;
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .note-focus-exit span {
+    display: none;
+  }
+}
+
+/* ---- Print / Save as PDF ----
+   The note alone, on white, whatever theme is on screen. The light palette
+   is set on the note itself; the note colours are defined on .md too, so
+   they are mixed again from these values. */
+
+@media print {
+  html.has-note-open .sidebar,
+  html.has-note-open .topbar,
+  html.has-note-open .tabbar,
+  html.has-note-open .gnav,
+  html.has-note-open .qa,
+  html.has-note-open .toaster,
+  .note-toolbar,
+  .note-conflict,
+  .note-format-slot,
+  .note-add-ref,
+  .note-refs-empty,
+  .note-ref-remove,
+  .note-meta,
+  .note-focus-exit,
+  .tool-panel,
+  .slash-menu,
+  .md-yt-frame,
+  .md-yt-play {
+    display: none !important;
+  }
+
+  html.has-note-open,
+  html.has-note-open body {
+    background: #fff !important;
+  }
+
+  html.has-note-open .shell {
+    display: block;
+  }
+
+  html.has-note-open .main,
+  html.has-note-open .page {
+    padding: 0 !important;
+    background: none !important;
+  }
+
+  html.has-note-open .page > * {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .note-editor {
+    --text: #1b1b1f;
+    --text-secondary: #3b3b42;
+    --text-muted: #55555d;
+    --text-faint: #6b6b73;
+    --surface: #ffffff;
+    --surface-2: #f4f4f6;
+    --surface-3: #ebebef;
+    --border: #d2d2d8;
+    --border-strong: #b8b8c0;
+    --accent: #1f4fb8;
+    --accent-soft: #e5ecfb;
+    max-width: none !important;
+    color: var(--text);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .note-title {
+    color: var(--text) !important;
+  }
+
+  .note-read {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .note-editor .md {
+    font-size: 11.5pt !important;
+    line-height: 1.6;
+  }
+
+  .md pre,
+  .md blockquote,
+  .md .md-callout,
+  .md table,
+  .md-picture,
+  .md-embed {
+    break-inside: avoid;
+  }
+
+  .md h1,
+  .md h2,
+  .md h3 {
+    break-after: avoid;
+  }
+
+  /* Folded blocks print open: paper cannot be tapped. */
+  .md details::details-content {
+    display: block;
+    content-visibility: visible;
+  }
+}

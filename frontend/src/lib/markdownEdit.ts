@@ -9,6 +9,8 @@
  * strings alone.
  */
 
+import { type CalloutType, NOTE_COLOR_ALT, type NoteColor } from './noteFormat';
+
 export type TextState = { value: string; start: number; end: number };
 
 export type TextEdit = {
@@ -206,6 +208,15 @@ export function cycleHeading(state: TextState): TextEdit {
   );
 }
 
+/** A heading of `level` on every selected line — or plain again when the
+ *  first line already is one. */
+export function setHeading(state: TextState, level: number): TextEdit {
+  const { from, to, lines } = selectedLines(state);
+  const first = parseLine(lines[0].text);
+  const next = first.kind === 'heading' && first.level === level ? 0 : level;
+  return rewritePrefixes(state, lines, from, to, (info) => info.quote + (next ? '#'.repeat(next) + ' ' : ''));
+}
+
 /**
  * Bullets, numbers, checkboxes or a quote on every selected line — or off
  * again when every line that has text already has it.
@@ -331,13 +342,14 @@ export function selectionIsList(state: TextState): boolean {
 
 /* ---- Inline actions ---- */
 
-export type InlineKind = 'bold' | 'italic' | 'strike' | 'code';
+export type InlineKind = 'bold' | 'italic' | 'strike' | 'code' | 'underline';
 
 const INLINE_MARK: Record<InlineKind, string> = {
   bold: '**',
   italic: '*',
   strike: '~~',
   code: '`',
+  underline: '++',
 };
 
 /** How many of `ch` run back from `pos` (exclusive) / forward from `pos`. */
@@ -366,6 +378,20 @@ function surrounded(value: string, start: number, end: number, mark: string): bo
 }
 
 /**
+ * A selection that starts on a line's block marker (`## `, `- `, `> `,
+ * `1. `, `- [ ] `) starts after it instead: a mark around the marker would
+ * turn the heading or list item back into plain text.
+ */
+function pastLinePrefix(value: string, start: number, end: number): number {
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  let lineEnd = value.indexOf('\n', lineStart);
+  if (lineEnd === -1) lineEnd = value.length;
+  const line = value.slice(lineStart, lineEnd);
+  const prefixEnd = lineStart + line.length - parseLine(line).rest.length;
+  return start < prefixEnd && prefixEnd < end ? prefixEnd : start;
+}
+
+/**
  * Wrap the selection in `**`, `*`, `~~` or a backtick — or unwrap it when it
  * already is. With nothing selected, a placeholder goes in, selected, so the
  * next keystroke replaces it. A selection across lines gets a fenced code
@@ -381,6 +407,7 @@ export function toggleInline(state: TextState, kind: InlineKind, placeholder: st
      leave "**word **", which is not bold. */
   while (end > start && /\s/.test(value[end - 1])) end -= 1;
   while (start < end && /\s/.test(value[start])) start += 1;
+  start = pastLinePrefix(value, start, end);
   const selected = value.slice(start, end);
 
   if (kind === 'code' && selected.includes('\n')) return toggleFence(state);
@@ -483,6 +510,20 @@ export function insertCodeBlock(state: TextState, placeholder: string): TextEdit
   const text = `${before}\`\`\`\n${placeholder}\n\`\`\``;
   const at = start + before.length + 4;
   return { from: start, to: end, text, selStart: at, selEnd: at + placeholder.length };
+}
+
+/** Code block: around the selected lines, or a new one with a placeholder. */
+export function codeBlockAction(state: TextState, placeholder: string): TextEdit {
+  if (state.start !== state.end) return toggleFence(state);
+  const { value, start } = state;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  let lineEnd = value.indexOf('\n', start);
+  if (lineEnd === -1) lineEnd = value.length;
+  /* On a line with text, the block goes on the next line. */
+  if (value.slice(lineStart, lineEnd).trim()) {
+    return insertBlock({ value, start: lineEnd, end: lineEnd }, '```\n' + placeholder + '\n```');
+  }
+  return insertCodeBlock(state, placeholder);
 }
 
 /** Code: inline on a line with text or a selection, a block on an empty line. */
@@ -633,4 +674,426 @@ export function insertBlock(state: TextState, text: string): TextEdit {
   if (!trail) caret += 2;
   else if (trail === '\n' && after) caret += 1;
   return { from: start, to: end, text: inserted, selStart: caret, selEnd: caret };
+}
+
+/* ---- Colour and highlight ---- */
+
+export type ColorKind = 'color' | 'highlight';
+
+/** `[text]{red}` / `==text==` / `==[green]text==` around `text`. */
+function wrapColor(kind: ColorKind, color: NoteColor, text: string): { text: string; lead: number } {
+  if (kind === 'color') return { text: `[${text}]{${color}}`, lead: 1 };
+  if (color === 'yellow') return { text: `==${text}==`, lead: 2 };
+  const lead = `==[${color}]`;
+  return { text: `${lead}${text}==`, lead: lead.length };
+}
+
+const COLOR_SPAN = new RegExp(`\\[([^\\[\\]\\n]*)\\]\\{(${NOTE_COLOR_ALT})\\}`, 'g');
+const HIGHLIGHT_SPAN = new RegExp(`==(?:\\[(${NOTE_COLOR_ALT})\\])?([^\\n]*?)==`, 'g');
+
+type Span = { from: number; to: number; innerFrom: number; inner: string; color: NoteColor };
+
+/** The coloured (or highlighted) span on the selection's line that holds the
+ *  whole selection, if there is one. */
+function spanAround(state: TextState, kind: ColorKind): Span | null {
+  const { value, start, end } = state;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  let lineEnd = value.indexOf('\n', start);
+  if (lineEnd === -1) lineEnd = value.length;
+  if (end > lineEnd) return null;
+  const line = value.slice(lineStart, lineEnd);
+  const pattern = new RegExp(kind === 'color' ? COLOR_SPAN : HIGHLIGHT_SPAN);
+  for (const m of line.matchAll(pattern)) {
+    const from = lineStart + (m.index ?? 0);
+    const to = from + m[0].length;
+    if (from > start || to < end) continue;
+    if (kind === 'color') {
+      return { from, to, innerFrom: from + 1, inner: m[1], color: m[2] as NoteColor };
+    }
+    const color = (m[1] as NoteColor | undefined) ?? 'yellow';
+    const lead = m[1] ? 2 + m[1].length + 2 : 2;
+    return { from, to, innerFrom: from + lead, inner: m[2], color };
+  }
+  return null;
+}
+
+/**
+ * Text colour or highlight on the selection. On text that already has one
+ * the colour is swapped, never nested; `null` takes it off. With nothing
+ * selected, a placeholder goes in selected. Across lines, each line with
+ * text is done on its own, since the marks cannot span lines.
+ */
+export function applyColor(state: TextState, kind: ColorKind, color: NoteColor | null, placeholder: string): TextEdit {
+  const { value } = state;
+  const noop: TextEdit = { from: state.start, to: state.start, text: '', selStart: state.start, selEnd: state.end };
+
+  if (value.slice(state.start, state.end).includes('\n')) {
+    const { from, to, lines } = selectedLines(state);
+    return rewriteRests(lines, from, to, (rest) => {
+      if (!rest.trim()) return rest;
+      const whole = spanAround({ value: rest, start: 0, end: rest.length }, kind);
+      const exact = whole && whole.from === 0 && whole.to === rest.length ? whole : null;
+      const inner = exact ? exact.inner : rest;
+      return color ? wrapColor(kind, color, inner).text : inner;
+    });
+  }
+
+  const span = spanAround(state, kind);
+  if (span) {
+    const selStart = Math.max(state.start, span.innerFrom) - span.innerFrom;
+    const selEnd = Math.min(state.end, span.innerFrom + span.inner.length) - span.innerFrom;
+    if (!color) {
+      return { from: span.from, to: span.to, text: span.inner, selStart: span.from + selStart, selEnd: span.from + selEnd };
+    }
+    const next = wrapColor(kind, color, span.inner);
+    return {
+      from: span.from,
+      to: span.to,
+      text: next.text,
+      selStart: span.from + next.lead + selStart,
+      selEnd: span.from + next.lead + selEnd,
+    };
+  }
+  if (!color) return noop;
+
+  let { start, end } = state;
+  while (end > start && /\s/.test(value[end - 1])) end -= 1;
+  while (start < end && /\s/.test(value[start])) start += 1;
+  start = pastLinePrefix(value, start, end);
+  const inner = start === end ? placeholder : value.slice(start, end);
+  const next = wrapColor(kind, color, inner);
+  return {
+    from: start,
+    to: end,
+    text: next.text,
+    selStart: start + next.lead,
+    selEnd: start + next.lead + inner.length,
+  };
+}
+
+/** True when the selection sits inside text that already has this kind. */
+export function hasColor(state: TextState, kind: ColorKind): boolean {
+  return spanAround(state, kind) !== null;
+}
+
+/* ---- Clear formatting ---- */
+
+const OUTER_PAIRS: [RegExp, RegExp][] = [
+  [new RegExp(`==\\[(?:${NOTE_COLOR_ALT})\\]$`), /^==/],
+  [/\[$/, new RegExp(`^\\]\\{(?:${NOTE_COLOR_ALT})\\}`)],
+  [/\*\*$/, /^\*\*/],
+  [/__$/, /^__/],
+  [/~~$/, /^~~/],
+  [/\+\+$/, /^\+\+/],
+  [/==$/, /^==/],
+  [/\*$/, /^\*/],
+  [/_$/, /^_/],
+  [/`$/, /^`/],
+];
+
+/** Every inline mark taken out of one line's text. */
+export function stripInlineMarks(text: string): string {
+  let out = text;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const before = out;
+    out = out
+      .replace(new RegExp(`\\[([^\\[\\]\\n]*)\\]\\{(?:${NOTE_COLOR_ALT})\\}`, 'g'), '$1')
+      .replace(new RegExp(`==\\[(?:${NOTE_COLOR_ALT})\\]`, 'g'), '==')
+      .replace(/==(?=\S)(.*?\S)==/g, '$1')
+      .replace(/\+\+(?=\S)(.*?\S)\+\+/g, '$1')
+      .replace(/~~(?=\S)(.*?\S)~~/g, '$1')
+      .replace(/(\*\*|__)(?=\S)(.*?\S)\1/g, '$2')
+      .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?!\w)/g, '$1$2')
+      .replace(/(^|[^\w_])_(?=\S)([^_]*?\S)_(?!\w)/g, '$1$2')
+      .replace(/`([^`]*)`/g, '$1');
+    if (out === before) break;
+  }
+  return out;
+}
+
+/**
+ * Bold, italic, strike, code, underline, colour and highlight taken off the
+ * selection — and off marks wrapped right around it. With nothing selected,
+ * the caret's line. Line prefixes (lists, quotes, headings) stay.
+ */
+export function clearFormatting(state: TextState): TextEdit {
+  const { value } = state;
+  let { start, end } = state;
+  if (start === end) {
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    let lineEnd = value.indexOf('\n', start);
+    if (lineEnd === -1) lineEnd = value.length;
+    start = lineStart;
+    end = lineEnd;
+  } else {
+    for (let grow = 0; grow < 8; grow += 1) {
+      const before = value.slice(Math.max(0, start - 20), start);
+      const after = value.slice(end, end + 20);
+      const pair = OUTER_PAIRS.find(([open, close]) => open.test(before) && close.test(after));
+      if (!pair) break;
+      start -= pair[0].exec(before)![0].length;
+      end += pair[1].exec(after)![0].length;
+    }
+  }
+  const { from, to } = selectedLines({ value, start, end });
+  /* Only the selected part of the first and last line is cleaned. */
+  const head = value.slice(from, start);
+  const tail = value.slice(end, to);
+  const middle = value.slice(start, end);
+  const cleaned = middle
+    .split('\n')
+    .map((line, index) => {
+      if (index === 0 && head) return stripInlineMarks(line);
+      const info = parseLine(line);
+      const prefix = line.slice(0, line.length - info.rest.length);
+      return prefix + stripInlineMarks(info.rest);
+    })
+    .join('\n');
+  const text = head + cleaned + tail;
+  return { from, to, text, selStart: from + head.length, selEnd: from + head.length + cleaned.length };
+}
+
+/* ---- Callouts ---- */
+
+/**
+ * The selected lines as a callout: `> [!NOTE]` above them and each quoted.
+ * On a callout already, only its type changes. On an empty line, a callout
+ * with a placeholder, selected. A blank line follows when text does, or
+ * that text would be read as part of the box.
+ */
+export function insertCallout(state: TextState, type: CalloutType, placeholder: string): TextEdit {
+  const { value } = state;
+  const { from, to, lines } = selectedLines(state);
+  const marker = `> [!${type.toUpperCase()}]`;
+
+  /* Already a callout: swap its type. */
+  let probe = from;
+  while (probe > 0) {
+    const prevEnd = probe - 1;
+    const prevStart = value.lastIndexOf('\n', prevEnd - 1) + 1;
+    const prev = value.slice(prevStart, prevEnd);
+    if (!/^\s*>/.test(prev)) break;
+    probe = prevStart;
+  }
+  const firstEnd = value.indexOf('\n', probe) === -1 ? value.length : value.indexOf('\n', probe);
+  const first = value.slice(probe, firstEnd);
+  const current = /^(\s*>\s*)\[!(note|tip|important|warning|caution)\]/i.exec(first);
+  if (current && /^\s*>/.test(lines[0].text)) {
+    const at = probe + current[1].length;
+    const old = current[0].length - current[1].length;
+    const text = `[!${type.toUpperCase()}]`;
+    const shift = text.length - old;
+    return { from: at, to: at + old, text, selStart: state.start + shift, selEnd: state.end + shift };
+  }
+
+  const nextStart = to + 1;
+  const nextEnd = value.indexOf('\n', nextStart) === -1 ? value.length : value.indexOf('\n', nextStart);
+  const needsGap = to < value.length && value.slice(nextStart, nextEnd).trim() !== '';
+  const gap = needsGap ? '\n' : '';
+  const empty = lines.every((line) => !line.text.trim());
+
+  if (empty) {
+    const text = `${marker}\n> ${placeholder}${gap}`;
+    const at = from + marker.length + 3;
+    return { from, to, text, selStart: at, selEnd: at + placeholder.length };
+  }
+  const body = lines.map((line) => (line.text.trim() ? `> ${line.text}` : '>')).join('\n');
+  const text = `${marker}\n${body}${gap}`;
+  const caret = from + marker.length + 1 + body.length;
+  return { from, to, text, selStart: caret, selEnd: caret };
+}
+
+/* ---- Toggles ---- */
+
+/**
+ * A collapsible block around the selected lines. Several lines: the first
+ * is the title. One line, or the caret's line: it is the title and a
+ * placeholder is the hidden part. An empty line: placeholders for both,
+ * the title selected.
+ */
+export function insertToggle(state: TextState, titlePlaceholder: string, bodyPlaceholder: string): TextEdit {
+  const { from, to, lines } = selectedLines(state);
+  const indent = parseLine(lines[0].text).indent;
+  const filled = lines.filter((line) => line.text.trim());
+  const open = `${indent}:::toggle `;
+  const close = `${indent}:::`;
+
+  if (!filled.length) {
+    const text = `${open}${titlePlaceholder}\n${indent}${bodyPlaceholder}\n${close}`;
+    return { from, to, text, selStart: from + open.length, selEnd: from + open.length + titlePlaceholder.length };
+  }
+  const title = parseLine(lines[0].text).rest.trim() || titlePlaceholder;
+  if (lines.length === 1) {
+    const text = `${open}${title}\n${indent}${bodyPlaceholder}\n${close}`;
+    const at = from + open.length + title.length + 1 + indent.length;
+    return { from, to, text, selStart: at, selEnd: at + bodyPlaceholder.length };
+  }
+  const body = lines
+    .slice(1)
+    .map((line) => line.text)
+    .join('\n');
+  const text = `${open}${title}\n${body}\n${close}`;
+  const caret = from + open.length + title.length + 1 + body.length;
+  return { from, to, text, selStart: caret, selEnd: caret };
+}
+
+/* ---- Tables ---- */
+
+/**
+ * A table `rows` × `cols` — the header row counted in `rows` — on lines of
+ * its own, with the first header cell selected.
+ */
+export function insertTable(state: TextState, rows: number, cols: number, columnLabel: (n: number) => string): TextEdit {
+  const r = Math.max(2, Math.min(rows, 20));
+  const c = Math.max(1, Math.min(cols, 10));
+  const header = Array.from({ length: c }, (_, i) => columnLabel(i + 1));
+  const lines = [
+    `| ${header.join(' | ')} |`,
+    `|${' --- |'.repeat(c)}`,
+    ...Array.from({ length: r - 1 }, () => `|${'   |'.repeat(c)}`),
+  ];
+  const edit = insertBlock(state, lines.join('\n'));
+  const tableStart = edit.from + edit.text.indexOf('| ') + 2;
+  return { ...edit, selStart: tableStart, selEnd: tableStart + header[0].length };
+}
+
+const TABLE_ROW = /^\s*\|/;
+const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+type Cell = { from: number; to: number };
+
+function cellsOf(line: string, offset: number): Cell[] {
+  const pipes: number[] = [];
+  for (let i = 0; i < line.length; i += 1) {
+    if (line[i] === '|' && line[i - 1] !== '\\') pipes.push(i);
+  }
+  const trimmedEnd = line.replace(/\s+$/, '').length;
+  if (!pipes.length || pipes[pipes.length - 1] < trimmedEnd - 1) pipes.push(trimmedEnd);
+  const cells: Cell[] = [];
+  for (let k = 0; k + 1 < pipes.length; k += 1) cells.push({ from: offset + pipes[k] + 1, to: offset + pipes[k + 1] });
+  return cells;
+}
+
+/**
+ * Tab inside a table: the next cell (Shift+Tab: the one before), its text
+ * selected. Tab in the last cell adds a row. Null when the caret is not in
+ * a table, so Tab keeps its usual job.
+ */
+export function moveTableCell(state: TextState, back: boolean): TextEdit | null {
+  const { value, start } = state;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  let lineEnd = value.indexOf('\n', start);
+  if (lineEnd === -1) lineEnd = value.length;
+  if (!TABLE_ROW.test(value.slice(lineStart, lineEnd))) return null;
+
+  /* The block of table lines around the caret. */
+  let blockStart = lineStart;
+  while (blockStart > 0) {
+    const prevStart = value.lastIndexOf('\n', blockStart - 2) + 1;
+    if (!TABLE_ROW.test(value.slice(prevStart, blockStart - 1))) break;
+    blockStart = prevStart;
+  }
+  let blockEnd = lineEnd;
+  while (blockEnd < value.length) {
+    const nextEnd = value.indexOf('\n', blockEnd + 1) === -1 ? value.length : value.indexOf('\n', blockEnd + 1);
+    if (!TABLE_ROW.test(value.slice(blockEnd + 1, nextEnd))) break;
+    blockEnd = nextEnd;
+  }
+  const rows: { start: number; text: string }[] = [];
+  let pos = blockStart;
+  for (const text of value.slice(blockStart, blockEnd).split('\n')) {
+    rows.push({ start: pos, text });
+    pos += text.length + 1;
+  }
+  if (!rows.some((row) => TABLE_DELIMITER.test(row.text))) return null;
+
+  const cells = rows.filter((row) => !TABLE_DELIMITER.test(row.text)).flatMap((row) => cellsOf(row.text, row.start));
+  const here = cells.findIndex((cell) => start >= cell.from && start <= cell.to);
+  if (here === -1) return null;
+  const select = (cell: Cell): TextEdit => {
+    const raw = value.slice(cell.from, cell.to);
+    const lead = raw.length - raw.trimStart().length;
+    const content = raw.trim();
+    const at = content ? cell.from + lead : cell.from + Math.min(1, raw.length);
+    return { from: start, to: start, text: '', selStart: at, selEnd: at + content.length };
+  };
+  if (back) return here > 0 ? select(cells[here - 1]) : { from: start, to: start, text: '', selStart: start, selEnd: state.end };
+  if (here + 1 < cells.length) return select(cells[here + 1]);
+
+  /* Past the last cell: a new row like the last one. */
+  const lastRow = rows[rows.length - 1];
+  const count = cellsOf(lastRow.text, 0).length || 1;
+  const row = `\n|${'   |'.repeat(count)}`;
+  const at = blockEnd + 3;
+  return { from: blockEnd, to: blockEnd, text: row, selStart: at, selEnd: at };
+}
+
+/* ---- Plain insertion ---- */
+
+/** `text` in place of the selection, the caret after it. */
+export function insertText(state: TextState, text: string): TextEdit {
+  const caret = state.start + text.length;
+  return { from: state.start, to: state.end, text, selStart: caret, selEnd: caret };
+}
+
+/** `edit` applied to `value`. */
+export function applyTextEdit(value: string, edit: TextEdit): string {
+  return value.slice(0, edit.from) + edit.text + value.slice(edit.to);
+}
+
+/**
+ * Two edits — the second worked out on the text the first leaves — as one,
+ * so the browser records them as a single undo step. The replacement is the
+ * changed stretch between what is common at both ends.
+ */
+export function chainEdits(state: TextState, first: TextEdit, second: (next: TextState) => TextEdit): TextEdit {
+  const middle = applyTextEdit(state.value, first);
+  const then = second({ value: middle, start: first.selStart, end: first.selEnd });
+  const final = applyTextEdit(middle, then);
+  const before = state.value;
+  let head = 0;
+  const max = Math.min(before.length, final.length);
+  while (head < max && before[head] === final[head]) head += 1;
+  let tail = 0;
+  while (tail < max - head && before[before.length - 1 - tail] === final[final.length - 1 - tail]) tail += 1;
+  return {
+    from: head,
+    to: before.length - tail,
+    text: final.slice(head, final.length - tail),
+    selStart: then.selStart,
+    selEnd: then.selEnd,
+  };
+}
+
+/* ---- The slash menu ---- */
+
+/** Whether `pos` is inside a fenced code block. */
+function insideFence(value: string, pos: number): boolean {
+  let open = false;
+  let at = 0;
+  while (at < pos) {
+    const end = value.indexOf('\n', at);
+    const lineEnd = end === -1 ? value.length : end;
+    if (lineEnd >= pos) break;
+    if (/^\s{0,3}(```|~~~)/.test(value.slice(at, lineEnd))) open = !open;
+    at = lineEnd + 1;
+  }
+  return open;
+}
+
+/**
+ * The `/word` being typed just before the caret, if it should open the
+ * slash menu: the `/` at the start of a line or after a space, nothing but
+ * letters after it, and not in code. A `/` inside an address follows a
+ * letter or `:`, so it never qualifies.
+ */
+export function slashTrigger(value: string, caret: number): { start: number; query: string } | null {
+  const lineStart = value.lastIndexOf('\n', caret - 1) + 1;
+  const before = value.slice(lineStart, caret);
+  const m = /(^|\s)\/([^\s/]{0,24})$/.exec(before);
+  if (!m) return null;
+  const start = lineStart + (m.index ?? 0) + m[1].length;
+  const ticks = (value.slice(lineStart, start).match(/`/g) ?? []).length;
+  if (ticks % 2 === 1 || insideFence(value, lineStart)) return null;
+  return { start, query: m[2] };
 }

@@ -1,15 +1,52 @@
 import type { Element as HastElement, Nodes as HastNodes, Root as HastRoot } from 'hast';
+import {
+  FileText,
+  FileX,
+  Info,
+  Lightbulb,
+  ListTree,
+  LucideIcon,
+  MessageSquareWarning,
+  OctagonAlert,
+  TriangleAlert,
+} from 'lucide-react';
 import type { Paragraph, Root as MdRoot, RootContent } from 'mdast';
-import { createContext, MouseEvent, useContext, useMemo, useRef } from 'react';
+import { createContext, MouseEvent, useContext, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown, { Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import type { Processor } from 'unified';
+import type { PluggableList, Processor } from 'unified';
 
 import { classifyEmbed, Embed, shortenUrl } from '../../lib/embeds';
 import { isAllowedUrl } from '../../lib/markdownEdit';
+import { CalloutType, calloutTypeOf, noteLinkId } from '../../lib/noteFormat';
+import { noteHash } from '../../lib/notes';
+import { remarkHeadingsToc, remarkNoteExtras, remarkNoteTokens, TocEntry } from '../../lib/noteSyntax';
+import { TranslationKey } from '../../locales';
+import { Icon } from '../Icon';
 import { NoteEmbed, Picture } from './NoteEmbeds';
+
+const CALLOUT_ICON: Record<CalloutType, LucideIcon> = {
+  note: Info,
+  tip: Lightbulb,
+  important: MessageSquareWarning,
+  warning: TriangleAlert,
+  caution: OctagonAlert,
+};
+
+const CALLOUT_LABEL: Record<CalloutType, TranslationKey> = {
+  note: 'notes.calloutNote',
+  tip: 'notes.calloutTip',
+  important: 'notes.calloutImportant',
+  warning: 'notes.calloutWarning',
+  caution: 'notes.calloutCaution',
+};
+
+/** Where a note may link to: the web and mail, or another note by id. */
+function allowedHref(url: string): boolean {
+  return isAllowedUrl(url) || noteLinkId(url) !== null;
+}
 
 /**
  * A note's body, rendered. This module is its own chunk — the parser is most
@@ -27,6 +64,7 @@ export default function MarkdownView({
   source,
   onToggleTask,
   onEdit,
+  noteExists,
 }: {
   source: string;
   /** Flip the checkbox of the list item that starts at this source offset.
@@ -34,13 +72,49 @@ export default function MarkdownView({
   onToggleTask?: (offset: number) => void;
   /** A tap on the text: where in the source it was, and where on screen. */
   onEdit: (offset: number | null, clientY: number) => void;
+  /** Whether a linked note still exists. Absent while the list is loading,
+   *  when every note link is taken to be fine. */
+  noteExists?: (id: string) => boolean;
 }) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
+  const untitledToggle = t('notes.toggleUntitled');
+
+  const remarkPlugins = useMemo<PluggableList>(
+    () => [
+      remarkNoteSyntax,
+      remarkNoteTokens,
+      remarkGfm,
+      [remarkNoteExtras, { untitledToggle }],
+      remarkBreaks,
+      remarkEmbeds,
+      remarkBlankLines,
+      remarkHeadingsToc,
+    ],
+    [untitledToggle],
+  );
 
   const components = useMemo<Components>(
     () => ({
       a({ href, children, node, ...rest }) {
+        const noteId = href ? noteLinkId(href) : null;
+        if (noteId) {
+          if (noteExists && !noteExists(noteId)) {
+            return (
+              <span className="md-note-link is-missing" title={t('notes.linkMissing')}>
+                <Icon icon={FileX} size="sm" />
+                <span>{children}</span>
+              </span>
+            );
+          }
+          /* In the app, not a new tab: the Notes page follows the hash. */
+          return (
+            <a {...rest} href={noteHash(noteId)} className="md-note-link">
+              <Icon icon={FileText} size="sm" />
+              <span>{children}</span>
+            </a>
+          );
+        }
         if (!href || !isAllowedUrl(href)) return <span className="md-link-off">{children}</span>;
         const only = node?.children.length === 1 ? node.children[0] : null;
         const text = only?.type === 'text' ? only.value : null;
@@ -59,6 +133,15 @@ export default function MarkdownView({
         return <Picture url={url} alt={alt ?? ''} />;
       },
       div({ node, children, className, ...rest }) {
+        const callout = calloutTypeOf(String(node?.properties.dataCalloutTitle ?? ''));
+        if (callout) {
+          return (
+            <div className="md-callout-title">
+              <Icon icon={CALLOUT_ICON[callout]} size="sm" />
+              <span>{t(CALLOUT_LABEL[callout])}</span>
+            </div>
+          );
+        }
         const embed = node ? embedOf(node) : null;
         if (embed) {
           return (
@@ -94,8 +177,19 @@ export default function MarkdownView({
           </div>
         );
       },
+      nav({ node }) {
+        const raw = node?.properties.dataToc;
+        if (typeof raw !== 'string') return null;
+        let entries: TocEntry[] = [];
+        try {
+          entries = JSON.parse(raw) as TocEntry[];
+        } catch {
+          return null;
+        }
+        return <NoteToc entries={entries} label={t('notes.tocTitle')} />;
+      },
     }),
-    [onToggleTask, t],
+    [onToggleTask, noteExists, t],
   );
 
   function onClick(event: MouseEvent<HTMLDivElement>) {
@@ -105,7 +199,7 @@ export default function MarkdownView({
     if (!rootRef.current?.contains(target)) return;
     /* Links, checkboxes and embeds do their own thing; text being selected
        to copy is not a tap. */
-    if (target.closest('a, input, button, iframe, .md-embed, .md-picture')) return;
+    if (target.closest('a, input, button, iframe, summary, .md-embed, .md-picture, .md-toc, .md-note-link')) return;
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && rootRef.current?.contains(selection.anchorNode)) return;
     let block = target.closest<HTMLElement>('[data-src]');
@@ -127,9 +221,9 @@ export default function MarkdownView({
     <div ref={rootRef} className="md" onClick={onClick}>
       {source.trim() ? (
         <Markdown
-          remarkPlugins={[remarkNoteSyntax, remarkGfm, remarkBreaks, remarkEmbeds, remarkBlankLines]}
+          remarkPlugins={remarkPlugins}
           rehypePlugins={[rehypeSourceOffsets]}
-          urlTransform={(url) => (isAllowedUrl(url) ? url : '')}
+          urlTransform={(url) => (allowedHref(url) ? url : '')}
           components={components}
         >
           {source}
@@ -142,6 +236,36 @@ export default function MarkdownView({
 }
 
 const TaskOffset = createContext(-1);
+
+/**
+ * "Contents": the note's top-level headings, each a jump to it. Open by
+ * default where there is room for it, folded on a phone. Buttons rather
+ * than `#id` links, because the hash is the app's address.
+ */
+function NoteToc({ entries, label }: { entries: TocEntry[]; label: string }) {
+  const [open] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches);
+  const top = Math.min(...entries.map((entry) => entry.depth));
+  return (
+    <details className="md-toc" open={open}>
+      <summary>
+        <Icon icon={ListTree} size="sm" />
+        <span>{label}</span>
+      </summary>
+      <ol>
+        {entries.map((entry) => (
+          <li key={entry.id} style={{ paddingInlineStart: `${(entry.depth - top) * 14}px` }}>
+            <button
+              type="button"
+              onClick={() => document.getElementById(entry.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              {entry.text}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
 
 function TaskBox({
   checked,

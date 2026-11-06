@@ -80,18 +80,25 @@ function snapshotOf(draft: NoteDraft): string {
  */
 export function useNoteEditor({
   initial,
+  seed,
   onCreated,
 }: {
   /** The saved note, or null for a new one. Read once, on mount. */
   initial: Note | null;
+  /**
+   * What a new note starts with: a template (not saved until it is edited,
+   * so opening one and leaving creates nothing) or a duplicate (`saveNow`,
+   * created straight away through the same path as any new note).
+   */
+  seed?: (NoteDraft & { saveNow?: boolean }) | null;
   /** Called once a new note has its real id. */
   onCreated: (id: string) => void;
 }) {
-  const [draft, setDraftState] = useState<NoteDraft>(() => ({
-    title: initial?.title ?? '',
-    body: initial?.body ?? '',
-    refs: initial?.refs ?? [],
-  }));
+  const [draft, setDraftState] = useState<NoteDraft>(() =>
+    initial
+      ? { title: initial.title, body: initial.body, refs: initial.refs }
+      : { title: seed?.title ?? '', body: seed?.body ?? '', refs: seed?.refs ?? [] },
+  );
   const [status, setStatus] = useState<NoteSaveStatus>(initial ? 'saved' : 'new');
 
   const draftRef = useRef(draft);
@@ -99,7 +106,7 @@ export function useNoteEditor({
   /** The version the next save is based on. */
   const baseRef = useRef(initial?.updatedAt ?? '');
   /** What the server last confirmed, to skip saves that would change nothing. */
-  const savedRef = useRef(snapshotOf(draft));
+  const savedRef = useRef(snapshotOf(!initial && seed?.saveNow ? { title: '', body: '', refs: [] } : draft));
   const inFlightRef = useRef(false);
   const queuedRef = useRef(false);
   const conflictRef = useRef(false);
@@ -250,6 +257,8 @@ export function useNoteEditor({
 
   useEffect(() => {
     mountedRef.current = true;
+    /* A duplicate is a note from the start. */
+    if (snapshotOf(draftRef.current) !== savedRef.current) void flush();
     return () => {
       mountedRef.current = false;
       void flush();

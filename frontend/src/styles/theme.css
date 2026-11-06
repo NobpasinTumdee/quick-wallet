@@ -1574,3 +1574,42 @@
 
   color-scheme: light;
 }
+
+/* ---- Note colours ----
+   Text colour and highlight for the eight names a note may use ([text]{red},
+   ==[red]text==). Each is mixed from one hue and the theme's own --text or
+   --surface, so it follows every theme, light or dark, and a custom palette
+   too. The percentages are the strongest hue that still measures at least
+   4.5:1 in all 44 built-in themes: text colours against --bg and --surface,
+   and --text on each highlight (worst case: nord and solarized).
+   Declared on .md as well as :root so a note printed with its own light
+   palette (see notes.css) mixes from that palette. */
+:root,
+.md {
+  --note-red: #e5484d;
+  --note-orange: #f76b15;
+  --note-yellow: #ffc53d;
+  --note-green: #30a46c;
+  --note-blue: #0090ff;
+  --note-purple: #8e4ec6;
+  --note-pink: #d6409f;
+  --note-gray: #8b8d98;
+
+  --note-text-red: color-mix(in oklab, var(--note-red) 55%, var(--text));
+  --note-text-orange: color-mix(in oklab, var(--note-orange) 65%, var(--text));
+  --note-text-yellow: color-mix(in oklab, var(--note-yellow) 40%, var(--text));
+  --note-text-green: color-mix(in oklab, var(--note-green) 65%, var(--text));
+  --note-text-blue: color-mix(in oklab, var(--note-blue) 65%, var(--text));
+  --note-text-purple: color-mix(in oklab, var(--note-purple) 45%, var(--text));
+  --note-text-pink: color-mix(in oklab, var(--note-pink) 55%, var(--text));
+  --note-text-gray: color-mix(in oklab, var(--note-gray) 65%, var(--text));
+
+  --note-hl-red: color-mix(in oklab, var(--note-red) 45%, var(--surface));
+  --note-hl-orange: color-mix(in oklab, var(--note-orange) 45%, var(--surface));
+  --note-hl-yellow: color-mix(in oklab, var(--note-yellow) 30%, var(--surface));
+  --note-hl-green: color-mix(in oklab, var(--note-green) 45%, var(--surface));
+  --note-hl-blue: color-mix(in oklab, var(--note-blue) 45%, var(--surface));
+  --note-hl-purple: color-mix(in oklab, var(--note-purple) 45%, var(--surface));
+  --note-hl-pink: color-mix(in oklab, var(--note-pink) 45%, var(--surface));
+  --note-hl-gray: color-mix(in oklab, var(--note-gray) 45%, var(--surface));
+}

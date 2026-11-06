@@ -1,10 +1,11 @@
-import { ArrowLeft, Check, Link2, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Link2, Minimize2, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import {
   ClipboardEvent,
   KeyboardEvent,
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -13,27 +14,40 @@ import {
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-import { NoteSaveStatus, useNoteEditor } from '../../hooks/useNotes';
+import { NoteDraft, NoteSaveStatus, useNoteEditor } from '../../hooks/useNotes';
 import { cx } from '../../lib/format';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import {
   TextEdit,
   TextState,
+  applyColor,
+  chainEdits,
+  clearFormatting,
   codeAction,
+  codeBlockAction,
   continueOnEnter,
   cycleHeading,
+  hasColor,
   headingLevelAt,
   indentLines,
   insertBlock,
+  insertCallout,
   insertDivider,
   insertLink,
+  insertTable,
+  insertText,
+  insertToggle,
+  moveTableCell,
   outdentLines,
   pastedUrl,
   selectionIsList,
+  setHeading,
+  slashTrigger,
   toggleBlock,
   toggleInline,
   toggleTaskAt,
 } from '../../lib/markdownEdit';
+import { useNotePrefs } from '../../lib/notePrefs';
 import {
   NOTE_BODY_MAX,
   NOTE_BODY_WARN,
@@ -42,19 +56,23 @@ import {
   NOTE_TITLE_MAX,
   NOTE_TITLE_WARN,
   sameRef,
+  stripMarkdown,
 } from '../../lib/notes';
+import { noteStats } from '../../lib/noteStats';
 import { navigate } from '../../lib/router';
 import { toast } from '../../lib/toast';
 import { useSettings } from '../../state/SettingsContext';
 import { Note, NoteRef, NoteRefType } from '../../types';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
-import { Button, Skeleton } from '../ui';
+import { Button, Portal, Skeleton } from '../ui';
 import { EmbedDialog } from './EmbedDialog';
-import { LinkDialog } from './LinkDialog';
-import { FormatAction, MOD_IS_META, NoteFormatBar } from './NoteFormatBar';
+import { LinkDialog, LinkTab } from './LinkDialog';
+import { FormatCommand, HistoryState, MOD_IS_META, NoteFormatBar } from './NoteFormatBar';
+import { NoteMenuAction, NoteMoreMenu } from './NoteMoreMenu';
 import { NoteRefChips } from './NoteRefChips';
 import { NoteRefPicker } from './NoteRefPicker';
+import { SlashItem, SlashMenu, filterSlashItems } from './SlashMenu';
 import { RefOption, useRefLists } from './useNoteRefData';
 
 /* The Markdown parser is the heavy part of a note, so it loads on its own —
@@ -63,6 +81,20 @@ const MarkdownView = lazyWithRetry(() => import('./MarkdownView'));
 
 type Mode = 'read' | 'edit';
 
+/** Commands that open a dialog rather than change the text. */
+const DIALOG_ACTIONS = new Set(['link', 'embed', 'noteLink']);
+
+/** Whether the browser can undo and redo a textarea's typing on request. */
+function historySupport(command: 'undo' | 'redo'): HistoryState {
+  try {
+    return typeof document.queryCommandSupported === 'function' && document.queryCommandSupported(command)
+      ? 'ok'
+      : 'unsupported';
+  } catch {
+    return 'unsupported';
+  }
+}
+
 /**
  * One note, full page: a big title, the references, and the body — read as
  * formatted Markdown, or edited as the text it is stored as, with a
@@ -70,25 +102,37 @@ type Mode = 'read' | 'edit';
  */
 export function NoteEditor({
   initial,
+  seed,
   pinned,
+  noteExists,
+  otherNotes,
   onBack,
   onCreated,
   onTogglePin,
   onDelete,
+  onDuplicate,
 }: {
   initial: Note | null;
+  /** What a new note starts with: a template, or a duplicate to save now. */
+  seed?: (NoteDraft & { saveNow?: boolean }) | null;
   /** From the list cache, so a pin made elsewhere shows here too. */
   pinned: boolean;
+  /** Whether a linked note still exists, for the reading view's note links. */
+  noteExists: (id: string) => boolean;
+  /** Every note, for the Link dialog's Note tab. */
+  otherNotes: Note[];
   onBack: () => void;
   onCreated: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   /** Rejects if the delete failed; the editor then carries on. */
   onDelete: (id: string) => Promise<void>;
+  onDuplicate: (draft: NoteDraft) => void;
 }) {
   const { t } = useTranslation();
   const { settings } = useSettings();
-  const editor = useNoteEditor({ initial, onCreated });
+  const editor = useNoteEditor({ initial, seed, onCreated });
   const { draft } = editor;
+  const [prefs, setPrefs] = useNotePrefs();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -96,16 +140,25 @@ export function NoteEditor({
   const [reloading, setReloading] = useState(false);
 
   /* A note with text opens to read; a new or empty one opens to write. */
-  const [mode, setMode] = useState<Mode>(() => (initial?.body.trim() ? 'read' : 'edit'));
+  const [mode, setMode] = useState<Mode>(() => ((initial?.body ?? seed?.body ?? '').trim() ? 'read' : 'edit'));
   const [bodyFocused, setBodyFocused] = useState(false);
   const [headingLevel, setHeadingLevel] = useState(0);
-  const [link, setLink] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [link, setLink] = useState<{ start: number; end: number; text: string; tab: LinkTab } | null>(null);
   /* Where the Embed dialog's result goes, kept while the dialog has focus. */
   const [embedAt, setEmbedAt] = useState<{ start: number; end: number } | null>(null);
+  const [history, setHistory] = useState<{ undo: HistoryState; redo: HistoryState }>(() => ({
+    undo: historySupport('undo'),
+    redo: historySupport('redo'),
+  }));
 
   /* Chips need the lists of whatever kinds this note points at — and only those. */
   const wanted = useMemo(() => new Set<NoteRefType>(draft.refs.map((ref) => ref.type)), [draft.refs]);
   const lists = useRefLists(wanted);
+
+  /* Stable for the reading view, which rebuilds its renderers when it changes. */
+  const existsRef = useRef(noteExists);
+  existsRef.current = noteExists;
+  const linkedNoteExists = useCallback((id: string) => existsRef.current(id), []);
 
   /* The body grows with its text, so the page scrolls rather than a box
      inside it — one scroll, which is what a phone keyboard can keep the caret
@@ -120,7 +173,7 @@ export function NoteEditor({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [draft.body, mode]);
+  }, [draft.body, mode, prefs.size, prefs.width]);
 
   /* The formatting bar sticks just under the toolbar, whose height changes
      with the conflict state and the width. */
@@ -134,6 +187,29 @@ export function NoteEditor({
     observer.observe(bar);
     return () => observer.disconnect();
   }, []);
+
+  /* ---- Focus mode and printing ---- */
+
+  const focusing = prefs.focus && mode === 'edit';
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('has-note-open');
+    return () => root.classList.remove('has-note-open', 'note-focus');
+  }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle('note-focus', focusing);
+  }, [focusing]);
+  useEffect(() => {
+    if (!focusing) return undefined;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      /* Anything open on top — a dialog, a menu — takes Escape first. */
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (document.documentElement.classList.contains('has-overlay')) return;
+      setPrefs({ focus: false });
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [focusing, setPrefs]);
 
   function openRef(ref: NoteRef, option: RefOption) {
     /* No screen opens a single record by address, so the chip goes to the
@@ -179,7 +255,7 @@ export function NoteEditor({
     el.setSelectionRange(pos, pos);
     window.scrollTo(0, scrollY);
     if (clientY !== null) {
-      const caret = caretClientTop(el, pos);
+      const caret = caretClientRect(el, pos).top;
       window.scrollBy(0, caret - clientY + lineHeight(el) / 2);
     }
     setHeadingLevel(headingLevelAt(el.value, pos));
@@ -201,6 +277,7 @@ export function NoteEditor({
 
   function stopEditing() {
     bodyRef.current?.blur();
+    setSlash(null);
     setMode('read');
   }
 
@@ -248,39 +325,116 @@ export function NoteEditor({
     return el ? { value: el.value, start: el.selectionStart, end: el.selectionEnd } : null;
   }
 
-  function runAction(action: FormatAction) {
-    const state = currentState();
-    if (!state) return;
+  /**
+   * The browser's own undo and redo — the same history Ctrl+Z walks, which
+   * every edit here joins through `insertText`. When the browser will not do
+   * it, the button is greyed out with the reason; there is deliberately no
+   * second history of our own that could disagree with the first.
+   */
+  function runHistory(command: 'undo' | 'redo') {
+    const el = bodyRef.current;
+    if (!el || history[command] !== 'ok') return;
+    el.focus({ preventScroll: true });
+    let done = false;
+    try {
+      done = document.execCommand(command, false);
+    } catch {
+      done = false;
+    }
+    setHistory((current) => ({
+      ...current,
+      [command]: done ? 'ok' : 'empty',
+      /* Undoing makes something to redo, and the other way round. */
+      ...(done && current[command === 'undo' ? 'redo' : 'undo'] === 'empty' ? { [command === 'undo' ? 'redo' : 'undo']: 'ok' } : {}),
+    }));
+    syncHeading();
+    keepCaretAboveDock();
+  }
+
+  function formatDate(withTime: boolean): string {
+    const now = new Date();
+    try {
+      return withTime
+        ? now.toLocaleString(settings.locale, { dateStyle: 'long', timeStyle: 'short' })
+        : now.toLocaleDateString(settings.locale, { dateStyle: 'long' });
+    } catch {
+      return withTime ? now.toLocaleString() : now.toLocaleDateString();
+    }
+  }
+
+  /** The edit a command makes at `state`; null for the ones that open a dialog. */
+  function editFor(command: FormatCommand, state: TextState): TextEdit | null {
     const placeholder = t('notes.fmtPlaceholder');
-    switch (action) {
+    switch (command.action) {
       case 'heading':
-        return applyEdit(cycleHeading(state));
+        return cycleHeading(state);
+      case 'h1':
+        return setHeading(state, 1);
+      case 'h2':
+        return setHeading(state, 2);
+      case 'h3':
+        return setHeading(state, 3);
       case 'bold':
       case 'italic':
       case 'strike':
-        return applyEdit(toggleInline(state, action, placeholder));
+      case 'underline':
+        return toggleInline(state, command.action, placeholder);
       case 'code':
-        return applyEdit(codeAction(state, placeholder, t('notes.fmtPlaceholderCode')));
+        return codeAction(state, placeholder, t('notes.fmtPlaceholderCode'));
+      case 'codeBlock':
+        return codeBlockAction(state, t('notes.fmtPlaceholderCode'));
+      case 'clear':
+        return clearFormatting(state);
+      case 'color':
+      case 'highlight':
+        return applyColor(state, command.action, command.color, placeholder);
       case 'bullet':
       case 'ordered':
       case 'task':
       case 'quote':
-        return applyEdit(toggleBlock(state, action));
+        return toggleBlock(state, command.action);
       case 'indent':
-        return applyEdit(indentLines(state));
+        return indentLines(state);
       case 'outdent':
-        return applyEdit(outdentLines(state));
+        return outdentLines(state);
       case 'divider':
-        return applyEdit(insertDivider(state));
-      case 'link': {
-        const selected = state.value.slice(state.start, state.end);
-        setLink({ start: state.start, end: state.end, text: selected.includes('\n') ? '' : selected.trim() });
-        return undefined;
-      }
-      case 'embed':
-        setEmbedAt({ start: state.start, end: state.end });
-        return undefined;
+        return insertDivider(state);
+      case 'callout':
+        return insertCallout(state, command.type, placeholder);
+      case 'toggle':
+        return insertToggle(state, t('notes.fmtToggleTitle'), t('notes.fmtToggleBody'));
+      case 'table':
+        return insertTable(state, command.rows, command.cols, (n) => t('notes.fmtColumn', { n }));
+      case 'date':
+        return insertText(state, formatDate(false));
+      case 'dateTime':
+        return insertText(state, formatDate(true));
+      default:
+        return null;
     }
+  }
+
+  function openDialog(action: string, state: TextState) {
+    if (action === 'embed') {
+      setEmbedAt({ start: state.start, end: state.end });
+      return;
+    }
+    const selected = state.value.slice(state.start, state.end);
+    setLink({
+      start: state.start,
+      end: state.end,
+      text: selected.includes('\n') ? '' : selected.trim(),
+      tab: action === 'noteLink' ? 'note' : 'web',
+    });
+  }
+
+  function runCommand(command: FormatCommand) {
+    if (command.action === 'undo' || command.action === 'redo') return runHistory(command.action);
+    const state = currentState();
+    if (!state) return;
+    if (DIALOG_ACTIONS.has(command.action)) return openDialog(command.action, state);
+    const edit = editFor(command, state);
+    if (edit) applyEdit(edit);
   }
 
   function insertLinkNow(label: string, url: string) {
@@ -303,6 +457,71 @@ export function NoteEditor({
     applyEdit(insertBlock({ value: el.value, start: Math.min(at.start, end), end }, markdown));
   }
 
+  /* ---- The slash menu ---- */
+
+  const slashId = useId().replace(/:/g, '');
+  const composingRef = useRef(false);
+  const [slash, setSlash] = useState<{
+    start: number;
+    query: string;
+    caret: { top: number; bottom: number; left: number };
+  } | null>(null);
+  const slashRef = useRef(slash);
+  slashRef.current = slash;
+  const [slashActive, setSlashActive] = useState(0);
+  /** A `/` closed with Escape stays closed until the caret leaves it. */
+  const dismissedRef = useRef<number | null>(null);
+  const slashItems = useMemo(() => (slash ? filterSlashItems(slash.query) : []), [slash]);
+
+  const syncSlash = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el || composingRef.current || document.activeElement !== el || el.selectionStart !== el.selectionEnd) {
+      setSlash(null);
+      return;
+    }
+    const found = slashTrigger(el.value, el.selectionStart);
+    if (!found) dismissedRef.current = null;
+    if (!found || dismissedRef.current === found.start) {
+      setSlash(null);
+      return;
+    }
+    const rect = caretClientRect(el, found.start);
+    const line = lineHeight(el);
+    const shown = slashRef.current;
+    if (!shown || shown.start !== found.start || shown.query !== found.query) setSlashActive(0);
+    setSlash({ start: found.start, query: found.query, caret: { top: rect.top, bottom: rect.top + line, left: rect.left } });
+  }, []);
+
+  /* Scrolling moves the caret on screen; the menu follows it. */
+  useEffect(() => {
+    if (!slash) return undefined;
+    const onMove = () => syncSlash();
+    window.addEventListener('scroll', onMove, { passive: true });
+    window.visualViewport?.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove);
+      window.visualViewport?.removeEventListener('resize', onMove);
+    };
+  }, [slash, syncSlash]);
+
+  function pickSlash(item: SlashItem) {
+    const state = currentState();
+    const open = slash;
+    setSlash(null);
+    if (!state || !open) return;
+    /* The `/word` goes, in the same undo step as what replaces it. */
+    const remove: TextEdit = { from: open.start, to: state.end, text: '', selStart: open.start, selEnd: open.start };
+    if (DIALOG_ACTIONS.has(item.command.action)) {
+      applyEdit(remove);
+      const after = currentState();
+      if (after) openDialog(item.command.action, after);
+      return;
+    }
+    applyEdit(chainEdits(state, remove, (next) => editFor(item.command, next) ?? insertText(next, '')));
+  }
+
+  /* ---- Keys ---- */
+
   function onBodyKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     /* Thai, Japanese, any IME: Enter and Tab belong to the composition. */
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -310,9 +529,33 @@ export function NoteEditor({
     if (!state) return;
     const mod = MOD_IS_META ? event.metaKey : event.ctrlKey;
 
+    if (slash) {
+      const count = slashItems.length;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        dismissedRef.current = slash.start;
+        setSlash(null);
+        return;
+      }
+      if (count > 0 && !mod && !event.altKey) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          setSlashActive((index) => (index + step + count) % count);
+          return;
+        }
+        if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+          event.preventDefault();
+          pickSlash(slashItems[Math.min(slashActive, count - 1)]);
+          return;
+        }
+      }
+    }
+
     if (mod && !event.altKey) {
       const key = event.key.toLowerCase();
-      const action: FormatAction | null = event.shiftKey
+      const action = event.shiftKey
         ? key === 'x'
           ? 'strike'
           : null
@@ -320,14 +563,16 @@ export function NoteEditor({
           ? 'bold'
           : key === 'i'
             ? 'italic'
-            : key === 'k'
-              ? 'link'
-              : key === 'e'
-                ? 'code'
-                : null;
+            : key === 'u'
+              ? 'underline'
+              : key === 'k'
+                ? 'link'
+                : key === 'e'
+                  ? 'code'
+                  : null;
       if (action) {
         event.preventDefault();
-        runAction(action);
+        runCommand({ action });
       }
       return;
     }
@@ -341,11 +586,20 @@ export function NoteEditor({
       }
       return;
     }
-    /* Tab indents list items only; anywhere else it moves focus as usual,
-       so the page stays usable from the keyboard. */
-    if (event.key === 'Tab' && selectionIsList(state)) {
-      event.preventDefault();
-      applyEdit(event.shiftKey ? outdentLines(state) : indentLines(state));
+    if (event.key === 'Tab') {
+      /* In a table, Tab walks the cells (and adds a row past the last one). */
+      const cell = moveTableCell(state, event.shiftKey);
+      if (cell) {
+        event.preventDefault();
+        applyEdit(cell);
+        return;
+      }
+      /* Tab indents list items; anywhere else it moves focus as usual,
+         so the page stays usable from the keyboard. */
+      if (selectionIsList(state)) {
+        event.preventDefault();
+        applyEdit(event.shiftKey ? outdentLines(state) : indentLines(state));
+      }
     }
   }
 
@@ -372,7 +626,7 @@ export function NoteEditor({
       const dock = document.querySelector<HTMLElement>('.note-format.is-docked');
       if (!el || !dock || document.activeElement !== el) return;
       const limit = dock.getBoundingClientRect().top - 8;
-      const bottom = caretClientTop(el, el.selectionEnd) + lineHeight(el);
+      const bottom = caretClientRect(el, el.selectionEnd).top + lineHeight(el);
       if (bottom > limit) window.scrollBy(0, bottom - limit);
     });
   }, []);
@@ -398,12 +652,84 @@ export function NoteEditor({
     [draft.body, editor],
   );
 
+  /* ---- The ⋯ menu ---- */
+
+  function markdownExport(): string {
+    const title = draft.title.trim();
+    return title ? `# ${title}\n\n${draft.body}` : draft.body;
+  }
+
+  function plainExport(): string {
+    const body = stripMarkdown(draft.body, { youtube: 'YouTube', picture: t('notes.embedPreviewPicture') });
+    const title = draft.title.trim();
+    return title ? `${title}\n\n${body}` : body;
+  }
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(t('notes.copied'));
+    } catch {
+      toast.error(t('notes.copyFailed'));
+    }
+  }
+
+  function download() {
+    const name =
+      draft.title
+        .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^\.+/, '')
+        .slice(0, 80) || t('notes.untitled');
+    const blob = new Blob([markdownExport()], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${name}.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /** Prints the reading view, waiting for it to load if the note was being edited. */
+  function print() {
+    if (mode === 'edit') stopEditing();
+    let tries = 0;
+    const ready = () => {
+      tries += 1;
+      if (readRef.current?.querySelector('.md') || tries > 40) window.print();
+      else window.setTimeout(ready, 50);
+    };
+    window.setTimeout(ready, 0);
+  }
+
+  function onMenu(action: NoteMenuAction) {
+    switch (action) {
+      case 'copyMarkdown':
+        return void copy(markdownExport());
+      case 'copyPlain':
+        return void copy(plainExport());
+      case 'download':
+        return download();
+      case 'print':
+        return print();
+      case 'duplicate':
+        return onDuplicate(draft);
+    }
+  }
+
   const titleNear = draft.title.length >= NOTE_TITLE_WARN;
   const bodyNear = draft.body.length >= NOTE_BODY_WARN;
   const locale = settings.locale;
+  const stats = useMemo(() => noteStats(draft.body, locale), [draft.body, locale]);
 
   return (
-    <article ref={articleRef} className="note-editor">
+    <article
+      ref={articleRef}
+      className={cx('note-editor', `note-size-${prefs.size}`, prefs.width === 'wide' && 'is-wide', focusing && 'is-focus')}
+    >
       <div ref={toolbarRef} className="note-toolbar">
         <Button size="sm" variant="ghost" onClick={onBack}>
           <Icon icon={ArrowLeft} size="sm" />
@@ -454,6 +780,7 @@ export function NoteEditor({
           >
             <Icon icon={Trash2} size="sm" />
           </Button>
+          <NoteMoreMenu prefs={prefs} onPrefs={setPrefs} onAction={onMenu} canDuplicate={Boolean(editor.noteId)} />
         </div>
       </div>
 
@@ -498,9 +825,7 @@ export function NoteEditor({
           }
         }}
       />
-      {titleNear && (
-        <Counter count={draft.title.length} max={NOTE_TITLE_MAX} locale={locale} />
-      )}
+      {titleNear && <Counter count={draft.title.length} max={NOTE_TITLE_MAX} locale={locale} />}
 
       <section className="note-refs-block" aria-label={t('notes.references')}>
         {draft.refs.length > 0 ? (
@@ -527,7 +852,16 @@ export function NoteEditor({
 
       {mode === 'edit' ? (
         <>
-          <NoteFormatBar onAction={runAction} headingLevel={headingLevel} editing={bodyFocused} />
+          <NoteFormatBar
+            onCommand={runCommand}
+            headingLevel={headingLevel}
+            editing={bodyFocused}
+            history={history}
+            isColored={(kind) => {
+              const state = currentState();
+              return state ? hasColor(state, kind) : false;
+            }}
+          />
           <textarea
             ref={bodyRef}
             className="note-body"
@@ -535,30 +869,94 @@ export function NoteEditor({
             maxLength={NOTE_BODY_MAX}
             placeholder={t('notes.bodyPlaceholder')}
             aria-label={t('notes.bodyLabel')}
+            aria-controls={slash ? slashId : undefined}
+            aria-expanded={slash ? true : undefined}
+            aria-activedescendant={slash && slashItems.length ? `${slashId}-${slashActive}` : undefined}
             rows={12}
             onChange={(event) => {
               editor.update({ body: event.target.value });
+              /* New typing gives undo something to take back again. */
+              setHistory((current) =>
+                current.undo === 'empty' || current.redo === 'empty'
+                  ? {
+                      undo: current.undo === 'empty' ? 'ok' : current.undo,
+                      redo: current.redo === 'empty' ? 'ok' : current.redo,
+                    }
+                  : current,
+              );
               keepCaretAboveDock();
+              syncSlash();
             }}
             onKeyDown={onBodyKeyDown}
             onPaste={onBodyPaste}
-            onSelect={syncHeading}
+            onSelect={() => {
+              syncHeading();
+              syncSlash();
+            }}
+            onCompositionStart={() => {
+              composingRef.current = true;
+              setSlash(null);
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+              syncSlash();
+            }}
             onFocus={() => setBodyFocused(true)}
-            onBlur={() => setBodyFocused(false)}
+            onBlur={() => {
+              setBodyFocused(false);
+              setSlash(null);
+            }}
           />
+          {slash && (
+            <SlashMenu
+              items={slashItems}
+              active={Math.min(slashActive, Math.max(0, slashItems.length - 1))}
+              caret={slash.caret}
+              listId={slashId}
+              onPick={pickSlash}
+              onHover={setSlashActive}
+            />
+          )}
         </>
       ) : (
         <div ref={readRef} className="note-read" aria-label={t('notes.bodyLabel')}>
           <Suspense fallback={<Skeleton rows={4} />}>
             <MarkdownView
               source={draft.body}
+              noteExists={linkedNoteExists}
               onToggleTask={conflict ? undefined : toggleTask}
               onEdit={(offset, clientY) => startEditing(offset, clientY)}
             />
           </Suspense>
         </div>
       )}
-      {bodyNear && <Counter count={draft.body.length} max={NOTE_BODY_MAX} locale={locale} />}
+      <div className="note-meta">
+        {stats.words > 0 && (
+          <p className="note-stats" title={stats.approximate ? t('notes.statsApproxHint') : undefined}>
+            {t(stats.approximate ? 'notes.statsApprox' : 'notes.statsLine', {
+              words: stats.words.toLocaleString(locale),
+              minutes: stats.minutes.toLocaleString(locale),
+            })}
+          </p>
+        )}
+        {bodyNear && <Counter count={draft.body.length} max={NOTE_BODY_MAX} locale={locale} />}
+      </div>
+
+      {focusing && (
+        <Portal>
+          <button
+            type="button"
+            className="note-focus-exit"
+            aria-label={t('notes.focusExit')}
+            title={t('notes.focusExit')}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setPrefs({ focus: false })}
+          >
+            <Icon icon={Minimize2} size="sm" />
+            <span>{t('notes.focusExit')}</span>
+          </button>
+        </Portal>
+      )}
 
       <NoteRefPicker
         open={pickerOpen}
@@ -570,6 +968,9 @@ export function NoteEditor({
       <LinkDialog
         open={link !== null}
         initialText={link?.text ?? ''}
+        initialTab={link?.tab ?? 'web'}
+        notes={otherNotes}
+        currentId={editor.noteId}
         onInsert={insertLinkNow}
         onClose={() => setLink(null)}
       />
@@ -626,7 +1027,8 @@ const MIRRORED = [
   'white-space',
 ];
 
-function caretClientTop(el: HTMLTextAreaElement, pos: number): number {
+/** Where the caret at `pos` is drawn, in viewport coordinates (top of its line). */
+function caretClientRect(el: HTMLTextAreaElement, pos: number): { top: number; left: number } {
   const style = getComputedStyle(el);
   const mirror = document.createElement('div');
   for (const name of MIRRORED) mirror.style.setProperty(name, style.getPropertyValue(name));
@@ -642,8 +1044,10 @@ function caretClientTop(el: HTMLTextAreaElement, pos: number): number {
   mirror.appendChild(marker);
   document.body.appendChild(mirror);
   const top = marker.offsetTop;
+  const left = marker.offsetLeft;
   mirror.remove();
-  return el.getBoundingClientRect().top + top - el.scrollTop;
+  const box = el.getBoundingClientRect();
+  return { top: box.top + top - el.scrollTop, left: box.left + left - el.scrollLeft };
 }
 
 function lineHeight(el: HTMLTextAreaElement): number {
