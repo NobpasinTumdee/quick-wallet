@@ -1,5 +1,4 @@
 import { ApiError, api } from '../../api/client';
-import { CardLayout, serializeLayout } from './layoutModel';
 
 /**
  * Talking to the server about layouts (Code.gs `uiPrefs.list` / `uiPrefs.save`).
@@ -54,13 +53,22 @@ function noteFailure(error: unknown): void {
   if (error instanceof ApiError && error.status === 404 && error.code === 'UNKNOWN_ACTION') unavailable = true;
 }
 
-/** The stored copy, `null` when there is none, `undefined` when it could not be asked. */
-export async function fetchRemoteLayout(page: string): Promise<RemotePref | null | undefined> {
+/**
+ * Every stored preference of the signed-in user, by key — one request for
+ * the current layout and the first version's (which is migrated when it is
+ * the newer). `undefined` when the server could not be asked.
+ */
+export async function fetchRemotePrefs(): Promise<Record<string, RemotePref> | undefined> {
   if (unavailable) return undefined;
   try {
-    const result = await api.get<{ prefs?: RemotePref[] }>('/uiPrefs', { key: prefKey(page) });
-    const pref = result?.prefs?.find((item) => item.key === prefKey(page));
-    return pref && typeof pref.value === 'string' ? { ...pref, updatedAt: Number(pref.updatedAt) || 0 } : null;
+    const result = await api.get<{ prefs?: RemotePref[] }>('/uiPrefs');
+    const prefs: Record<string, RemotePref> = {};
+    for (const pref of result?.prefs ?? []) {
+      if (pref && typeof pref.key === 'string' && typeof pref.value === 'string') {
+        prefs[pref.key] = { ...pref, updatedAt: Number(pref.updatedAt) || 0 };
+      }
+    }
+    return prefs;
   } catch (error) {
     noteFailure(error);
     return undefined;
@@ -71,15 +79,18 @@ export async function fetchRemoteLayout(page: string): Promise<RemotePref | null
  * Sends this device's layout. Answers what the server now holds when it kept
  * a newer copy (`accepted: false`), or `undefined` when it could not be sent.
  */
-export async function uploadLayout(page: string, layout: CardLayout): Promise<{ accepted: boolean; pref?: RemotePref } | undefined> {
-  if (unavailable || !(layout.updatedAt > 0)) return undefined;
-  const value = serializeLayout(layout);
+export async function uploadLayout(
+  page: string,
+  value: string,
+  updatedAt: number,
+): Promise<{ accepted: boolean; pref?: RemotePref } | undefined> {
+  if (unavailable || !(updatedAt > 0)) return undefined;
   if (value.length > MAX_LAYOUT_CHARS) return undefined;
   try {
     const result = await api.put<{ accepted?: boolean; pref?: RemotePref }>('/uiPrefs', {
       key: prefKey(page),
       value,
-      updatedAt: layout.updatedAt,
+      updatedAt,
     });
     return { accepted: result?.accepted !== false, pref: result?.pref };
   } catch (error) {

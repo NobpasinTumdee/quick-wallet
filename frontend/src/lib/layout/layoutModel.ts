@@ -1,12 +1,16 @@
 /**
- * Card layouts: the pure part.
+ * Card layouts: the pure part, first format ("flow").
+ *
+ * Free placement (gridModel.ts) stores x, y, w and h per card. This file is
+ * the format before it, which is still how a layout nobody has placed yet is
+ * read and drawn — the default, and anything migrated from the old app's
+ * `layout.home` — so those look exactly as they always did.
  *
  * A page that can be rearranged (desktop Home today, Analytics later) has a
  * registry of its cards and, per user, a saved layout: the cards in display
  * order, each with a width in grid columns (of 12) and a few flags. The grid
- * packs them; nothing stores x/y coordinates, so a layout can never overlap,
- * reflows by itself at any width, and moves from the keyboard as simply as
- * from the mouse.
+ * packs them in that order (no x/y in this format), so such a layout can
+ * never overlap and reflows by itself at any width.
  *
  * Everything here is pure and has no React or DOM in it, so it runs in the
  * node tests (tests/layoutModel.test.mjs).
@@ -160,36 +164,6 @@ function safeParse(text: string): unknown {
   }
 }
 
-/** True when the layout is the registry default in every respect but its time. */
-export function isDefaultLayout<Id extends string>(layout: CardLayout<Id>, registry: readonly CardDef<Id>[]): boolean {
-  const base = defaultLayout(registry).cards;
-  return (
-    layout.cards.length === base.length &&
-    layout.cards.every((card, index) => {
-      const other = base[index];
-      return (
-        card.id === other.id &&
-        card.w === other.w &&
-        (card.h ?? null) === (other.h ?? null) &&
-        !card.collapsed &&
-        !card.hidden
-      );
-    })
-  );
-}
-
-/** What gets stored: the cards, without anything that equals "unset". */
-export function serializeLayout<Id extends string>(layout: CardLayout<Id>): string {
-  const cards = layout.cards.map((card) => {
-    const out: Record<string, unknown> = { id: card.id, w: card.w };
-    if (card.h) out.h = card.h;
-    if (card.collapsed) out.collapsed = true;
-    if (card.hidden) out.hidden = true;
-    return out;
-  });
-  return JSON.stringify(layout.reset ? { v: 1, updatedAt: layout.updatedAt, reset: true, cards: [] } : { v: 1, updatedAt: layout.updatedAt, cards });
-}
-
 /* ---- Widths on screen ---- */
 
 /** Pixel width of `span` columns in a grid `container` px wide with `gap` px gaps. */
@@ -214,21 +188,12 @@ export function effectiveSpan(def: Pick<CardDef, 'widths' | 'minPx'>, w: ColumnS
   return 12;
 }
 
-/* ---- Edits (used by edit mode) ---- */
+/* ---- Edits (the Expand button on a collapsed card in this format) ---- */
 
 /** The same layout with new cards. Any edit is a custom layout again, so a
  *  reset marker does not survive it. */
 function withCards<Id extends string>(layout: CardLayout<Id>, cards: CardState<Id>[]): CardLayout<Id> {
   return { v: layout.v, updatedAt: layout.updatedAt, cards };
-}
-
-/** Moves the card at `from` to index `to` (in the full list, hidden cards included). */
-export function moveCard<Id extends string>(layout: CardLayout<Id>, from: number, to: number): CardLayout<Id> {
-  if (from === to || from < 0 || from >= layout.cards.length) return layout;
-  const cards = layout.cards.slice();
-  const [card] = cards.splice(from, 1);
-  cards.splice(Math.max(0, Math.min(cards.length, to)), 0, card);
-  return withCards(layout, cards);
 }
 
 /** Changes one card's fields; anything not allowed for it is put right. */
@@ -253,33 +218,7 @@ export function updateCard<Id extends string>(
   return withCards(layout, cards);
 }
 
-/**
- * Moves card `id` to just before (or after) card `targetId`. Positions are in
- * the full list, so hidden cards keep their place relative to their
- * neighbours and come back where they were.
- */
-export function moveCardTo<Id extends string>(layout: CardLayout<Id>, id: Id, targetId: Id, after: boolean): CardLayout<Id> {
-  if (id === targetId) return layout;
-  const from = layout.cards.findIndex((card) => card.id === id);
-  if (from === -1 || !layout.cards.some((card) => card.id === targetId)) return layout;
-  const cards = layout.cards.slice();
-  const [card] = cards.splice(from, 1);
-  const at = cards.findIndex((item) => item.id === targetId) + (after ? 1 : 0);
-  cards.splice(at, 0, card);
-  if (cards.every((item, index) => item === layout.cards[index])) return layout;
-  return withCards(layout, cards);
-}
-
-/** One step earlier (-1) or later (+1) among the visible cards: the keyboard move. */
-export function moveCardBy<Id extends string>(layout: CardLayout<Id>, id: Id, delta: -1 | 1): CardLayout<Id> {
-  const visible = layout.cards.filter((card) => !card.hidden);
-  const index = visible.findIndex((card) => card.id === id);
-  const target = visible[index + delta];
-  if (index === -1 || !target) return layout;
-  return moveCardTo(layout, id, target.id, delta > 0);
-}
-
-/* ---- Rows and gaps (what edit mode shows) ---- */
+/* ---- Rows (where the grid puts cards in this format) ---- */
 
 export interface PackedRow {
   ids: string[];
@@ -291,7 +230,8 @@ export interface PackedRow {
  * How the grid lays the cards out when it keeps their order (a custom
  * layout): left to right, a card that does not fit in what is left of a row
  * starting the next one. This is CSS grid's own auto-placement for cards that
- * each take one row, so edit mode can show the empty space a row ends with.
+ * each take one row; free placement starts from it the first time a layout
+ * in this format is edited (gridModel `placeFlowLayout`).
  */
 export function packRows(items: readonly { id: string; span: number }[]): PackedRow[] {
   const rows: PackedRow[] = [];
@@ -306,45 +246,4 @@ export function packRows(items: readonly { id: string; span: number }[]): Packed
     row.used += span;
   }
   return rows;
-}
-
-/**
- * A size that would close a row's empty space: one card in the row widened
- * by exactly the gap to a width it allows. The row's last card is tried
- * first — it borders the gap — then the others from right to left. Null when
- * no single card can; only ever a suggestion, never applied by itself.
- */
-export function gapSuggestion<Id extends string>(
-  row: PackedRow,
-  registry: readonly CardDef<Id>[],
-  spans: Readonly<Record<string, ColumnSpan>>,
-): { id: Id; w: ColumnSpan } | null {
-  const gap = GRID_COLUMNS - row.used;
-  if (gap <= 0) return null;
-  for (let index = row.ids.length - 1; index >= 0; index -= 1) {
-    const def = registry.find((item) => item.id === row.ids[index]);
-    const current = spans[row.ids[index]];
-    if (!def || !current) continue;
-    const wanted = current + gap;
-    const step = def.widths.find((width) => width === wanted);
-    if (step) return { id: def.id, w: step };
-  }
-  return null;
-}
-
-/* ---- Sync between devices ---- */
-
-/**
- * What to do with this device's layout and the copy stored on the server
- * (null when there is none). Last write wins on `updatedAt`:
- *  - `adopt`: the server's is newer — take it (a reset marker included);
- *  - `upload`: this device's is newer — an edit made offline, or before the
- *    server could store layouts — send it;
- *  - `none`: the same, or neither has ever been customised.
- */
-export function reconcileLayouts(local: Pick<CardLayout, 'updatedAt'>, remote: Pick<CardLayout, 'updatedAt'> | null): 'adopt' | 'upload' | 'none' {
-  const remoteAt = remote?.updatedAt ?? 0;
-  if (remote && remoteAt > local.updatedAt) return 'adopt';
-  if (local.updatedAt > remoteAt) return 'upload';
-  return 'none';
 }

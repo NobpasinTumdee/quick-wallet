@@ -13,7 +13,7 @@ import {
   Unlock,
   Wallet,
 } from 'lucide-react';
-import { Fragment, ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
+import { Fragment, ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
@@ -22,6 +22,7 @@ import { RecordedAt } from '../components/RecordedAt';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { FinancialInboxWidget } from '../components/FinancialInboxWidget';
 import { WalletIconRenderer } from '../components/WalletIconRenderer';
+import { FitList } from '../components/FitList';
 import { BalanceView, SwipeableBalanceCard } from '../components/SwipeableBalanceCard';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
@@ -38,10 +39,23 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { HOME_CARDS, HOME_LAYOUT_PAGE, HomeCardId } from '../lib/layout/homeCards';
+import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HomeCardId } from '../lib/layout/homeCards';
 import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/useCardLayout';
 import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
 import { CardLayout, updateCard } from '../lib/layout/layoutModel';
+import {
+  GridLayout,
+  fitGridToWidth,
+  gridArea,
+  isPlaced,
+  migrateV1,
+  placeFlowLayout,
+  readingOrder,
+  serializeGridLayout,
+  setGridCardFlags,
+  toCardLayout,
+} from '../lib/layout/gridModel';
+import { continueRecent } from '../lib/layout/recentRows';
 import { toast } from '../lib/toast';
 
 
@@ -100,24 +114,62 @@ export function DashboardPage({
      grid from the saved layout — or from the default, which reproduces the
      old 6-column arrangement to the pixel. */
   const layoutActive = useMediaQuery(SIDEBAR_QUERY);
-  const { layout, save: saveLayout, reset: resetLayout, isCustom } = useCardLayout(HOME_LAYOUT_PAGE, user?.id, HOME_CARDS, layoutActive);
+  const {
+    layout: gridLayout,
+    save: saveGridLayout,
+    reset: resetLayout,
+    isCustom,
+  } = useCardLayout(HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, user?.id, HOME_CARDS, layoutActive);
+  /* Flow layouts (the default, and every layout saved before free placement)
+     are drawn and edited in order-and-width terms, exactly as before. */
+  const layout = useMemo(() => toCardLayout(gridLayout, HOME_CARDS), [gridLayout]);
+  const saveLayout = (next: CardLayout<HomeCardId>) => saveGridLayout(migrateV1(next));
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
   const gridMetrics = useGridMetrics(gridElement, layoutActive);
 
-  /* Edit mode: a draft copy, started from the saved layout when Customize is
-     pressed. Done saves it, Cancel drops it. Leaving Home or going below the
-     sidebar breakpoint ends it without saving. */
+  /* Each card's drawn width in a flow layout on this screen. */
+  const spans = useEffectiveSpans(layout, HOME_CARDS, gridMetrics);
+
+  /* A placed layout (cards with x/y/w/h in cells) as drawn on this screen:
+     a card too narrow here is widened and the rest reflows. */
+  const placedLayout =
+    layoutActive && isPlaced(gridLayout) ? fitGridToWidth(gridLayout, HOME_CARDS, gridMetrics.width, gridMetrics.gap) : null;
+
+  /* Edit mode works on cells. Opening it on a flow layout turns what is on
+     screen into a placed draft — every card where it is, as tall as it
+     measures, rounded to whole rows — so editing starts from exactly what
+     you see. Done saves the draft only if something changed, so opening
+     and closing never converts a layout by itself. Cancel drops it; leaving
+     Home or going below the sidebar breakpoint ends it without saving. */
   const editing = useHomeEditing() && layoutActive;
-  const [draft, setDraft] = useState<CardLayout<HomeCardId> | null>(null);
-  if (editing && !draft) setDraft(layout);
+  const [draft, setDraft] = useState<GridLayout<HomeCardId> | null>(null);
+  const draftStart = useRef('');
+  if (editing && !draft) {
+    let start: GridLayout<HomeCardId>;
+    if (placedLayout) {
+      start = placedLayout;
+    } else {
+      /* Read from the flow grid still on screen: its children are the
+         visible cards, in order. */
+      const visible = layout.cards.filter((card) => !card.hidden);
+      const children = gridElement ? (Array.from(gridElement.children) as HTMLElement[]) : [];
+      const heights: Record<string, number> = {};
+      if (children.length === visible.length) visible.forEach((card, index) => (heights[card.id] = children[index].offsetHeight));
+      start = fitGridToWidth(
+        placeFlowLayout(gridLayout, HOME_CARDS, spans, heights, gridMetrics.gap || 24),
+        HOME_CARDS,
+        gridMetrics.width,
+        gridMetrics.gap,
+      );
+    }
+    draftStart.current = serializeGridLayout(start);
+    setDraft(start);
+  }
   if (!editing && draft) setDraft(null);
   useEffect(() => {
     if (!layoutActive) setHomeEditing(false);
   }, [layoutActive]);
   useEffect(() => () => setHomeEditing(false), []);
-
-  const shown = (editing && draft) || layout;
-  const spans = useEffectiveSpans(shown, HOME_CARDS, gridMetrics);
 
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
     '/api/dashboard',
@@ -380,8 +432,24 @@ export function DashboardPage({
      One function per card, taking the extra class that sizes it on the
      desktop grid (empty below 1000px). Their markup is exactly what it was;
      only where each one is placed now comes from the layout. */
-  const homeCards: Record<HomeCardId, (sizeClass: string, tall: boolean) => ReactNode> = {
-    budgets: (sizeClass, tall) => (
+  /* "+3 more" under a list that does not show every row in its card. */
+  const moreLink = (count: number, kind: 'budgets' | 'categories') => (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="fit-more-link"
+      aria-label={t(kind === 'budgets' ? 'layout.moreBudgets' : 'layout.moreCategories', { n: count })}
+      onClick={() => onNavigate(kind === 'budgets' ? 'budgets' : 'analytics')}
+    >
+      {t('layout.moreCount', { n: count })}
+    </Button>
+  );
+
+  /* Each card, given its width class, the first version's "Tall" height
+     step, and `fill`: sized in grid rows (a placed layout), so its content
+     adapts to the height — lists show as many rows as fit, the chart grows. */
+  const homeCards: Record<HomeCardId, (sizeClass: string, tall: boolean, fill: boolean) => ReactNode> = {
+    budgets: (sizeClass, tall, fill) => (
       <Card
         className={cx('bento-item--wide', sizeClass)}
         title={t('dashboard.budgetProgress')}
@@ -405,8 +473,13 @@ export function DashboardPage({
             }
           />
         ) : (
-          <div className="list">
-            {data.budgets.slice(0, tall ? 10 : 5).map((budget) => (
+          <FitList
+            items={data.budgets}
+            fallback={tall ? 10 : 5}
+            active={fill}
+            className="list"
+            more={(count) => moreLink(count, 'budgets')}
+            renderItem={(budget) => (
               <div key={budget.id} className="budget-item">
                 <div className="budget-head">
                   <span className="budget-name truncate">
@@ -431,8 +504,8 @@ export function DashboardPage({
                   </span>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          />
         )}
       </Card>
     ),
@@ -476,7 +549,7 @@ export function DashboardPage({
     /* Twelve months of paired bars. At half width each month gets ~40px,
        which is why the component scrolls horizontally; given the full row
        it mostly does not have to. */
-    cashflow: (sizeClass, tall) => (
+    cashflow: (sizeClass, tall, fill) => (
       <Suspense
         fallback={<div className={cx('card bento-item--full ischart-placeholder', sizeClass)} aria-hidden="true" />}
       >
@@ -489,17 +562,23 @@ export function DashboardPage({
           loading={history.initialLoading}
           stale={history.isValidating}
           chartHeight={tall ? TALL_CHART_HEIGHT : undefined}
+          fillHeight={fill}
         />
       </Suspense>
     ),
 
-    breakdown: (sizeClass, tall) => (
+    breakdown: (sizeClass, tall, fill) => (
       <Card className={cx('bento-item--half', sizeClass)} title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
         {data.categoryBreakdown.length === 0 ? (
           <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
         ) : (
-          <div className="stack stack--tight">
-            {data.categoryBreakdown.slice(0, tall ? 14 : 7).map((row, index) => (
+          <FitList
+            items={data.categoryBreakdown}
+            fallback={tall ? 14 : 7}
+            active={fill}
+            className="stack stack--tight"
+            more={(count) => moreLink(count, 'categories')}
+            renderItem={(row, index) => (
               <div key={row.category} className="share-row">
                 <span className="truncate">{row.category}</span>
                 <span className="share-track">
@@ -510,14 +589,14 @@ export function DashboardPage({
                 </span>
                 <span className="numeric text-muted">{money(row.amount)}</span>
               </div>
-            ))}
-          </div>
+            )}
+          />
         )}
       </Card>
     ),
 
     /* Half width by default so it pairs with "Where it went". */
-    recent: (sizeClass) => (
+    recent: (sizeClass, _tall, fill) => (
       <Card
         className={cx('bento-item--half', sizeClass)}
         title={t('dashboard.recentTitle')}
@@ -531,8 +610,18 @@ export function DashboardPage({
         {data.recentTransactions.length === 0 ? (
           <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.noTransactionsTitle')} description={t('dashboard.noTransactionsBody')} />
         ) : (
-          <div className="list">
-            {data.recentTransactions.map((tx) => {
+          <FitList
+            /* Taller than eight rows: read on in the chart's year of rows,
+               in the server's own order (see recentRows.ts). */
+            items={
+              fill
+                ? continueRecent(data.recentTransactions, history.initialLoading ? null : history.items, historyWindow.to)
+                : data.recentTransactions
+            }
+            fallback={data.recentTransactions.length}
+            active={fill}
+            className="list"
+            renderItem={(tx) => {
               const wallet = data.wallets.find((w) => w.id === tx.walletId);
               const target = data.wallets.find((w) => w.id === tx.toWalletId);
               const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '';
@@ -576,8 +665,8 @@ export function DashboardPage({
                   </span>
                 </div>
               );
-            })}
-          </div>
+            }}
+          />
         )}
       </Card>
     ),
@@ -623,7 +712,11 @@ export function DashboardPage({
           variant="ghost"
           aria-expanded={false}
           aria-label={t('layout.expandCard', { title })}
-          onClick={() => saveLayout(updateCard(layout, HOME_CARDS, id, { collapsed: false }))}
+          onClick={() =>
+            isPlaced(gridLayout)
+              ? saveGridLayout(setGridCardFlags(gridLayout, id, { collapsed: false }))
+              : saveLayout(updateCard(layout, HOME_CARDS, id, { collapsed: false }))
+          }
         >
           <Icon icon={ChevronDown} size="sm" />
           {t('layout.expand')}
@@ -642,22 +735,33 @@ export function DashboardPage({
         .map((card) => ({ id: card.id, sizeClass: `lspan-${spans[card.id] ?? card.w}`, tall: card.h === 'tall', collapsed: !!card.collapsed }))
     : HOME_CARDS.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
 
-  const plainBento = (
+  /* A placed layout: each card in its own cells, sized in rows, its content
+     filling exactly that. Cards are in reading order, so Tab and a screen
+     reader go top to bottom, left to right. */
+  const plainBento = placedLayout ? (
+    <div ref={setGridElement} className="bento layout-12 is-custom is-placed">
+      {readingOrder(placedLayout.cards).map((card) => (
+        <div key={card.id} className="lplace" style={gridArea(card)}>
+          {card.collapsed ? collapsedBar(card.id, '') : homeCards[card.id]('', false, true)}
+        </div>
+      ))}
+    </div>
+  ) : (
     <div
       ref={setGridElement}
       className={cx('bento', layoutActive && 'layout-12', layoutActive && isCustom && 'is-custom')}
     >
       {placed.map((item) => (
         <Fragment key={item.id}>
-          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : homeCards[item.id](item.sizeClass, item.tall)}
+          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : homeCards[item.id](item.sizeClass, item.tall, false)}
         </Fragment>
       ))}
     </div>
   );
 
-  const finishEditing = (next: CardLayout<HomeCardId> | null) => {
-    if (next && JSON.stringify(next.cards) !== JSON.stringify(layout.cards)) {
-      saveLayout(next);
+  const finishEditing = (next: GridLayout<HomeCardId> | null) => {
+    if (next && serializeGridLayout(next) !== draftStart.current) {
+      saveGridLayout(next);
       toast.success(t('layout.saved'));
     }
     setHomeEditing(false);
@@ -671,11 +775,11 @@ export function DashboardPage({
         <CardLayoutEditor
           registry={HOME_CARDS}
           draft={draft}
-          onChange={(next) => setDraft(next as CardLayout<HomeCardId>)}
-          spans={spans}
-          renderCard={(id, tall) => homeCards[id as HomeCardId]('', tall)}
+          onChange={(next) => setDraft(next as GridLayout<HomeCardId>)}
+          metrics={gridMetrics}
+          renderCard={(id) => homeCards[id as HomeCardId]('', false, true)}
           gridRef={setGridElement}
-          gridClassName="bento layout-12 is-custom"
+          gridClassName="bento layout-12 is-custom is-placed"
           onDone={() => finishEditing(draft)}
           onCancel={() => finishEditing(null)}
           onReset={() => {

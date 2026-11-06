@@ -28,7 +28,7 @@
  */
 
 import { ChartArea, ChartColumn, ChartLine, Equal, TrendingDown, TrendingUp } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -62,6 +62,10 @@ import { Card, EmptyState, Segmented } from './ui';
 /* ------------------------------------------------------------------ */
 
 const CHART_HEIGHT = 268;
+/** The shortest plot a filling chart is given, however small its card. */
+const MIN_FILL_HEIGHT = 140;
+/** Filling a card: how often a change of its size re-measures the plot. */
+const FILL_THROTTLE_MS = 120;
 /** Room for two bars, two compact labels and a month tick without collisions. */
 const MONTH_WIDTH = 92;
 /** Headroom above the tallest mark so its label is not clipped by the frame. */
@@ -245,6 +249,7 @@ export function IncomeSpendingChart({
   stale = false,
   className,
   chartHeight = CHART_HEIGHT,
+  fillHeight = false,
 }: {
   /** Rows covering the window. Empty while they load — `trend` covers the gap. */
   transactions: Transaction[];
@@ -259,6 +264,12 @@ export function IncomeSpendingChart({
   className?: string;
   /** Plot height; only the desktop Home "Tall" setting changes it. */
   chartHeight?: number;
+  /**
+   * Grow or shrink the plot to fill the card's height (desktop Home with
+   * free placement, where the card is sized in grid rows). Overrides
+   * `chartHeight`.
+   */
+  fillHeight?: boolean;
 }) {
   const money = useMoneyFormatter();
   const { settings } = useSettings();
@@ -285,6 +296,49 @@ export function IncomeSpendingChart({
     const element = scrollRef.current;
     if (element) element.scrollLeft = element.scrollWidth;
   }, [flow.points.length, kind]);
+
+  /* Filling the card: the plot gets whatever height the card body has left
+     after the stats, the scrollbar and the legend. Those do not depend on
+     the plot's height, so one measurement settles it. Later size changes
+     (a card being resized in edit mode, the window) are followed at most
+     every FILL_THROTTLE_MS, first and last included, so a resize never
+     re-draws the chart on every frame. */
+  const chartRoot = useRef<HTMLDivElement | null>(null);
+  const [fitHeight, setFitHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const root = chartRoot.current;
+    const body = root?.parentElement;
+    if (!fillHeight || !root || !body) return undefined;
+    const measure = () => {
+      const plot = root.querySelector<HTMLElement>('.ischart-plot');
+      if (!plot) return;
+      const style = getComputedStyle(body);
+      const room = body.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+      const chrome = root.offsetHeight - plot.offsetHeight;
+      const next = Math.max(MIN_FILL_HEIGHT, Math.floor(room - chrome));
+      setFitHeight((current) => (current === next ? current : next));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    let timer = 0;
+    let last = 0;
+    const run = () => {
+      timer = 0;
+      last = Date.now();
+      measure();
+    };
+    const observer = new ResizeObserver(() => {
+      if (timer) return;
+      const wait = Math.max(0, FILL_THROTTLE_MS - (Date.now() - last));
+      timer = window.setTimeout(run, wait);
+    });
+    observer.observe(body);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [fillHeight, flow.hasData]);
+  const plotHeight = fillHeight && fitHeight !== null ? fitHeight : chartHeight;
 
   const gradient = (series: 'income' | 'expense') => `${uid}-${series}`;
   const label = (value: unknown) => compactLabel(money.convert(Number(value) || 0), settings.locale);
@@ -427,7 +481,7 @@ export function IncomeSpendingChart({
           }
         />
       ) : (
-        <div className={cx('ischart', stale && 'is-stale')}>
+        <div ref={chartRoot} className={cx('ischart', stale && 'is-stale')}>
           <div className="ischart-stats">
             <StatGroup series="income" stats={flow.income} sampleSize={flow.sampleSize} money={money} />
             <StatGroup series="expense" stats={flow.expense} sampleSize={flow.sampleSize} money={money} />
@@ -457,7 +511,7 @@ export function IncomeSpendingChart({
             aria-label={`Monthly income and spending, ${flow.points.length} months, scrollable`}
           >
             <div className="ischart-plot" style={{ minWidth: `${plotWidth}px` }} key={kind}>
-              <ResponsiveContainer width="100%" height={chartHeight}>
+              <ResponsiveContainer width="100%" height={plotHeight} debounce={fillHeight ? FILL_THROTTLE_MS : 0}>
                 {chart()}
               </ResponsiveContainer>
             </div>

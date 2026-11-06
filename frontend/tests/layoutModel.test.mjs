@@ -3,22 +3,11 @@ import './support/register.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const {
-  defaultLayout,
-  effectiveSpan,
-  isDefaultLayout,
-  gapSuggestion,
-  moveCard,
-  moveCardBy,
-  moveCardTo,
-  packRows,
-  reconcileLayouts,
-  nearestWidth,
-  sanitizeLayout,
-  serializeLayout,
-  spanPixels,
-  updateCard,
-} = await import('../src/lib/layout/layoutModel.ts');
+import { isDefaultV1, serializeV1 } from './support/v1Format.mjs';
+
+const { defaultLayout, effectiveSpan, packRows, nearestWidth, sanitizeLayout, spanPixels, updateCard } = await import(
+  '../src/lib/layout/layoutModel.ts'
+);
 const { HOME_CARDS } = await import('../src/lib/layout/homeCards.ts');
 
 const ids = (layout) => layout.cards.map((card) => card.id);
@@ -29,7 +18,7 @@ test('default: today’s order and sizes (old 6-column spans doubled)', () => {
   assert.deepEqual(ids(layout), DEFAULT_ORDER);
   assert.deepEqual(layout.cards.map((c) => c.w), [8, 4, 12, 6, 6, 12, 12]);
   assert.equal(layout.updatedAt, 0);
-  assert.ok(isDefaultLayout(layout, HOME_CARDS));
+  assert.ok(isDefaultV1(layout, defaultLayout(HOME_CARDS)));
 });
 
 test('registry: every default fits its own minimum on the narrowest desktop (684px content)', () => {
@@ -41,7 +30,7 @@ test('registry: every default fits its own minimum on the narrowest desktop (684
 
 test('sanitize: anything unreadable is the default, without throwing', () => {
   for (const raw of [null, undefined, 42, 'not json', '{"v":1}', { v: 2, cards: [] }, { v: 1, cards: 'x' }, []]) {
-    assert.ok(isDefaultLayout(sanitizeLayout(raw, HOME_CARDS), HOME_CARDS), JSON.stringify(raw));
+    assert.ok(isDefaultV1(sanitizeLayout(raw, HOME_CARDS), defaultLayout(HOME_CARDS)), JSON.stringify(raw));
   }
 });
 
@@ -85,7 +74,7 @@ test('sanitize: a card the saved layout never had goes in at its default spot', 
 
 test('sanitize: a reset marker means the default, and keeps its time so it wins a sync', () => {
   const layout = sanitizeLayout({ v: 1, updatedAt: 99, reset: true, cards: [] }, HOME_CARDS);
-  assert.ok(isDefaultLayout(layout, HOME_CARDS));
+  assert.ok(isDefaultV1(layout, defaultLayout(HOME_CARDS)));
   assert.equal(layout.updatedAt, 99);
   assert.equal(layout.reset, true);
 });
@@ -94,11 +83,11 @@ test('serialize → sanitize round-trips, and omits unset fields', () => {
   let layout = defaultLayout(HOME_CARDS, 1234);
   layout = updateCard(layout, HOME_CARDS, 'wallets', { w: 6, collapsed: true });
   layout = updateCard(layout, HOME_CARDS, 'analytics', { hidden: true });
-  const text = serializeLayout(layout);
+  const text = serializeV1(layout);
   assert.ok(!text.includes('"collapsed":false'));
   assert.deepEqual(sanitizeLayout(text, HOME_CARDS), layout);
   assert.ok(text.length < 20000);
-  const reset = serializeLayout({ ...defaultLayout(HOME_CARDS, 7), reset: true });
+  const reset = serializeV1({ ...defaultLayout(HOME_CARDS, 7), reset: true });
   assert.deepEqual(JSON.parse(reset), { v: 1, updatedAt: 7, reset: true, cards: [] });
 });
 
@@ -125,34 +114,6 @@ test('effectiveSpan: steps a too-narrow card up, never down', () => {
   assert.ok(Math.abs(spanPixels(12, 684, 24) - 684) < 1e-9);
 });
 
-test('moveCard reorders and clears a reset marker', () => {
-  const layout = { ...defaultLayout(HOME_CARDS, 3), reset: true };
-  const moved = moveCard(layout, 6, 0);
-  assert.equal(ids(moved)[0], 'analytics');
-  assert.equal(moved.reset, undefined);
-  assert.equal(moveCard(layout, 2, 2), layout);
-});
-
-test('moveCardTo: before/after a target; hidden cards keep their place', () => {
-  let layout = updateCard(defaultLayout(HOME_CARDS), HOME_CARDS, 'cashflow', { hidden: true });
-  layout = moveCardTo(layout, 'analytics', 'wallets', false);
-  assert.deepEqual(ids(layout), ['budgets', 'analytics', 'wallets', 'cashflow', 'breakdown', 'recent', 'inbox']);
-  layout = moveCardTo(layout, 'budgets', 'recent', true);
-  assert.deepEqual(ids(layout), ['analytics', 'wallets', 'cashflow', 'breakdown', 'recent', 'budgets', 'inbox']);
-  assert.equal(moveCardTo(layout, 'budgets', 'budgets', true), layout);
-  assert.equal(moveCardTo(layout, 'budgets', 'recent', true), layout, 'already there: same object');
-  assert.equal(moveCardTo(layout, 'budgets', 'ghost', true), layout);
-});
-
-test('moveCardBy: steps over hidden cards, stops at the ends', () => {
-  const layout = updateCard(defaultLayout(HOME_CARDS), HOME_CARDS, 'cashflow', { hidden: true });
-  const down = moveCardBy(layout, 'wallets', 1);
-  /* The next visible card after wallets is breakdown (cashflow is hidden). */
-  assert.deepEqual(ids(down).filter((id) => id !== 'cashflow'), ['budgets', 'breakdown', 'wallets', 'recent', 'inbox', 'analytics']);
-  assert.equal(moveCardBy(layout, 'budgets', -1), layout);
-  assert.equal(moveCardBy(layout, 'analytics', 1), layout);
-});
-
 test('packRows: left to right, a card that does not fit starts the next row', () => {
   const rows = packRows([
     { id: 'a', span: 8 },
@@ -172,40 +133,9 @@ test('packRows: left to right, a card that does not fit starts the next row', ()
   assert.ok(packRows(base).every((row) => row.used === 12));
 });
 
-test('gapSuggestion: widen the row’s last card first, else another; never invents a width', () => {
-  const spans = { budgets: 8, wallets: 3, recent: 4, analytics: 3 };
-  /* budgets 8 + wallets 3 → gap 1: wallets 3→4 is allowed. */
-  assert.deepEqual(gapSuggestion({ ids: ['budgets', 'wallets'], used: 11 }, HOME_CARDS, spans), { id: 'wallets', w: 4 });
-  /* recent 4 + analytics 3 → gap 5: analytics 8 is allowed. */
-  assert.deepEqual(gapSuggestion({ ids: ['recent', 'analytics'], used: 7 }, HOME_CARDS, spans), { id: 'analytics', w: 8 });
-  /* budgets 8 alone → gap 4: 12 is allowed. */
-  assert.deepEqual(gapSuggestion({ ids: ['budgets'], used: 8 }, HOME_CARDS, spans), { id: 'budgets', w: 12 });
-  /* wallets 3 + recent 4 → gap 5: recent 9 is not a width, so wallets 3→8. */
-  assert.deepEqual(gapSuggestion({ ids: ['wallets', 'recent'], used: 7 }, HOME_CARDS, spans), { id: 'wallets', w: 8 });
-  /* cashflow 8 + wallets 3 → gap 1: wallets 3→4. A full row has nothing to suggest. */
-  assert.deepEqual(gapSuggestion({ ids: ['cashflow', 'wallets'], used: 11 }, HOME_CARDS, { cashflow: 8, wallets: 3 }), { id: 'wallets', w: 4 });
-  /* cashflow 6 + recent 4 → gap 2: recent 6 is allowed. */
-  assert.deepEqual(gapSuggestion({ ids: ['cashflow', 'recent'], used: 10 }, HOME_CARDS, { cashflow: 6, recent: 4 }), { id: 'recent', w: 6 });
-  assert.equal(gapSuggestion({ ids: ['budgets', 'wallets'], used: 12 }, HOME_CARDS, spans), null);
-  assert.equal(gapSuggestion({ ids: ['cashflow'], used: 6 }, HOME_CARDS, { cashflow: 6 })?.w, 12);
-});
-
-test('reconcileLayouts: last write wins; never-customised devices do nothing', () => {
-  /* Fresh device, nothing on the server: no request beyond the check. */
-  assert.equal(reconcileLayouts({ updatedAt: 0 }, null), 'none');
-  /* Another PC saved: take it. */
-  assert.equal(reconcileLayouts({ updatedAt: 0 }, { updatedAt: 50 }), 'adopt');
-  assert.equal(reconcileLayouts({ updatedAt: 40 }, { updatedAt: 50 }), 'adopt');
-  /* Edited here while offline, or before the redeploy: send it. */
-  assert.equal(reconcileLayouts({ updatedAt: 60 }, { updatedAt: 50 }), 'upload');
-  assert.equal(reconcileLayouts({ updatedAt: 60 }, null), 'upload');
-  assert.equal(reconcileLayouts({ updatedAt: 50 }, { updatedAt: 50 }), 'none');
-});
-
-test('a reset from another device replaces an older custom layout here', () => {
-  const custom = updateCard(defaultLayout(HOME_CARDS, 100), HOME_CARDS, 'wallets', { hidden: true });
-  const remote = sanitizeLayout(serializeLayout({ ...defaultLayout(HOME_CARDS, 200), reset: true }), HOME_CARDS);
-  assert.equal(reconcileLayouts(custom, remote), 'adopt');
-  assert.ok(isDefaultLayout(remote, HOME_CARDS));
+test('a reset written by the old app reads as the default and keeps its time', () => {
+  const remote = sanitizeLayout(serializeV1({ ...defaultLayout(HOME_CARDS, 200), reset: true }), HOME_CARDS);
+  assert.ok(isDefaultV1(remote, defaultLayout(HOME_CARDS)));
   assert.equal(remote.updatedAt, 200);
+  assert.equal(remote.reset, true);
 });

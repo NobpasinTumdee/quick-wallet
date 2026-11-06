@@ -16802,11 +16802,124 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     border-color: var(--accent);
     background: var(--accent-softer);
   }
+  /* The widget panel: a card not on Home, with the size it comes back at.
+     Click adds it at the first free spot; drag puts it where it is dropped. */
+  .layout-widget {
+    max-width: 260px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .layout-widget.is-dragging {
+    border-style: solid;
+    border-color: var(--accent);
+    opacity: 0.55;
+  }
+  .layout-widget-size {
+    flex: none;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  /* Below 1280px: why some cards are wider than set. */
+  .layout-editbar-narrow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    margin: var(--space-1) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+  }
+  .layout-editbar-narrow > svg {
+    flex: none;
+    margin-top: 1px;
+    color: var(--accent);
+  }
+  /* What follows the pointer while a card is dragged in from the panel. */
+  .lwidget-ghost {
+    position: fixed;
+    z-index: var(--z-popover);
+    top: 0;
+    left: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 240px;
+    height: 28px;
+    margin: -14px 0 0 -28px;
+    padding: 0 var(--space-3) 0 var(--space-2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-lg);
+    color: var(--text);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semi);
+    pointer-events: none;
+    white-space: nowrap;
+  }
   .layout-editbar-actions {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     margin-left: auto;
+  }
+
+  /* ---- Free placement: cards in cells ----
+     A placed layout gives every card x, y, w and h in cells: 12 columns and
+     rows of 40px (ROW_PX in gridModel.ts) with the usual gap. A card is the
+     size of its cells, never of its content — `contain: size` keeps content
+     from stretching a row — and the content adapts instead: lists show the
+     rows that fit (FitList), the chart fills the card, and what cannot
+     adapt (the wallet and inbox lists) scrolls inside. Card bodies scroll as
+     a last resort, so nothing is ever cut off without a way to reach it. */
+  .bento.layout-12.is-placed {
+    grid-auto-rows: 40px;
+    grid-auto-flow: row;
+    align-items: stretch;
+  }
+  .bento.is-placed > .lplace,
+  .bento.is-placed > .lcard {
+    contain: size;
+    min-width: 0;
+    min-height: 0;
+  }
+  .lplace {
+    display: flex;
+    flex-direction: column;
+  }
+  .lplace > *,
+  .lcard-body > * {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+  }
+  .is-placed .card > .card-body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+  }
+  .is-placed .inbox-widget {
+    overflow: hidden;
+  }
+  .is-placed .inbox-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+  }
+  /* A collapsed card is one row tall. */
+  .is-placed .lcollapsed {
+    padding-block: 0;
+  }
+  /* "+3 more" under a list that does not show every row. */
+  .fit-more {
+    display: flex;
+    padding-top: var(--space-2);
+  }
+  .card-body--flush > .fit-more {
+    padding: var(--space-2) var(--space-4) var(--space-3);
   }
 
   /* ---- The grid while editing ---- */
@@ -16822,44 +16935,77 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     user-select: none;
   }
 
+  /* A card being edited: drawn at exactly its size on Home. Its controls
+     sit in a slim bar straddling its top edge — half in the gap above, half
+     in the card's own top padding — so they never cover what is in the card,
+     and the bar never wraps: the title gives way first, then the size. */
   .lcard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-    padding: var(--space-2);
-    border: 1px dashed var(--accent-ring);
-    border-radius: calc(var(--radius) + 4px);
-    background: var(--accent-softer);
+    position: relative;
+    container-type: inline-size;
+    border-radius: var(--radius);
+    outline: 1.5px dashed var(--accent-ring);
+    outline-offset: 3px;
+  }
+  .lcard.has-menu {
+    z-index: 3;
   }
   .lcard.is-dragging {
-    border-style: solid;
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    z-index: 4;
+    outline-style: solid;
+    outline-color: var(--accent);
+    box-shadow: var(--shadow-lg);
+    will-change: transform;
   }
-  .lcard.is-dragging .lcard-body,
-  .lcard.is-dragging .lcard-note {
-    opacity: 0.35;
+  /* Lifted: solid behind its glass, so the cards it passes over do not show through. */
+  .lcard.is-dragging .lcard-body {
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+  .lcard.is-resizing {
+    z-index: 4;
+    outline-style: solid;
+    outline-color: var(--accent);
   }
 
   .lcard-bar {
+    position: absolute;
+    z-index: 2;
+    top: -14px;
+    left: var(--space-3);
+    right: var(--space-3);
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: var(--space-1) var(--space-2);
+    gap: 2px;
+    height: 28px;
     min-width: 0;
+    padding: 0 2px;
+    overflow: hidden;
+    border: 1px solid var(--accent-ring);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-sm);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  /* A one-row card: the bar sits inside it, centred. */
+  .lcard.is-slim .lcard-bar {
+    top: 5px;
   }
   .lcard-handle,
   .lcard-icon {
     display: inline-grid;
     place-items: center;
     flex: none;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -16869,51 +17015,47 @@ table.data.tx-table tbody tr.tx-day-row:hover {
   }
   .lcard-handle:hover,
   .lcard-icon:hover {
-    border-color: var(--accent);
+    background: var(--surface-hover);
     color: var(--accent);
   }
-  .lcard-icon[aria-pressed='true'] {
+  .lcard-icon[aria-pressed='true'],
+  .lcard-icon[aria-expanded='true'] {
     background: var(--accent-soft);
     color: var(--accent);
   }
   .lcard-handle:focus-visible,
   .lcard-icon:focus-visible,
-  .layout-chip:focus-visible,
-  .lgap-fill:focus-visible {
+  .layout-chip:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--ring);
   }
   .lcard-title {
     flex: 1 1 0;
     min-width: 0;
-    font-size: var(--text-sm);
+    padding-inline: 2px;
+    font-size: var(--text-xs);
     font-weight: var(--weight-semi);
   }
-  .lcard-tools {
-    display: inline-flex;
-    gap: var(--space-1);
-  }
-  .lcard-selects {
-    display: flex;
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  select.control.lcard-select {
-    flex: 1 1 96px;
-    width: auto;
-    min-width: 0;
-    padding: 5px 30px 5px 10px;
-    font-size: var(--text-sm);
-    background-color: var(--surface);
-  }
-  .lcard-note {
-    margin: 0 var(--space-1);
+  .lcard-size {
+    flex: none;
+    padding-inline: 4px;
     color: var(--text-muted);
     font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
+  @container (max-width: 200px) {
+    .lcard-size {
+      display: none;
+    }
+  }
+
   /* The card itself, as it will look; `inert` makes it display only. */
   .lcard-body {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
     pointer-events: none;
     user-select: none;
   }
@@ -16921,74 +17063,148 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     animation: none;
   }
 
-  /* ---- Empty space at the end of a row ---- */
-  .lgap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    align-self: stretch;
-    min-width: 0;
-    min-height: 96px;
-    padding: var(--space-3);
-    border: 1.5px dashed var(--border-strong);
-    border-radius: calc(var(--radius) + 4px);
-    color: var(--text-faint);
-    font-size: var(--text-xs);
-    text-align: center;
+  /* Resizing by pointer: the right edge, the bottom edge and the corner. */
+  .lcard-resize {
+    position: absolute;
+    z-index: 2;
+    touch-action: none;
   }
-  .lgap-label {
-    font-weight: var(--weight-semi);
-    letter-spacing: var(--tracking-wide);
-    text-transform: uppercase;
-    font-size: var(--text-2xs);
+  .lcard-resize--e {
+    top: var(--space-5);
+    bottom: var(--space-5);
+    right: -10px;
+    width: 14px;
+    cursor: ew-resize;
   }
-  .lgap-hint {
-    max-width: 24ch;
+  .lcard-resize--s {
+    left: var(--space-5);
+    right: var(--space-5);
+    bottom: -10px;
+    height: 14px;
+    cursor: ns-resize;
   }
-  .lgap-fill {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-width: 100%;
-    min-height: 30px;
-    padding: 0 var(--space-3);
-    border: 1px solid var(--accent-ring);
+  .lcard-resize--se {
+    right: -10px;
+    bottom: -10px;
+    width: 22px;
+    height: 22px;
+    cursor: nwse-resize;
+  }
+  .lcard-resize--e::after,
+  .lcard-resize--s::after {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 4px;
+    height: 28px;
     border-radius: var(--radius-pill);
-    background: var(--accent-softer);
-    color: var(--accent);
-    font: inherit;
-    font-size: var(--text-xs);
-    cursor: pointer;
+    background: var(--accent-ring);
+    transform: translate(-50%, -50%);
+    transition: background-color 120ms ease;
   }
-  .lgap-fill.is-compact {
-    width: 30px;
-    padding: 0;
-    justify-content: center;
+  .lcard-resize--s::after {
+    width: 28px;
+    height: 4px;
   }
-  .lgap-fill:hover {
-    background: var(--accent-soft);
+  .lcard-resize--se::after {
+    content: '';
+    position: absolute;
+    right: 7px;
+    bottom: 7px;
+    width: 10px;
+    height: 10px;
+    border-right: 2.5px solid var(--accent);
+    border-bottom: 2.5px solid var(--accent);
+    border-bottom-right-radius: 4px;
+  }
+  .lcard-resize:hover::after,
+  .lcard.is-resizing .lcard-resize::after {
+    background-color: var(--accent);
+  }
+  .lcard-resize--se:hover::after,
+  .lcard.is-resizing .lcard-resize--se::after {
+    background-color: transparent;
+  }
+  .bento.is-drag-active .lcard:not(.is-resizing) .lcard-resize {
+    visibility: hidden;
   }
 
-  /* What follows the pointer while dragging. */
-  .lcard-ghost {
-    position: fixed;
-    z-index: var(--z-toast);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    max-width: 260px;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--accent);
+  /* While dragging: the grid's cells, faintly, and where the card will land. */
+  .lgrid-cells {
+    position: absolute;
+    z-index: 0;
+    inset: 0 0 calc(-6 * var(--lcell-pitch-y)) 0;
+    pointer-events: none;
+    opacity: 0.55;
+    background-image: linear-gradient(to right, var(--accent-softer) var(--lcell-w), transparent var(--lcell-w));
+    background-size: var(--lcell-pitch-x) 100%;
+    -webkit-mask-image: linear-gradient(to bottom, #000 var(--lcell-h), transparent var(--lcell-h));
+    mask-image: linear-gradient(to bottom, #000 var(--lcell-h), transparent var(--lcell-h));
+    -webkit-mask-size: 100% var(--lcell-pitch-y);
+    mask-size: 100% var(--lcell-pitch-y);
+  }
+  .lplaceholder {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--accent);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    pointer-events: none;
+  }
+  /* Resizing: the card itself shows its new size; only the label is added. */
+  .lplaceholder.is-resize {
+    z-index: 5;
+    place-items: end;
+    padding: var(--space-2);
+    border-color: transparent;
+    background: transparent;
+  }
+  .lplaceholder-size {
+    padding: 2px var(--space-2);
     border-radius: var(--radius-pill);
-    background: var(--glass-bg-strong);
-    box-shadow: var(--shadow-lg);
-    color: var(--text);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    box-shadow: var(--shadow-sm);
     font-size: var(--text-sm);
     font-weight: var(--weight-semi);
-    white-space: nowrap;
-    pointer-events: none;
-    transform: translate(14px, 14px);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bento.is-drag-active > .lcard:not(.is-dragging):not(.is-resizing) {
+      transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  }
+
+  /* A card's ⋯ menu: its exact width and height. */
+  .lcard-menu {
+    position: fixed;
+    z-index: var(--z-popover);
+    display: grid;
+    gap: var(--space-2);
+    min-width: 220px;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+  }
+  .lcard-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+  }
+  select.control.lcard-select {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    padding: 5px 26px 5px 8px;
+    font-size: var(--text-sm);
+    background-color: var(--surface);
   }
 }
