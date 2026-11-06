@@ -268,7 +268,12 @@ const PRESET_LABELS: Record<DatePreset, string> = {
 
 export function activeFilters(
   filters: TxFilters,
-  lookups: { walletName: (id: string) => string } = { walletName: (id) => id },
+  lookups: {
+    walletName: (id: string) => string;
+    /** Localised preset and type names; English when not given. */
+    presetLabel?: (preset: DatePreset) => string;
+    typeLabel?: (type: TransactionType) => string;
+  } = { walletName: (id) => id },
 ): ActiveFilter[] {
   const active: ActiveFilter[] = [];
 
@@ -276,7 +281,7 @@ export function activeFilters(
     const label =
       filters.datePreset === 'custom'
         ? `${filters.from || '…'} → ${filters.to || '…'}`
-        : PRESET_LABELS[filters.datePreset];
+        : lookups.presetLabel?.(filters.datePreset) ?? PRESET_LABELS[filters.datePreset];
     active.push({
       key: 'datePreset',
       label,
@@ -300,7 +305,9 @@ export function activeFilters(
     });
   }
 
-  if (filters.type) active.push({ key: 'type', label: filters.type, clear: { type: '' } });
+  if (filters.type) {
+    active.push({ key: 'type', label: lookups.typeLabel?.(filters.type) ?? filters.type, clear: { type: '' } });
+  }
 
   if (filters.category) {
     active.push({ key: 'category', label: filters.category, clear: { category: '' } });

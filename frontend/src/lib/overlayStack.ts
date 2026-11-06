@@ -32,10 +32,16 @@ interface Entry {
   close: () => void;
   /** Whether this entry pushed a history state that must be popped. */
   pushedHistory: boolean;
+  /** Whether it holds the scroll lock (every overlay except opt-outs). */
+  locks: boolean;
+  /** The `qwOverlay` id on the history entry it owns, for opt-outs only. */
+  stateId?: number;
 }
 
 const stack: Entry[] = [];
 let nextId = 1;
+/** Entries holding the scroll lock and viewport listeners. */
+let lockCount = 0;
 /** popstate events we caused ourselves and must not treat as Back. */
 let selfPops = 0;
 
@@ -164,11 +170,26 @@ export interface OverlayHandle {
   release: () => void;
 }
 
-export function pushOverlay(close: () => void): OverlayHandle {
+export interface OverlayOptions {
+  /**
+   * False for something that stays open while the page scrolls under it —
+   * the Activity selection. It still takes Back and Escape like any overlay,
+   * but leaves scrolling alone, and since the page stays usable (the tab bar
+   * can navigate away while it is open), it only pops its history entry when
+   * that entry is still the current one. Every existing caller locks.
+   */
+  lockScroll?: boolean;
+}
+
+export function pushOverlay(close: () => void, options: OverlayOptions = {}): OverlayHandle {
   const id = nextId++;
   const wantsHistory = isMobile();
-  if (stack.length === 0) attach();
-  const entry: Entry = { id, close, pushedHistory: false };
+  const locks = options.lockScroll !== false;
+  if (locks) {
+    if (lockCount === 0) attach();
+    lockCount += 1;
+  }
+  const entry: Entry = { id, close, pushedHistory: false, locks };
   stack.push(entry);
 
   if (wantsHistory) {
@@ -176,10 +197,12 @@ export function pushOverlay(close: () => void): OverlayHandle {
       /* Take over the entry a just-closed overlay left behind. */
       pendingPops -= 1;
       entry.pushedHistory = true;
+      if (!locks) entry.stateId = (window.history.state as { qwOverlay?: number } | null)?.qwOverlay;
     } else {
       try {
         window.history.pushState({ ...(window.history.state ?? {}), qwOverlay: id }, '');
         entry.pushedHistory = true;
+        if (!locks) entry.stateId = id;
       } catch {
         /* Some embedded browsers refuse; Back simply will not close it. */
       }
@@ -194,13 +217,47 @@ export function pushOverlay(close: () => void): OverlayHandle {
       const index = stack.findIndex((item) => item.id === id);
       if (index === -1) return;
       const [removed] = stack.splice(index, 1);
-      if (removed.pushedHistory) {
+      if (removed.pushedHistory && (removed.locks || ownsCurrentEntry(removed))) {
         pendingPops += 1;
         schedulePops();
       }
-      if (stack.length === 0) detach();
+      if (removed.locks) {
+        lockCount -= 1;
+        if (lockCount === 0) detach();
+      }
     },
   };
+}
+
+/**
+ * For an overlay that does not lock the page: is its history entry still
+ * where Back would land? After a navigation it is not — the new page's
+ * entry is on top — and popping then would walk back out of that page.
+ */
+function ownsCurrentEntry(entry: Entry): boolean {
+  const current = (window.history.state as { qwOverlay?: number } | null)?.qwOverlay;
+  return current !== undefined && (current === entry.stateId || stack.some((item) => item.id === current));
+}
+
+/**
+ * For the router, just before it changes the page: is the current history
+ * entry only the step a non-locking overlay (the Activity selection) pushed?
+ * Then it hands the entry over — the overlay will not pop it when it is
+ * released — and the router replaces it with the new page instead of
+ * pushing on top of it, so Back from the new page goes straight to the page
+ * before, exactly as if nothing had been selected.
+ *
+ * False whenever anything that locks (a sheet, a dialog) is open, or the
+ * entry is not one of ours: navigation is then untouched.
+ */
+export function takeSoftHistoryEntry(): boolean {
+  if (stack.some((item) => item.locks)) return false;
+  const current = (window.history.state as { qwOverlay?: number } | null)?.qwOverlay;
+  if (current === undefined) return false;
+  const owner = stack.find((item) => !item.locks && item.pushedHistory && item.stateId === current);
+  if (!owner) return false;
+  owner.pushedHistory = false;
+  return true;
 }
 
 /** Lets the current close handler be swapped without re-registering. */

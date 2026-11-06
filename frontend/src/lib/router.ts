@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { takeSoftHistoryEntry } from './overlayStack';
 
 /**
  * Minimal hash router. Hash routing means the app works when opened straight
@@ -81,6 +82,13 @@ export function currentHashPath(): string {
 
 export function navigate(route: Route): void {
   if (parseHash() === route) return;
+  /* Leaving a page while its selection holds the current history step:
+     replace that step rather than stack the new page on top of it, or Back
+     would land on the old page's leftover step first. */
+  if (takeSoftHistoryEntry()) {
+    window.location.replace(`#/${route}`);
+    return;
+  }
   window.location.hash = `#/${route}`;
 }
 

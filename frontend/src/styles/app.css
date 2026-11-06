@@ -401,6 +401,22 @@ body::after {
   }
 }
 
+/* Classic top bar on the narrowest phones. At 320px the month stepper, the
+   refresh, settings and sign-out buttons came to 5px more than the bar holds
+   (the title has already collapsed to nothing), so the page scrolled
+   sideways. The room comes from the spacing only — 2px less between the
+   tools and no extra air before sign-out, 8px in all — so no button and no
+   tap area gets smaller. Wider screens and the New layout are untouched. */
+@media (max-width: 340px) {
+  :root:not(.ui-mobile-v2) .topbar-tools {
+    gap: 2px;
+  }
+
+  :root:not(.ui-mobile-v2) .topbar-signout {
+    margin-left: 0;
+  }
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -16152,5 +16168,516 @@ line.arate-zero {
 
   .widget-token {
     padding: var(--space-3);
+  }
+}
+
+/* ==========================================================================
+   Activity — day totals, row selection, the phone's slim toolbar
+   Every figure is the page's `sumTotals` through its `money()`; the CSS only
+   lays them out. Numbers never wrap inside themselves and are never clipped:
+   when a line is too narrow the figures move to their own line instead.
+   ========================================================================== */
+
+.tx-sep {
+  color: var(--text-faint);
+}
+
+/* ---- A day's totals ---- */
+
+.tx-day-sum {
+  display: inline-flex;
+  flex-wrap: wrap-reverse; /* too narrow: net stays on top, in/out goes under */
+  justify-content: flex-end;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  letter-spacing: normal;
+  text-align: end;
+}
+
+.tx-day-io,
+.tx-day-net {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tx-day-muted {
+  color: var(--text-muted);
+  font-weight: var(--weight-regular, 400);
+}
+
+/* ---- Select toggle: the round direction mark, a tick while selected ---- */
+
+.tx-select {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tx-select:focus-visible {
+  outline: none;
+}
+
+.tx-select:focus-visible .tx-mark {
+  box-shadow: var(--ring);
+}
+
+.tx-select:hover .tx-mark {
+  border-color: var(--accent);
+}
+
+.tx-mark.is-selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tx-tile.is-selected {
+  background: var(--accent-softer);
+}
+
+/* ---- Desktop table: the select column and the day bands ---- */
+
+table.data.tx-table th.tx-sel-col,
+table.data.tx-table td.tx-sel-col {
+  width: 1%;
+  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+}
+
+table.data.tx-table .tx-select {
+  width: 36px;
+  height: 36px;
+}
+
+table.data.tx-table .tx-select .tx-mark {
+  width: 30px;
+  height: 30px;
+}
+
+table.data.tx-table tbody tr.is-selected,
+table.data.tx-table tbody tr.is-selected:hover {
+  background: var(--accent-softer);
+}
+
+/* The band is a real row header, not a column header: none of the
+   sticky, uppercase column-head look. Not sticky either — the table sits in
+   a horizontal scroller inside a clipping card, where it could not stick to
+   the window. */
+table.data.tx-table tr.tx-day-row th {
+  position: static;
+  padding: var(--space-2) var(--space-5) var(--space-2) var(--space-4);
+  background: var(--surface-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-secondary);
+}
+
+table.data.tx-table tbody.tx-day:first-of-type tr.tx-day-row th {
+  border-top: 0;
+}
+
+table.data.tx-table tbody tr.tx-day-row:hover {
+  background: none;
+}
+
+.tx-day-band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tx-day-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-inline: 8px; /* centred over the 36px select marks below it */
+  padding: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+
+.tx-day-check:hover {
+  border-color: var(--accent);
+}
+
+.tx-day-check:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tx-day-check.is-all,
+.tx-day-check.is-some {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tx-day-dash {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent-contrast);
+}
+
+.tx-group-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tx-group-switch input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---- The selection bar ----
+   Sticky at the bottom of the page column, so it lines up with the list on
+   every width and never needs to know where the sidebar ends. */
+
+.tx-selbar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.tx-selbar-count {
+  white-space: nowrap;
+}
+
+.tx-selbar-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-4);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+
+.tx-selbar-fig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tx-selbar-key {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--text-muted);
+}
+
+.tx-selbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+}
+
+/* Desktop: the quick-add button floats at the bottom-right corner; the bar
+   ends before it so Clear is never under it. */
+@media (min-width: 768px) {
+  .tx-selbar {
+    margin-inline-end: calc(56px + var(--space-4));
+  }
+}
+
+/* Toasts move up over the bar instead of landing on it. */
+@media (min-width: 640px) {
+  :root.has-tx-selection .toaster {
+    bottom: calc(var(--space-5) + 68px + 64px);
+  }
+}
+
+@media (max-width: 767px) {
+  /* Phone: count and actions on top, the figures under them; above the
+     quick-add button, so it covers neither "+" nor the tab bar. */
+  .tx-selbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'count actions'
+      'figures figures';
+    gap: 2px var(--space-2);
+    padding: var(--space-1) var(--space-1) var(--space-2) var(--space-3);
+    bottom: calc(84px + 56px + var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .tx-selbar-count {
+    grid-area: count;
+  }
+
+  .tx-selbar-actions {
+    grid-area: actions;
+    margin: 0;
+  }
+
+  .tx-selbar-figures {
+    grid-area: figures;
+    gap: 0 var(--space-3);
+  }
+
+  .tx-selbar .btn {
+    min-height: 44px;
+  }
+
+  :root.ui-mobile-v2 .tx-selbar {
+    bottom: calc(var(--tabbar-height) + var(--m2-bar-lift) + var(--space-4) + 56px + var(--space-3));
+  }
+
+  :root.ui-mobile-v2.has-tx-selection .toaster {
+    bottom: calc(var(--tabbar-height) + var(--m2-bar-lift) + var(--space-4) + 56px + var(--space-3) + 84px);
+  }
+}
+
+/* ---- Mobile layout "New": day header with totals, selectable tiles ---- */
+@media (max-width: 767px) {
+  :root.ui-mobile-v2 .tx-day-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: var(--space-3);
+    row-gap: 2px;
+  }
+
+  :root.ui-mobile-v2 .tx-day-head .tx-day-label {
+    white-space: nowrap;
+  }
+
+  /* The mark is the select button now, outside the edit button, so the edit
+     button's grid loses its mark column. */
+  :root.ui-mobile-v2 .tx-group .tx-tile.is-selectable {
+    gap: 0;
+  }
+
+  :root.ui-mobile-v2 .tx-group .tx-tile.is-selectable .tx-select {
+    margin-inline-start: var(--space-1);
+  }
+
+  :root.ui-mobile-v2 .tx-group .tx-tile.is-selectable .tx-tile-main {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'title amount amount'
+      'meta meta time';
+    padding-inline-start: var(--space-1);
+  }
+
+  /* ---- The slim toolbar ---- */
+
+  /* Frameless: the controls carry their own outlines, and a card around
+     them was most of the old toolbar's height. */
+  :root.ui-mobile-v2 .tx-slim {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  /* The day header right under it supplies the separation the page gap
+     used to. */
+  :root.ui-mobile-v2 .page:has(> .tx-slim) {
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+  }
+
+  :root.ui-mobile-v2 .tx-slim-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px var(--space-3);
+    padding-inline: var(--space-1);
+  }
+
+  :root.ui-mobile-v2 .tx-slim-totals {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 6px;
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semi);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :root.ui-mobile-v2 .tx-slim-totals > span {
+    white-space: nowrap;
+  }
+
+  :root.ui-mobile-v2 .filters.is-slim {
+    gap: var(--space-2);
+  }
+
+  :root.ui-mobile-v2 .filters-slim-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  /* Too narrow for an inline field: a search icon beside ⋯ … */
+  :root.ui-mobile-v2 .filters-search-btn,
+  :root.ui-mobile-v2 .filters-search-close {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  :root.ui-mobile-v2 .filters-search-btn {
+    margin-inline-start: auto;
+  }
+
+  /* … in the accent while a search is on, so a collapsed one is not missed. */
+  :root.ui-mobile-v2 .filters-search-btn.is-active {
+    border-color: var(--accent);
+    background: var(--accent-softer);
+    color: var(--accent);
+  }
+
+  :root.ui-mobile-v2 .filters-search-btn:focus-visible,
+  :root.ui-mobile-v2 .filters-search-close:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  /* … that opens a full-width field over the whole row. */
+  :root.ui-mobile-v2 .filters-search-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--bg);
+  }
+
+  :root.ui-mobile-v2 .filters.is-slim .filters-toggle {
+    flex: none;
+    min-height: 44px;
+    padding-inline: var(--space-3);
+  }
+
+  /* The panel opening under it says the rest; the room goes to search. */
+  :root.ui-mobile-v2 .filters.is-slim .filters-caret {
+    display: none;
+  }
+
+  :root.ui-mobile-v2 .filters-search {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--text-muted);
+  }
+
+  :root.ui-mobile-v2 .filters-search:focus-within {
+    border-color: var(--accent);
+    box-shadow: var(--ring);
+  }
+
+  :root.ui-mobile-v2 .filters-search input {
+    flex: 1;
+    min-width: 0;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 16px; /* below 16px iOS zooms the page on focus */
+  }
+
+  :root.ui-mobile-v2 .tx-slim-more {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  :root.ui-mobile-v2 .tx-slim-more[aria-expanded='true'] {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  :root.ui-mobile-v2 .tx-slim-more:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  :root.ui-mobile-v2 .filters-slim-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
   }
 }

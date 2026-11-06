@@ -14,7 +14,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { TranslationKey } from '../locales';
@@ -43,6 +43,11 @@ import { WalletPicker } from './WalletPicker';
  */
 
 /* Keys, not labels — module-level arrays are built once at import time. */
+/** Narrower than this, the slim row's search becomes an icon that expands. */
+const SEARCH_MIN = 120;
+/** Below this viewport width it is always the icon (320px phones). */
+const SEARCH_INLINE_FROM = 360;
+
 const DATE_PRESETS: { value: DatePreset; labelKey: TranslationKey }[] = [
   { value: 'period', labelKey: 'common.thisMonth' },
   { value: 'today', labelKey: 'activity.datePresetToday' },
@@ -60,6 +65,29 @@ const TIME_PRESETS = [
   { labelKey: 'activity.timeLateNight', icon: Moon, from: '00:00', to: '05:59' },
 ];
 
+/** The type names the filter chips and the desktop table's badges show. */
+export const TYPE_LABELS: Record<TransactionType, TranslationKey> = {
+  income: 'forms.typeIncome',
+  expense: 'forms.typeExpense',
+  transfer: 'forms.typeTransfer',
+};
+
+/** "48 transactions", or "12 of 340" with the first number bold. */
+export function FilterCount({ matched, total }: { matched: number; total: number }) {
+  const { t } = useTranslation();
+  return (
+    <span className="filters-count">
+      {matched === total ? (
+        t('activity.countAll', { count: total })
+      ) : (
+        <span aria-label={t('activity.countLabel', { matched, total })}>
+          <strong>{matched}</strong> {t('activity.countOf', { total })}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function TransactionFilters({
   filters,
   onChange,
@@ -67,6 +95,9 @@ export function TransactionFilters({
   categories,
   matched,
   total,
+  variant = 'bar',
+  barExtra,
+  trailing,
 }: {
   filters: TxFilters;
   onChange: (patch: Partial<TxFilters>) => void;
@@ -75,69 +106,198 @@ export function TransactionFilters({
   /** Rows surviving the filters, and rows fetched — the "12 of 340" line. */
   matched: number;
   total: number;
+  /**
+   * `slim`: the phone's compact toolbar (mobile New) — Filters, a search
+   * field and `trailing` on one row, the chips under it, and no count (the
+   * page shows it beside the totals). The panel it opens is the same.
+   */
+  variant?: 'bar' | 'slim';
+  /** Beside the count on the full bar: desktop's "Group by day". */
+  barExtra?: ReactNode;
+  /** At the end of the slim row: the ⋯ menu. */
+  trailing?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const slim = variant === 'slim';
 
   const walletName = (id: string) => wallets.find((w) => w.id === id)?.name ?? t('recurring.unknownWallet');
-  const chips = activeFilters(filters, { walletName });
+  const presetLabel = (preset: DatePreset) =>
+    t(DATE_PRESETS.find((item) => item.value === preset)?.labelKey ?? 'activity.datePresetCustom');
+  const all = activeFilters(filters, { walletName, presetLabel, typeLabel: (type) => t(TYPE_LABELS[type]) });
+  /* ---- Slim search ----
+     Inline from 360px while the field would get at least SEARCH_MIN px;
+     otherwise (320px, a long Filters label) an icon that opens the field over the
+     whole row. Measured from what the row's other controls actually take,
+     so it follows the language and the filter badge. */
+  const rowRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const [compactSearch, setCompactSearch] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!slim || !row) return undefined;
+    const others = () =>
+      (Array.from(row.children) as HTMLElement[]).filter((child) => !child.dataset.slot);
+    const measure = () => {
+      const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+      const items = others();
+      const used = items.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
+      /* One gap after each of the others, before or after the search slot. */
+      setCompactSearch(
+        window.innerWidth < SEARCH_INLINE_FROM || row.clientWidth - used - gap * items.length < SEARCH_MIN,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    others().forEach((child) => observer.observe(child));
+    return () => observer.disconnect();
+  }, [slim]);
+
+  const searchExpanded = compactSearch && searchOpen;
+
+  useEffect(() => {
+    if (searchExpanded) searchInputRef.current?.focus();
+  }, [searchExpanded]);
+
+  /* Closing keeps what was typed (it stays a removable chip) and drops the
+     focus, which also puts a phone's keyboard away. */
+  const closeSearch = () => {
+    searchInputRef.current?.blur();
+    setSearchOpen(false);
+    window.requestAnimationFrame(() => searchButtonRef.current?.focus({ preventScroll: true }));
+  };
+
+  /* While the field is on screen the search is not a chip too. The badge
+     still counts it: it is a filter that is on. */
+  const searchVisible = slim && (!compactSearch || searchOpen);
+  const chips = searchVisible ? all.filter((chip) => chip.key !== 'search') : all;
+
+  const searchField = (
+    <label className="filters-search" data-slot="search">
+      <Icon icon={Search} size="sm" />
+      <input
+        ref={searchInputRef}
+        type="search"
+        value={filters.search}
+        placeholder={t('common.search')}
+        aria-label={t('common.search')}
+        enterKeyHint="search"
+        onChange={(event) => onChange({ search: event.target.value })}
+        onKeyDown={(event) => {
+          if (searchExpanded && event.key === 'Escape') {
+            event.preventDefault();
+            closeSearch();
+          }
+        }}
+      />
+    </label>
+  );
+
+  const toggle = (
+    <button
+      type="button"
+      className="filters-toggle"
+      aria-expanded={open}
+      onClick={() => setOpen((current) => !current)}
+    >
+      <Icon icon={SlidersHorizontal} size="sm" />
+      {t('activity.filtersButton')}
+      {all.length > 0 && <Badge tone="accent">{all.length}</Badge>}
+      <Icon icon={ChevronDown} size="sm" className={cx('filters-caret', open && 'is-open')} />
+    </button>
+  );
+
+  const chipButtons = chips.map((chip) => (
+    <button
+      key={chip.key}
+      type="button"
+      className="filter-chip"
+      onClick={() => onChange(chip.clear)}
+      aria-label={t('activity.removeFilter', { label: chip.label })}
+    >
+      {chip.label}
+      <Icon icon={X} size="sm" />
+    </button>
+  ));
 
   /** True when this preset's window is exactly what's set — drives the chips. */
   const timeMatches = (from: string, to: string) =>
     filters.timeFrom === from && filters.timeTo === to;
 
   return (
-    <div className={cx('filters', open && 'is-open')}>
-      <div className="filters-bar">
-        <button
-          type="button"
-          className="filters-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
-          <Icon icon={SlidersHorizontal} size="sm" />
-          Filters
-          {chips.length > 0 && <Badge tone="accent">{chips.length}</Badge>}
-          <Icon icon={ChevronDown} size="sm" className={cx('filters-caret', open && 'is-open')} />
-        </button>
-
-        {/* Always visible, open or closed. */}
-        <div className="filter-chips">
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              className="filter-chip"
-              onClick={() => onChange(chip.clear)}
-              aria-label={t('activity.removeFilter', { label: chip.label })}
-            >
-              {chip.label}
-              <Icon icon={X} size="sm" />
-            </button>
-          ))}
-        </div>
-
-        <div className="spacer" />
-
-        <span className="filters-count">
-          {matched === total ? (
-            <>
-              {total} transaction{total === 1 ? '' : 's'}
-            </>
-          ) : (
-            <>
-              <strong>{matched}</strong> of {total}
-            </>
+    <div className={cx('filters', open && 'is-open', slim && 'is-slim')}>
+      {slim ? (
+        <>
+          <div className="filters-slim-row" ref={rowRef}>
+            {toggle}
+            {compactSearch ? (
+              <button
+                ref={searchButtonRef}
+                type="button"
+                data-slot="search"
+                className={cx('filters-search-btn', filters.search.trim() && 'is-active')}
+                aria-label={t('common.search')}
+                title={t('common.search')}
+                aria-expanded={searchOpen}
+                onClick={() => setSearchOpen(true)}
+              >
+                <Icon icon={Search} size="sm" />
+              </button>
+            ) : (
+              searchField
+            )}
+            {trailing}
+            {searchExpanded && (
+              <div className="filters-search-overlay" data-slot="overlay">
+                {searchField}
+                <button
+                  type="button"
+                  className="filters-search-close"
+                  aria-label={t('activity.closeSearch')}
+                  title={t('activity.closeSearch')}
+                  onClick={closeSearch}
+                >
+                  <Icon icon={X} size="sm" />
+                </button>
+              </div>
+            )}
+          </div>
+          {chips.length > 0 && (
+            <div className="filters-slim-chips">
+              <div className="filter-chips">{chipButtons}</div>
+              <Button size="sm" variant="ghost" onClick={() => onChange(EMPTY_FILTERS)}>
+                <Icon icon={RotateCcw} size="sm" />
+                {t('activity.clear')}
+              </Button>
+            </div>
           )}
-        </span>
+        </>
+      ) : (
+        <div className="filters-bar">
+          {toggle}
 
-        {chips.length > 0 && (
-          <Button size="sm" variant="ghost" onClick={() => onChange(EMPTY_FILTERS)}>
-            <Icon icon={RotateCcw} size="sm" />
-            {t('activity.clear')}
-          </Button>
-        )}
-      </div>
+          {/* Always visible, open or closed. */}
+          <div className="filter-chips">{chipButtons}</div>
+
+          <div className="spacer" />
+
+          {barExtra}
+
+          <FilterCount matched={matched} total={total} />
+
+          {chips.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => onChange(EMPTY_FILTERS)}>
+              <Icon icon={RotateCcw} size="sm" />
+              {t('activity.clear')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {open && (
         <div className="filters-body">
@@ -242,8 +402,8 @@ export function TransactionFilters({
                 at". Setting an end before the start reads as an overnight
                 window, which is the useful interpretation of 22:00 → 02:00. */}
             <p className="field-hint">
-              {t('activity.timeOfDayHint')} <strong>recorded</strong> — the date field itself
-              carries no clock time. An end earlier than the start spans midnight.
+              {t('activity.timeOfDayHint')} <strong>{t('activity.timeOfDayRecorded')}</strong>
+              {t('activity.timeOfDayHintRest')}
             </p>
           </section>
 

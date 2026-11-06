@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { evaluatePad, padValueToRaw } from '../lib/amountExpr';
 import { cx, formatNumber } from '../lib/format';
 import { useNumberPadMode } from '../lib/numberPad';
-import { OverlayHandle, pushOverlay, updateOverlayClose } from '../lib/overlayStack';
+import { OverlayHandle, OverlayOptions, pushOverlay, updateOverlayClose } from '../lib/overlayStack';
 import { Icon } from './Icon';
 import { AmountPadField, PadKind, padOptions } from './NumberPad';
 
@@ -537,14 +537,14 @@ const FOCUSABLE =
  * without re-registering — which used to re-run the Escape listener and the
  * scroll lock on every render.
  */
-export function useOverlay(open: boolean, onClose: () => void): OverlayHandle | null {
+export function useOverlay(open: boolean, onClose: () => void, options?: OverlayOptions): OverlayHandle | null {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [handle, setHandle] = useState<OverlayHandle | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
-    const next = pushOverlay(() => closeRef.current());
+    const next = pushOverlay(() => closeRef.current(), options);
     setHandle(next);
     return () => {
       next.release();
