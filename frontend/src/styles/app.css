@@ -17208,3 +17208,205 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     background-color: var(--surface);
   }
 }
+
+/* ==========================================================================
+   Arrange Home (phones and tablets): card order and visibility
+   ========================================================================== */
+
+.arrange-hint {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.arrange-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arrange-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding-block: 4px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.arrange-row:last-child {
+  border-bottom: 0;
+}
+
+.arrange-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+/* Long names (Thai especially) wrap rather than being cut off. */
+.arrange-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.arrange-name small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.arrange-row.is-hidden .arrange-name > span,
+.arrange-row.is-hidden .arrange-icon {
+  opacity: 0.55;
+}
+
+.arrange-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* 44px tap areas; the visible box inside is smaller. */
+.arrange-move {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.arrange-move > * {
+  box-sizing: content-box;
+  padding: 6px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+}
+
+.arrange-move:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.arrange-move:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.arrange-move:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+.arrange-switch {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 44px;
+  align-items: center;
+}
+
+.arrange-switch .sub-share-track {
+  margin-top: 0;
+}
+
+.arrange-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.arrange-foot-actions {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Settings › Preferences row. */
+.arrange-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.arrange-setting-summary {
+  color: var(--text-muted);
+}
+
+/* Every card hidden: the hero stays, and this says how to get them back. */
+.home-arrange-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--divider);
+  border-radius: var(--radius-md, 12px);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.home-arrange-empty p {
+  margin: 0;
+}
+
+/* New layout: the link sits in the content sheet's bottom padding (44px),
+   out of the flow, so Home's cards and height do not move at all. */
+.home-arrange-link {
+  display: none;
+}
+
+@media (max-width: 999px) {
+  :root.ui-mobile-v2 .home-sheet > .home-arrange-link {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :root.ui-mobile-v2 .home-sheet > .home-arrange-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -4px;
+    border-radius: var(--radius-xs);
+  }
+}
+
+/* Tablet: a half card whose partner is not next to it in a custom order
+   takes the full row, so nothing back-fills the gap beside it. */
+@media (min-width: 768px) and (max-width: 999px) {
+  .bento > .bento-item--half.mspan-full {
+    grid-column: 1 / -1;
+  }
+}

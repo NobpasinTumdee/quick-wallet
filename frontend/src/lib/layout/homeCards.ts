@@ -50,3 +50,12 @@ export const HOME_CARDS: readonly HomeCardDef[] = [
  */
 export const HOME_LAYOUT_PAGE = 'home-grid';
 export const HOME_LEGACY_LAYOUT_PAGE = 'home';
+
+/**
+ * The phone's Home (below 1000px — phones and tablets, Classic and New):
+ * card order and which cards show, its own key, separate from the desktop's.
+ */
+export const HOME_ORDER_PAGE = 'home-mobile';
+
+/** The cards drawn a half each, side by side, on a tablet (768–999px). */
+export const HOME_TABLET_HALVES: ReadonlySet<HomeCardId> = new Set<HomeCardId>(['breakdown', 'recent']);

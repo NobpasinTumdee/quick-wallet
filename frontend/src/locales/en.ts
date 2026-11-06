@@ -1225,6 +1225,29 @@ export const en = {
     resetDone: 'Layout reset to default',
   },
 
+  /* Arrange Home: card order and visibility on phones and tablets. */
+  arrange: {
+    title: 'Arrange Home',
+    subtitle: 'Choose the order of the cards under your balance, and which ones show. This is for phones and tablets; the desktop layout is separate.',
+    open: 'Arrange Home',
+    settingLabel: 'Home cards',
+    settingHint: 'The order of the cards on Home on phones and tablets, and which ones show. Syncs to your other phones.',
+    summaryDefault: 'Default order',
+    summaryCustom: 'Custom order',
+    summaryHidden: 'Custom order · {{n}} hidden',
+    moveUp: 'Move {{title}} up',
+    moveDown: 'Move {{title}} down',
+    show: 'Show {{title}} on Home',
+    hiddenTag: 'Hidden',
+    announceMoved: '{{title}} moved to {{position}} of {{n}}',
+    resetTitle: 'Reset Home to the default order?',
+    resetBody: 'Every card goes back to its original order, and hidden cards come back. This applies to your phones and tablets; the desktop layout is not affected.',
+    resetConfirm: 'Reset order',
+    saved: 'Home order saved',
+    resetDone: 'Home order reset to default',
+    allHidden: 'All Home cards are hidden.',
+  },
+
   analytics: {
     title: 'Analytics',
     subtitle: 'The patterns behind the numbers',

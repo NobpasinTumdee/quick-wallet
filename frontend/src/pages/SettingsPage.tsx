@@ -1,5 +1,5 @@
-import { LogOut, Smartphone } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { ListOrdered, LogOut, Smartphone } from 'lucide-react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
@@ -31,6 +31,10 @@ import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { MobileLayout, useMobileLayout, useMobileV2 } from '../lib/mobileLayout';
 import { useNumberPadSetting } from '../lib/numberPad';
+import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
+import { useHomeOrder } from '../lib/layout/useHomeOrder';
+import { toast } from '../lib/toast';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
@@ -181,6 +185,9 @@ export function SettingsPage() {
 
           {/* The same kind of setting: immediate, per device, phone only. */}
           <MobileLayoutSetting />
+
+          {/* Phones and tablets only: at 1000px and up Home has Customize. */}
+          <HomeArrangeSetting />
 
           <Field label={t('settings.locale')} hint={t('settings.localeHint')}>
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
@@ -472,6 +479,62 @@ function NumberPadSwitch() {
           <small id="number-pad-hint">{t('pad.settingHint')}</small>
         </span>
       </label>
+    </div>
+  );
+}
+
+const HomeArrangeSheet = lazyWithRetry(() => import('../components/HomeArrangeSheet'));
+
+/** Opens Arrange Home — the same sheet as the link on Home in the New layout. */
+function HomeArrangeSetting() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const desktop = useMediaQuery(SIDEBAR_QUERY);
+  const { order, save, reset, isCustom } = useHomeOrder(user?.id, !desktop);
+  const [open, setOpen] = useState(false);
+  if (desktop) return null;
+  const hidden = order.cards.filter((card) => card.hidden).length;
+  const summary = !isCustom
+    ? t('arrange.summaryDefault')
+    : hidden > 0
+      ? t('arrange.summaryHidden', { n: hidden })
+      : t('arrange.summaryCustom');
+  return (
+    /* Field's look without its <label>, which would rename the button. */
+    <div className="field span-2" role="group" aria-labelledby="arrange-setting-label">
+      <span className="field-label" id="arrange-setting-label">
+        {t('arrange.settingLabel')}
+      </span>
+      <div className="arrange-setting">
+        <span className="arrange-setting-summary" id="arrange-setting-summary">
+          {summary}
+        </span>
+        <Button type="button" size="sm" aria-describedby="arrange-setting-summary arrange-setting-hint" onClick={() => setOpen(true)}>
+          <Icon icon={ListOrdered} size="sm" />
+          {t('arrange.open')}
+        </Button>
+      </div>
+      <span className="field-hint" id="arrange-setting-hint">
+        {t('arrange.settingHint')}
+      </span>
+      {open && (
+        <Suspense fallback={null}>
+          <HomeArrangeSheet
+            order={order}
+            onClose={() => setOpen(false)}
+            onSave={(next) => {
+              save(next);
+              setOpen(false);
+              toast.success(t('arrange.saved'));
+            }}
+            onReset={() => {
+              reset();
+              setOpen(false);
+              toast.success(t('arrange.resetDone'));
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

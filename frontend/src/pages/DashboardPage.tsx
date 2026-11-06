@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Globe,
   History,
+  ListOrdered,
   Receipt,
   Target,
   Unlock,
@@ -39,7 +40,9 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HomeCardId } from '../lib/layout/homeCards';
+import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HOME_TABLET_HALVES, HomeCardId } from '../lib/layout/homeCards';
+import { useHomeOrder } from '../lib/layout/useHomeOrder';
+import { unpairedHalves, visibleIds } from '../lib/layout/orderModel';
 import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/useCardLayout';
 import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
 import { CardLayout, updateCard } from '../lib/layout/layoutModel';
@@ -73,6 +76,8 @@ const IncomeSpendingChart = lazyWithRetry(() =>
 const TALL_CHART_HEIGHT = 400;
 
 const CardLayoutEditor = lazyWithRetry(() => import('../components/CardLayoutEditor'));
+
+const HomeArrangeSheet = lazyWithRetry(() => import('../components/HomeArrangeSheet'));
 
 const TaxCalculatorModal = lazyWithRetry(() =>
   import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
@@ -170,6 +175,12 @@ export function DashboardPage({
     if (!layoutActive) setHomeEditing(false);
   }, [layoutActive]);
   useEffect(() => () => setHomeEditing(false), []);
+
+  /* ---- Below 1000px (phones and tablets, Classic and New): card order ----
+     Its own key, separate from the desktop's. Without a saved order (or after
+     a reset) nothing below changes: the cards render exactly as always. */
+  const homeOrder = useHomeOrder(user?.id, !layoutActive);
+  const [arrangeOpen, setArrangeOpen] = useState(false);
 
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
     '/api/dashboard',
@@ -733,7 +744,18 @@ export function DashboardPage({
     ? layout.cards
         .filter((card) => !card.hidden)
         .map((card) => ({ id: card.id, sizeClass: `lspan-${spans[card.id] ?? card.w}`, tall: card.h === 'tall', collapsed: !!card.collapsed }))
-    : HOME_CARDS.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
+    : homeOrder.isCustom
+      ? orderedCards(visibleIds(homeOrder.order))
+      : HOME_CARDS.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
+
+  /* A phone order says nothing about sizes. On a tablet the two half cards
+     sit side by side only when they are next to each other; one on its own
+     is drawn full width there (`mspan-full`, which does nothing on a phone). */
+  function orderedCards(ids: HomeCardId[]) {
+    const full = unpairedHalves(ids, HOME_TABLET_HALVES);
+    return ids.map((id) => ({ id, sizeClass: full.has(id) ? 'mspan-full' : '', tall: false, collapsed: false }));
+  }
+  const openArrange = () => setArrangeOpen(true);
 
   /* A placed layout: each card in its own cells, sized in rows, its content
      filling exactly that. Cards are in reading order, so Tab and a screen
@@ -745,6 +767,15 @@ export function DashboardPage({
           {card.collapsed ? collapsedBar(card.id, '') : homeCards[card.id]('', false, true)}
         </div>
       ))}
+    </div>
+  ) : !layoutActive && placed.length === 0 ? (
+    /* Every card hidden on a phone: the hero stays, with a way back. */
+    <div className="home-arrange-empty">
+      <p>{t('arrange.allHidden')}</p>
+      <Button size="sm" onClick={openArrange}>
+        <Icon icon={ListOrdered} size="sm" />
+        {t('arrange.open')}
+      </Button>
     </div>
   ) : (
     <div
@@ -925,6 +956,14 @@ export function DashboardPage({
         <div className="home-sheet">
           {metrics}
           {bento}
+          {/* In the sheet's bottom padding, so Home's layout does not move;
+              when every card is hidden the empty state has its own. */}
+          {placed.length > 0 && (
+            <button type="button" className="home-arrange-link" onClick={openArrange}>
+              <Icon icon={ListOrdered} size="sm" />
+              {t('arrange.open')}
+            </button>
+          )}
         </div>
       ) : (
         bento
@@ -933,6 +972,25 @@ export function DashboardPage({
       {/* The chunk is only fetched once the button is pressed, and the
           component itself holds no subscription and issues no request until
           its own Run calculation button is pressed. */}
+      {arrangeOpen && (
+        <Suspense fallback={null}>
+          <HomeArrangeSheet
+            order={homeOrder.order}
+            onClose={() => setArrangeOpen(false)}
+            onSave={(next) => {
+              homeOrder.save(next);
+              setArrangeOpen(false);
+              toast.success(t('arrange.saved'));
+            }}
+            onReset={() => {
+              homeOrder.reset();
+              setArrangeOpen(false);
+              toast.success(t('arrange.resetDone'));
+            }}
+          />
+        </Suspense>
+      )}
+
       {taxOpen && (
         <Suspense fallback={null}>
           <TaxCalculatorModal open onClose={() => setTaxOpen(false)} />
