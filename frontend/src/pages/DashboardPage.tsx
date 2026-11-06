@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Calculator,
   ChartNoAxesCombined,
+  ChevronDown,
   Globe,
   History,
   Receipt,
@@ -12,7 +13,7 @@ import {
   Unlock,
   Wallet,
 } from 'lucide-react';
-import { Suspense, useMemo, useState } from 'react';
+import { Fragment, ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
@@ -36,6 +37,12 @@ import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
+import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { HOME_CARDS, HOME_LAYOUT_PAGE, HomeCardId } from '../lib/layout/homeCards';
+import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/useCardLayout';
+import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
+import { CardLayout, updateCard } from '../lib/layout/layoutModel';
+import { toast } from '../lib/toast';
 
 
 const IncomeSpendingChart = lazyWithRetry(() =>
@@ -46,6 +53,13 @@ const IncomeSpendingChart = lazyWithRetry(() =>
 /* The tax modal drags in its own receipt UI and, on export, jsPDF. None of it
    belongs in the Dashboard's chunk when most visits never open it — and this
    is the default route, so its chunk is the one everybody pays for. */
+/* Edit mode for the desktop layout: its own chunk, loaded when Customize is
+   pressed — almost no visit to Home ever needs it. */
+/** The cash-flow chart's plot height when its card is set to Tall. */
+const TALL_CHART_HEIGHT = 400;
+
+const CardLayoutEditor = lazyWithRetry(() => import('../components/CardLayoutEditor'));
+
 const TaxCalculatorModal = lazyWithRetry(() =>
   import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
 );
@@ -79,6 +93,31 @@ export function DashboardPage({
      False on desktop and in Classic, which render exactly as before. */
   const mobileV2 = useMobileV2();
   const { user } = useAuth();
+
+  /* ---- Customisable layout (desktop with the sidebar only) ----
+     Below 1000px none of this applies and the bento renders exactly as it
+     always has. At 1000px and up the same cards are placed on a 12-column
+     grid from the saved layout — or from the default, which reproduces the
+     old 6-column arrangement to the pixel. */
+  const layoutActive = useMediaQuery(SIDEBAR_QUERY);
+  const { layout, save: saveLayout, reset: resetLayout, isCustom } = useCardLayout(HOME_LAYOUT_PAGE, user?.id, HOME_CARDS, layoutActive);
+  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
+  const gridMetrics = useGridMetrics(gridElement, layoutActive);
+
+  /* Edit mode: a draft copy, started from the saved layout when Customize is
+     pressed. Done saves it, Cancel drops it. Leaving Home or going below the
+     sidebar breakpoint ends it without saving. */
+  const editing = useHomeEditing() && layoutActive;
+  const [draft, setDraft] = useState<CardLayout<HomeCardId> | null>(null);
+  if (editing && !draft) setDraft(layout);
+  if (!editing && draft) setDraft(null);
+  useEffect(() => {
+    if (!layoutActive) setHomeEditing(false);
+  }, [layoutActive]);
+  useEffect(() => () => setHomeEditing(false), []);
+
+  const shown = (editing && draft) || layout;
+  const spans = useEffectiveSpans(shown, HOME_CARDS, gridMetrics);
 
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
     '/api/dashboard',
@@ -337,12 +376,14 @@ export function DashboardPage({
     </div>
   );
 
-  const bento = (
-    <>
-    {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
-    <div className="bento">
+  /* ---- The cards ----
+     One function per card, taking the extra class that sizes it on the
+     desktop grid (empty below 1000px). Their markup is exactly what it was;
+     only where each one is placed now comes from the layout. */
+  const homeCards: Record<HomeCardId, (sizeClass: string, tall: boolean) => ReactNode> = {
+    budgets: (sizeClass, tall) => (
       <Card
-        className="bento-item--wide"
+        className={cx('bento-item--wide', sizeClass)}
         title={t('dashboard.budgetProgress')}
         subtitle={formatPeriod(period, locale)}
         actions={
@@ -365,7 +406,7 @@ export function DashboardPage({
           />
         ) : (
           <div className="list">
-            {data.budgets.slice(0, 5).map((budget) => (
+            {data.budgets.slice(0, tall ? 10 : 5).map((budget) => (
               <div key={budget.id} className="budget-item">
                 <div className="budget-head">
                   <span className="budget-name truncate">
@@ -394,10 +435,12 @@ export function DashboardPage({
           </div>
         )}
       </Card>
+    ),
 
-      {/* Wallets split by mode — the two halves of the app, side by side. */}
+    /* Wallets split by mode — the two halves of the app, side by side. */
+    wallets: (sizeClass) => (
       <Card
-        className="bento-item--narrow"
+        className={cx('bento-item--narrow', sizeClass)}
         title={t('dashboard.walletsTitle')}
         actions={
           <Button size="sm" onClick={() => onNavigate('wallets')}>
@@ -428,31 +471,35 @@ export function DashboardPage({
           </>
         )}
       </Card>
+    ),
 
-      {/* Twelve months of paired bars. At half width each month gets ~40px,
-          which is why the component scrolls horizontally; given the full row
-          it mostly does not have to. */}
+    /* Twelve months of paired bars. At half width each month gets ~40px,
+       which is why the component scrolls horizontally; given the full row
+       it mostly does not have to. */
+    cashflow: (sizeClass, tall) => (
       <Suspense
-        fallback={<div className="card bento-item--full ischart-placeholder" aria-hidden="true" />}
+        fallback={<div className={cx('card bento-item--full ischart-placeholder', sizeClass)} aria-hidden="true" />}
       >
         <IncomeSpendingChart
-          className="bento-item--full"
+          className={cx('bento-item--full', sizeClass)}
           transactions={history.items}
           trend={data.trend}
           period={period}
           months={HISTORY_MONTHS}
           loading={history.initialLoading}
           stale={history.isValidating}
+          chartHeight={tall ? TALL_CHART_HEIGHT : undefined}
         />
       </Suspense>
+    ),
 
-
-      <Card className="bento-item--half" title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
+    breakdown: (sizeClass, tall) => (
+      <Card className={cx('bento-item--half', sizeClass)} title={t('dashboard.breakdownTitle')} subtitle={formatPeriod(period, locale)}>
         {data.categoryBreakdown.length === 0 ? (
           <EmptyState icon={<Icon icon={Receipt} size="xl" />} title={t('dashboard.nothingSpentTitle')} description={t('dashboard.nothingSpentBody')} />
         ) : (
           <div className="stack stack--tight">
-            {data.categoryBreakdown.slice(0, 7).map((row, index) => (
+            {data.categoryBreakdown.slice(0, tall ? 14 : 7).map((row, index) => (
               <div key={row.category} className="share-row">
                 <span className="truncate">{row.category}</span>
                 <span className="share-track">
@@ -467,12 +514,12 @@ export function DashboardPage({
           </div>
         )}
       </Card>
+    ),
 
-
-      {/* Half width so it pairs with "Where it went" — dense packing lifts it
-          into that row's empty half rather than leaving one there. */}
+    /* Half width by default so it pairs with "Where it went". */
+    recent: (sizeClass) => (
       <Card
-        className="bento-item--half"
+        className={cx('bento-item--half', sizeClass)}
         title={t('dashboard.recentTitle')}
         actions={
           <Button size="sm" onClick={() => onNavigate('transactions')}>
@@ -533,22 +580,23 @@ export function DashboardPage({
           </div>
         )}
       </Card>
+    ),
 
-      {/* Directly under the balance: the inbox is the other half of "where do
-        I stand" — what the balances do not know about yet. */}
-      <FinancialInboxWidget wallets={data.wallets} />
+    /* What the balances do not know about yet. */
+    inbox: (sizeClass) => <FinancialInboxWidget wallets={data.wallets} className={sizeClass || undefined} />,
 
-      {/* ---- Gateway to /analytics ----
-          Full width and last, so it reads as "there is more, through here"
-          rather than competing with the figures above it.
+    /* ---- Gateway to /analytics ----
+       Full width and last by default, so it reads as "there is more, through
+       here" rather than competing with the figures above it.
 
-          It carries real weight on a phone: the gesture arc is capped at five
-          items and Analytics did not make the cut, so this card is the only
-          way onto that screen below 1000px. A whole card rather than a button
-          for the same reason — it has to be findable, not just present. */}
+       It carries real weight on a phone: the gesture arc is capped at five
+       items and Analytics did not make the cut, so this card is the only
+       way onto that screen below 1000px. A whole card rather than a button
+       for the same reason — it has to be findable, not just present. */
+    analytics: (sizeClass) => (
       <button
         type="button"
-        className="card bento-item--full analytics-cta"
+        className={cx('card bento-item--full analytics-cta', sizeClass)}
         onClick={() => onNavigate('analytics')}
       >
         <span className="analytics-cta-mark" aria-hidden="true">
@@ -560,7 +608,86 @@ export function DashboardPage({
         </span>
         <Icon icon={ArrowRight} size="sm" className="analytics-cta-arrow" />
       </button>
+    ),
+  };
+
+  /* A collapsed card on Home: its title and a way back. Expanding saves. */
+  const collapsedBar = (id: HomeCardId, sizeClass: string) => {
+    const def = HOME_CARDS.find((item) => item.id === id)!;
+    const title = t(def.titleKey);
+    return (
+      <section className={cx('card lcollapsed', sizeClass)} aria-label={title}>
+        <span className="lcollapsed-title truncate">{title}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={false}
+          aria-label={t('layout.expandCard', { title })}
+          onClick={() => saveLayout(updateCard(layout, HOME_CARDS, id, { collapsed: false }))}
+        >
+          <Icon icon={ChevronDown} size="sm" />
+          {t('layout.expand')}
+        </Button>
+      </section>
+    );
+  };
+
+  /* Below 1000px: the registry's own order, no size classes — the bento as it
+     always was. At 1000px and up: the layout's order and drawn widths, hidden
+     cards left out. A saved custom layout also turns off `dense`, so a card
+     stays exactly where it was put instead of back-filling an earlier gap. */
+  const placed = layoutActive
+    ? layout.cards
+        .filter((card) => !card.hidden)
+        .map((card) => ({ id: card.id, sizeClass: `lspan-${spans[card.id] ?? card.w}`, tall: card.h === 'tall', collapsed: !!card.collapsed }))
+    : HOME_CARDS.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
+
+  const plainBento = (
+    <div
+      ref={setGridElement}
+      className={cx('bento', layoutActive && 'layout-12', layoutActive && isCustom && 'is-custom')}
+    >
+      {placed.map((item) => (
+        <Fragment key={item.id}>
+          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : homeCards[item.id](item.sizeClass, item.tall)}
+        </Fragment>
+      ))}
     </div>
+  );
+
+  const finishEditing = (next: CardLayout<HomeCardId> | null) => {
+    if (next && JSON.stringify(next.cards) !== JSON.stringify(layout.cards)) {
+      saveLayout(next);
+      toast.success(t('layout.saved'));
+    }
+    setHomeEditing(false);
+  };
+
+  const bento = (
+    <>
+    {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
+    {editing && draft ? (
+      <Suspense fallback={plainBento}>
+        <CardLayoutEditor
+          registry={HOME_CARDS}
+          draft={draft}
+          onChange={(next) => setDraft(next as CardLayout<HomeCardId>)}
+          spans={spans}
+          renderCard={(id, tall) => homeCards[id as HomeCardId]('', tall)}
+          gridRef={setGridElement}
+          gridClassName="bento layout-12 is-custom"
+          onDone={() => finishEditing(draft)}
+          onCancel={() => finishEditing(null)}
+          onReset={() => {
+            resetLayout();
+            setHomeEditing(false);
+            toast.success(t('layout.resetDone'));
+          }}
+        />
+      </Suspense>
+    ) : (
+      plainBento
+    )}
     </>
   );
 

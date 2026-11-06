@@ -784,6 +784,11 @@ function dispatch_(action, method, query, body, token) {
     'notes.update': function () { return notesUpdate_(requireAuth_(token), query, body); },
     'notes.delete': function () { return notesDelete_(requireAuth_(token), query); },
 
+    /* Display preferences that follow the user between devices: the desktop
+       Home layout. See "UI preferences" below. */
+    'uiPrefs.list': function () { return uiPrefsList_(requireAuth_(token), query); },
+    'uiPrefs.save': function () { return uiPrefsSave_(requireAuth_(token), body); },
+
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
 
@@ -6534,6 +6539,212 @@ function testWidgetTokens() {
     }
   }
   Logger.log(failures.length ? 'testWidgetTokens FAILED: ' + failures.join('; ') : 'testWidgetTokens: all checks passed, test rows removed.');
+  return failures;
+}
+
+/* =========================================================================
+ * UI preferences — display settings that follow a user between devices
+ * =========================================================================
+ * Today one kind: the desktop Home card layout, key `layout.home`. The value
+ * is the layout as JSON — `{ v: 1, updatedAt, cards: [...] }`, or a reset
+ * marker `{ v: 1, updatedAt, reset: true, cards: [] }` — which the client
+ * sanitises on every read, so a value here can never break a page.
+ *
+ * One row per user and key, ID `<userId>:<key>`. Last write wins on
+ * `updatedAt` (milliseconds, from the device that made the change): a save
+ * older than the stored one is refused and answered with the stored row, so
+ * the device that sent it can catch up instead.
+ *
+ * Deliberately NOT in SHEETS. `health_()` (Settings → Database), `setup()` and
+ * `createMissingSheets()` all walk SHEETS, and adding this must not change
+ * what any of them report. So the sheet has its own small reader and writer
+ * below, and is created by the first save — nothing to run by hand.
+ *
+ * Nothing here touches money or any other table.
+ */
+
+var UI_PREFS_SHEET_ = 'UiPrefs';
+var UI_PREFS_HEADERS_ = ['ID', 'User ID', 'Key', 'Value (JSON)', 'Updated At'];
+/** Only layouts for now: `layout.` plus a short page name. */
+var UI_PREFS_KEY_PATTERN_ = /^layout\.[a-z0-9-]{1,32}$/;
+var UI_PREFS_VALUE_MAX_ = 20000;
+var UI_PREFS_CARDS_MAX_ = 64;
+/** How far ahead of this server's clock a device's stamp may be. */
+var UI_PREFS_FUTURE_SLACK_MS_ = 24 * 60 * 60 * 1000;
+
+function uiPrefsSheet_(create) {
+  var ss = spreadsheet_();
+  var sheet = ss.getSheetByName(UI_PREFS_SHEET_);
+  if (!sheet && create) {
+    sheet = ss.insertSheet(UI_PREFS_SHEET_);
+    sheet.getRange(1, 1, 1, UI_PREFS_HEADERS_.length).setValues([UI_PREFS_HEADERS_]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, UI_PREFS_HEADERS_.length).setFontWeight('bold');
+  }
+  return sheet;
+}
+
+/** Every row, read by header name so a moved column still reads right. */
+function uiPrefsRows_(sheet) {
+  if (!sheet) return [];
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  var at = UI_PREFS_HEADERS_.map(function (h) { return headers.indexOf(h.toLowerCase()); });
+  var rows = [];
+  for (var r = 1; r < values.length; r += 1) {
+    var line = values[r];
+    var cell = function (i) { return at[i] >= 0 ? line[at[i]] : ''; };
+    var id = String(cell(0) || '').trim();
+    if (!id) continue;
+    rows.push({
+      _row: r + 1,
+      id: id,
+      userId: String(cell(1) || ''),
+      key: String(cell(2) || ''),
+      value: coerce_(cell(3), 'text'),
+      updatedAt: Number(coerce_(cell(4), 'text')) || 0
+    });
+  }
+  return rows;
+}
+
+function uiPrefPublic_(row) {
+  return { key: row.key, value: row.value, updatedAt: row.updatedAt };
+}
+
+/** GET uiPrefs.list[?key=] → { prefs: [{ key, value, updatedAt }] } for the signed-in user. */
+function uiPrefsList_(user, query) {
+  var key = query && query.key ? String(query.key) : '';
+  var prefs = uiPrefsRows_(uiPrefsSheet_(false))
+    .filter(function (row) { return row.userId === user.id && (!key || row.key === key); })
+    .map(uiPrefPublic_);
+  return { prefs: prefs };
+}
+
+/**
+ * PUT uiPrefs.save { key, value, updatedAt } →
+ *   { accepted: true,  pref }   stored;
+ *   { accepted: false, pref }   refused as older — `pref` is what is stored.
+ */
+function uiPrefsSave_(user, body) {
+  body = body || {};
+  var key = String(body.key || '');
+  if (!UI_PREFS_KEY_PATTERN_.test(key)) throw bad_('Unknown preference "' + key + '"');
+
+  var value = typeof body.value === 'string' ? body.value : '';
+  if (!value || value.length > UI_PREFS_VALUE_MAX_) {
+    throw bad_('A layout must be between 1 and ' + UI_PREFS_VALUE_MAX_ + ' characters');
+  }
+  var parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (err) {
+    throw bad_('A layout must be JSON');
+  }
+  if (!parsed || typeof parsed !== 'object' || parsed.v !== 1 ||
+      !Array.isArray(parsed.cards) || parsed.cards.length > UI_PREFS_CARDS_MAX_) {
+    throw bad_('Not a layout this version understands');
+  }
+
+  var updatedAt = Math.floor(Number(body.updatedAt));
+  if (!isFinite(updatedAt) || updatedAt <= 0 || updatedAt > Date.now() + UI_PREFS_FUTURE_SLACK_MS_) {
+    throw bad_('A layout needs a valid updatedAt');
+  }
+
+  var sheet = uiPrefsSheet_(true);
+  var id = user.id + ':' + key;
+  var existing = uiPrefsRows_(sheet).filter(function (row) { return row.id === id; })[0];
+
+  if (existing && existing.updatedAt >= updatedAt) {
+    return { accepted: false, pref: uiPrefPublic_(existing) };
+  }
+
+  /* Text with a leading apostrophe (serialize_ 'text'), so Sheets never turns
+     the JSON or the timestamp into a formula, number or date. */
+  var row = [id, user.id, key, serialize_(value, 'text'), serialize_(String(updatedAt), 'text')];
+  if (existing) {
+    sheet.getRange(existing._row, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet.appendRow(row);
+  }
+  return { accepted: true, pref: { key: key, value: value, updatedAt: updatedAt } };
+}
+
+/**
+ * Proves the UiPrefs round trip against the real sheet. Run from the Apps
+ * Script editor, then View → Logs. Uses a made-up user id that cannot belong
+ * to anyone, deletes its own rows at the end (and any left by an earlier,
+ * interrupted run), and never reads or writes any other table. If it created
+ * the UiPrefs sheet itself and nothing else is in it, the sheet goes too.
+ */
+function testUiLayoutRoundTrip() {
+  var TEST_PREFIX = 'zz-test-ui-layout-';
+  var fakeUser = { id: TEST_PREFIX + Utilities.getUuid() };
+  var failures = [];
+  var check = function (ok, what) { if (!ok) failures.push(what); };
+  var hadSheet = Boolean(uiPrefsSheet_(false));
+
+  var layout = function (stamp, note) {
+    return JSON.stringify({
+      v: 1,
+      updatedAt: stamp,
+      cards: [
+        { id: 'wallets', w: 3 },
+        { id: 'budgets', w: 8, h: 'tall', collapsed: true },
+        { id: 'recent', w: 6, hidden: true }
+      ],
+      note: note || ''
+    });
+  };
+
+  try {
+    var t1 = Date.now() - 5000;
+    var awkward = "=1+1 '@x +66 2026-08-01 ภาษาไทย";
+    var first = uiPrefsSave_(fakeUser, { key: 'layout.home', value: layout(t1, awkward), updatedAt: t1 });
+    check(first.accepted === true, 'first save accepted');
+
+    var listed = uiPrefsList_(fakeUser, { key: 'layout.home' }).prefs;
+    check(listed.length === 1, 'one row listed (got ' + listed.length + ')');
+    check(listed[0] && listed[0].value === layout(t1, awkward), 'value round-trips exactly');
+    check(listed[0] && listed[0].updatedAt === t1, 'updatedAt round-trips exactly');
+
+    var older = uiPrefsSave_(fakeUser, { key: 'layout.home', value: layout(t1 - 1000), updatedAt: t1 - 1000 });
+    check(older.accepted === false && older.pref.updatedAt === t1, 'older save refused, stored row returned');
+
+    var t2 = t1 + 1000;
+    var reset = JSON.stringify({ v: 1, updatedAt: t2, reset: true, cards: [] });
+    check(uiPrefsSave_(fakeUser, { key: 'layout.home', value: reset, updatedAt: t2 }).accepted === true,
+      'newer reset accepted');
+    var after = uiPrefsList_(fakeUser, {}).prefs;
+    check(after.length === 1 && after[0].value === reset, 'updated in place, not appended');
+
+    var refused = 0;
+    [
+      { key: 'theme', value: reset, updatedAt: t2 + 1 },
+      { key: 'layout.home', value: 'not json', updatedAt: t2 + 1 },
+      { key: 'layout.home', value: JSON.stringify({ v: 2, cards: [] }), updatedAt: t2 + 1 },
+      { key: 'layout.home', value: reset, updatedAt: 0 }
+    ].forEach(function (bad) {
+      try { uiPrefsSave_(fakeUser, bad); } catch (err) { refused += 1; }
+    });
+    check(refused === 4, 'invalid saves refused (' + refused + ' of 4)');
+    check(uiPrefsList_({ id: fakeUser.id + '-other' }, {}).prefs.length === 0, 'another user sees nothing');
+  } finally {
+    var sheet = uiPrefsSheet_(false);
+    if (sheet) {
+      uiPrefsRows_(sheet)
+        .filter(function (row) { return row.userId.indexOf(TEST_PREFIX) === 0; })
+        .map(function (row) { return row._row; })
+        .sort(function (a, b) { return b - a; })
+        .forEach(function (n) { sheet.deleteRow(n); });
+      if (!hadSheet && sheet.getLastRow() <= 1) spreadsheet_().deleteSheet(sheet);
+    }
+  }
+
+  Logger.log(failures.length
+    ? 'UI LAYOUT ROUND TRIP FAILURES:\n - ' + failures.join('\n - ')
+    : 'UiPrefs round trip OK: save, list, stale refusal, reset, validation, per-user scoping. Test rows removed.');
   return failures;
 }
 

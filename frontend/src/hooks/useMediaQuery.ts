@@ -53,3 +53,10 @@ export function useMediaQuery(query: string): boolean {
  * for the same decision — two numbers that must agree should be one constant.
  */
 export const DESKTOP_QUERY = '(min-width: 768px)';
+
+/**
+ * Where the sidebar takes over from the tab bar (app.css `@media (min-width:
+ * 1000px)`). Desktop-only features — the customisable Home — start here;
+ * below it the page is exactly as it always was.
+ */
+export const SIDEBAR_QUERY = '(min-width: 1000px)';

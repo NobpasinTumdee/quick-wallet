@@ -57,7 +57,14 @@ const TYPE_ICON: Record<InboxType, typeof StickyNote> = {
   note: StickyNote,
 };
 
-export function FinancialInboxWidget({ wallets }: { wallets: WalletBalance[] }) {
+export function FinancialInboxWidget({
+  wallets,
+  className,
+}: {
+  wallets: WalletBalance[];
+  /** Sizes it on the desktop Home grid; nothing else uses it. */
+  className?: string;
+}) {
   const { t } = useTranslation();
   const { settings } = useSettings();
   const money = useMoneyFormatter();
@@ -131,7 +138,7 @@ export function FinancialInboxWidget({ wallets }: { wallets: WalletBalance[] }) 
   const prefill = converting ? prefillFor(converting, today) : null;
 
   return (
-    <section className="inbox-widget" aria-labelledby="inbox-heading">
+    <section className={cx('inbox-widget', className)} aria-labelledby="inbox-heading">
       <header className="inbox-head">
         <h2 id="inbox-heading">
           <Icon icon={InboxIcon} size="sm" />

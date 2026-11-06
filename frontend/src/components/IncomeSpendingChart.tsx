@@ -244,6 +244,7 @@ export function IncomeSpendingChart({
   loading = false,
   stale = false,
   className,
+  chartHeight = CHART_HEIGHT,
 }: {
   /** Rows covering the window. Empty while they load — `trend` covers the gap. */
   transactions: Transaction[];
@@ -256,6 +257,8 @@ export function IncomeSpendingChart({
   /** Refetching over data already on screen: dim, never re-skeleton. */
   stale?: boolean;
   className?: string;
+  /** Plot height; only the desktop Home "Tall" setting changes it. */
+  chartHeight?: number;
 }) {
   const money = useMoneyFormatter();
   const { settings } = useSettings();
@@ -454,7 +457,7 @@ export function IncomeSpendingChart({
             aria-label={`Monthly income and spending, ${flow.points.length} months, scrollable`}
           >
             <div className="ischart-plot" style={{ minWidth: `${plotWidth}px` }} key={kind}>
-              <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
                 {chart()}
               </ResponsiveContainer>
             </div>

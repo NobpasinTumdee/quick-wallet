@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Landmark,
   LayoutGrid,
+  LayoutPanelTop,
   LogOut,
   NotebookPen,
   ChartNoAxesCombined,
@@ -26,12 +27,14 @@ import { useTranslation } from 'react-i18next';
 import { refreshPrefixes } from '../api/cache';
 import { prefetch, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useLanguageSync } from '../hooks/useLanguage';
+import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { QuickLink, hasQuickLinkParams, parseQuickLink, resolveQuickLink, stripQuickLink } from '../lib/quickLink';
 import { useMobileV2, useTopbarHeightVar } from '../lib/mobileLayout';
+import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
@@ -495,6 +498,21 @@ export function AppShell() {
   );
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
 
+  /* Customize Home: desktop with the sidebar only, and only on Home. When edit
+     mode ends, focus comes back here rather than being dropped on <body>. */
+  const sidebarLayout = useMediaQuery(SIDEBAR_QUERY);
+  const homeEditing = useHomeEditing();
+  const showCustomize = route === 'dashboard' && sidebarLayout;
+  const customizeButton = useRef<HTMLButtonElement | null>(null);
+  const wasEditing = useRef(homeEditing);
+  useEffect(() => {
+    if (wasEditing.current && !homeEditing) {
+      const active = document.activeElement;
+      if (!active || active === document.body || !active.isConnected) customizeButton.current?.focus();
+    }
+    wasEditing.current = homeEditing;
+  }, [homeEditing]);
+
   return (
     <div className={cx('shell', railed && 'is-railed')}>
       <aside className="sidebar">
@@ -607,6 +625,22 @@ export function AppShell() {
             )}
           </div>
           <div className="topbar-tools">
+            {showCustomize && (
+              /* The same markup <Button> renders; a plain element so it can hold a ref. */
+              <button
+                ref={customizeButton}
+                type="button"
+                className="btn btn--ghost btn--sm topbar-customize"
+                aria-pressed={homeEditing}
+                disabled={homeEditing}
+                aria-label={t('layout.customizeLabel')}
+                title={t('layout.customizeLabel')}
+                onClick={() => setHomeEditing(true)}
+              >
+                <Icon icon={LayoutPanelTop} size="sm" />
+                <span>{t('layout.customize')}</span>
+              </button>
+            )}
             {showPeriodPicker && !mobileV2 && (
               /* Three controls grouped so they read as a single month stepper. */
               <div className="period-nav">

@@ -16681,3 +16681,314 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     gap: var(--space-2);
   }
 }
+
+/* ==========================================================================
+   Customisable card layout — desktop with the sidebar (>= 1000px) only
+   --------------------------------------------------------------------------
+   DashboardPage adds `.layout-12` to the bento at 1000px and up and gives
+   every card an `lspan-N` (columns of 12) from the saved layout. Twelve
+   columns with each old 6-column span doubled is the same geometry to the
+   pixel, so with no saved layout Home looks exactly as before. Below 1000px
+   neither class is ever set and the rules above apply untouched.
+   ========================================================================== */
+@media (min-width: 1000px) {
+  .bento.layout-12 {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .bento.layout-12 > .lspan-3 { grid-column: span 3; }
+  .bento.layout-12 > .lspan-4 { grid-column: span 4; }
+  .bento.layout-12 > .lspan-6 { grid-column: span 6; }
+  .bento.layout-12 > .lspan-8 { grid-column: span 8; }
+  .bento.layout-12 > .lspan-12 { grid-column: span 12; }
+
+  /* A saved arrangement is placed exactly as arranged: no back-filling an
+     earlier gap with a later card, which would make the order you set
+     disagree with the order you see. The default layout tiles every row
+     exactly, so it looks the same with or without this. */
+  .bento.layout-12.is-custom {
+    grid-auto-flow: row;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Customisable layout: collapsed cards and edit mode (>= 1000px only)
+   --------------------------------------------------------------------------
+   None of these classes is ever set below 1000px. Theme tokens only, so every
+   theme (light, dark, pastel) carries them. */
+@media (min-width: 1000px) {
+  .topbar-customize {
+    gap: var(--space-2);
+  }
+
+  /* A collapsed card: its title and an Expand button, one slim row. */
+  .lcollapsed {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+  .lcollapsed-title {
+    min-width: 0;
+    font-weight: var(--weight-semi);
+  }
+
+  /* ---- The edit bar: under the top bar, above the cards ---- */
+  .layout-editbar {
+    position: sticky;
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3) var(--space-5);
+    margin-bottom: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--accent-ring);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+  }
+  .layout-editbar-text {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+  .layout-editbar-title {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: var(--weight-semi);
+  }
+  .layout-editbar-title:focus {
+    outline: none;
+  }
+  .layout-editbar-title:focus-visible {
+    box-shadow: 0 0 0 3px var(--ring);
+    border-radius: var(--radius-xs);
+  }
+  .layout-editbar-hint {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+  }
+  .layout-editbar-tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .layout-editbar-none {
+    color: var(--text-faint);
+    font-size: var(--text-xs);
+  }
+  .layout-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 220px;
+    min-height: 30px;
+    padding: 0 var(--space-3) 0 var(--space-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+  .layout-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-softer);
+  }
+  .layout-editbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+  }
+
+  /* ---- The grid while editing ---- */
+  .bento.is-editing {
+    position: relative; /* card offsets are measured against it */
+  }
+  .bento.is-editing > * {
+    animation: none;
+  }
+  .bento.is-drag-active,
+  .bento.is-drag-active * {
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .lcard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: var(--space-2);
+    border: 1px dashed var(--accent-ring);
+    border-radius: calc(var(--radius) + 4px);
+    background: var(--accent-softer);
+  }
+  .lcard.is-dragging {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .lcard.is-dragging .lcard-body,
+  .lcard.is-dragging .lcard-note {
+    opacity: 0.35;
+  }
+
+  .lcard-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+  }
+  .lcard-handle,
+  .lcard-icon {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .lcard-handle {
+    cursor: grab;
+    touch-action: none;
+  }
+  .lcard-handle:hover,
+  .lcard-icon:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .lcard-icon[aria-pressed='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .lcard-handle:focus-visible,
+  .lcard-icon:focus-visible,
+  .layout-chip:focus-visible,
+  .lgap-fill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+  .lcard-title {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semi);
+  }
+  .lcard-tools {
+    display: inline-flex;
+    gap: var(--space-1);
+  }
+  .lcard-selects {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  select.control.lcard-select {
+    flex: 1 1 96px;
+    width: auto;
+    min-width: 0;
+    padding: 5px 30px 5px 10px;
+    font-size: var(--text-sm);
+    background-color: var(--surface);
+  }
+  .lcard-note {
+    margin: 0 var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+  }
+  /* The card itself, as it will look; `inert` makes it display only. */
+  .lcard-body {
+    pointer-events: none;
+    user-select: none;
+  }
+  .lcard-body > * {
+    animation: none;
+  }
+
+  /* ---- Empty space at the end of a row ---- */
+  .lgap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    align-self: stretch;
+    min-width: 0;
+    min-height: 96px;
+    padding: var(--space-3);
+    border: 1.5px dashed var(--border-strong);
+    border-radius: calc(var(--radius) + 4px);
+    color: var(--text-faint);
+    font-size: var(--text-xs);
+    text-align: center;
+  }
+  .lgap-label {
+    font-weight: var(--weight-semi);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    font-size: var(--text-2xs);
+  }
+  .lgap-hint {
+    max-width: 24ch;
+  }
+  .lgap-fill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    min-height: 30px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--accent-ring);
+    border-radius: var(--radius-pill);
+    background: var(--accent-softer);
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+  .lgap-fill.is-compact {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  .lgap-fill:hover {
+    background: var(--accent-soft);
+  }
+
+  /* What follows the pointer while dragging. */
+  .lcard-ghost {
+    position: fixed;
+    z-index: var(--z-toast);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: 260px;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-strong);
+    box-shadow: var(--shadow-lg);
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semi);
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translate(14px, 14px);
+  }
+}
