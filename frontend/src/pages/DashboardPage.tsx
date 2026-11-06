@@ -5,16 +5,14 @@ import {
   ArrowUp,
   Calculator,
   ChartNoAxesCombined,
-  ChevronDown,
   Globe,
   History,
-  ListOrdered,
   Receipt,
   Target,
   Unlock,
   Wallet,
 } from 'lucide-react';
-import { Fragment, ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
@@ -39,27 +37,19 @@ import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
-import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HOME_TABLET_HALVES, HomeCardId } from '../lib/layout/homeCards';
-import { useHomeOrder } from '../lib/layout/useHomeOrder';
-import { unpairedHalves, visibleIds } from '../lib/layout/orderModel';
-import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/useCardLayout';
-import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
-import { CardLayout, updateCard } from '../lib/layout/layoutModel';
 import {
-  GridLayout,
-  fitGridToWidth,
-  gridArea,
-  isPlaced,
-  migrateV1,
-  placeFlowLayout,
-  readingOrder,
-  serializeGridLayout,
-  setGridCardFlags,
-  toCardLayout,
-} from '../lib/layout/gridModel';
+  CardBoardArrange,
+  CardBoardArrangeEmpty,
+  CardBoardArrangeLink,
+  CardBoardConfig,
+  CardBoardGrid,
+  useCardBoard,
+} from '../components/CardBoard';
+import { HOME_ARRANGE_ENTRY, HOME_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
+import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HOME_TABLET_HALVES, HomeCardId } from '../lib/layout/homeCards';
+import { HOME_EDIT_PAGE } from '../lib/layout/homeEditStore';
+import { HOME_ORDER_FORMAT } from '../lib/layout/layoutFormats';
 import { continueRecent } from '../lib/layout/recentRows';
-import { toast } from '../lib/toast';
 
 
 const IncomeSpendingChart = lazyWithRetry(() =>
@@ -75,13 +65,22 @@ const IncomeSpendingChart = lazyWithRetry(() =>
 /** The cash-flow chart's plot height when its card is set to Tall. */
 const TALL_CHART_HEIGHT = 400;
 
-const CardLayoutEditor = lazyWithRetry(() => import('../components/CardLayoutEditor'));
-
-const HomeArrangeSheet = lazyWithRetry(() => import('../components/HomeArrangeSheet'));
 
 const TaxCalculatorModal = lazyWithRetry(() =>
   import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
 );
+
+/** Home's cards and where their layouts are kept (see CardBoard). */
+const HOME_BOARD: CardBoardConfig<HomeCardId> = {
+  editPage: HOME_EDIT_PAGE,
+  gridPage: HOME_LAYOUT_PAGE,
+  legacyPage: HOME_LEGACY_LAYOUT_PAGE,
+  orderFormat: HOME_ORDER_FORMAT,
+  registry: HOME_CARDS,
+  halves: HOME_TABLET_HALVES,
+  messages: { saved: 'layout.saved', resetDone: 'layout.resetDone' },
+  arrange: { texts: HOME_ARRANGE_TEXTS, entry: HOME_ARRANGE_ENTRY },
+};
 
 /** How far back the cash-flow chart looks. One year of scrollable history. */
 const HISTORY_MONTHS = 12;
@@ -113,74 +112,14 @@ export function DashboardPage({
   const mobileV2 = useMobileV2();
   const { user } = useAuth();
 
-  /* ---- Customisable layout (desktop with the sidebar only) ----
-     Below 1000px none of this applies and the bento renders exactly as it
-     always has. At 1000px and up the same cards are placed on a 12-column
-     grid from the saved layout — or from the default, which reproduces the
-     old 6-column arrangement to the pixel. */
-  const layoutActive = useMediaQuery(SIDEBAR_QUERY);
-  const {
-    layout: gridLayout,
-    save: saveGridLayout,
-    reset: resetLayout,
-    isCustom,
-  } = useCardLayout(HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, user?.id, HOME_CARDS, layoutActive);
-  /* Flow layouts (the default, and every layout saved before free placement)
-     are drawn and edited in order-and-width terms, exactly as before. */
-  const layout = useMemo(() => toCardLayout(gridLayout, HOME_CARDS), [gridLayout]);
-  const saveLayout = (next: CardLayout<HomeCardId>) => saveGridLayout(migrateV1(next));
-  const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
-  const gridMetrics = useGridMetrics(gridElement, layoutActive);
-
-  /* Each card's drawn width in a flow layout on this screen. */
-  const spans = useEffectiveSpans(layout, HOME_CARDS, gridMetrics);
-
-  /* A placed layout (cards with x/y/w/h in cells) as drawn on this screen:
-     a card too narrow here is widened and the rest reflows. */
-  const placedLayout =
-    layoutActive && isPlaced(gridLayout) ? fitGridToWidth(gridLayout, HOME_CARDS, gridMetrics.width, gridMetrics.gap) : null;
-
-  /* Edit mode works on cells. Opening it on a flow layout turns what is on
-     screen into a placed draft — every card where it is, as tall as it
-     measures, rounded to whole rows — so editing starts from exactly what
-     you see. Done saves the draft only if something changed, so opening
-     and closing never converts a layout by itself. Cancel drops it; leaving
-     Home or going below the sidebar breakpoint ends it without saving. */
-  const editing = useHomeEditing() && layoutActive;
-  const [draft, setDraft] = useState<GridLayout<HomeCardId> | null>(null);
-  const draftStart = useRef('');
-  if (editing && !draft) {
-    let start: GridLayout<HomeCardId>;
-    if (placedLayout) {
-      start = placedLayout;
-    } else {
-      /* Read from the flow grid still on screen: its children are the
-         visible cards, in order. */
-      const visible = layout.cards.filter((card) => !card.hidden);
-      const children = gridElement ? (Array.from(gridElement.children) as HTMLElement[]) : [];
-      const heights: Record<string, number> = {};
-      if (children.length === visible.length) visible.forEach((card, index) => (heights[card.id] = children[index].offsetHeight));
-      start = fitGridToWidth(
-        placeFlowLayout(gridLayout, HOME_CARDS, spans, heights, gridMetrics.gap || 24),
-        HOME_CARDS,
-        gridMetrics.width,
-        gridMetrics.gap,
-      );
-    }
-    draftStart.current = serializeGridLayout(start);
-    setDraft(start);
-  }
-  if (!editing && draft) setDraft(null);
-  useEffect(() => {
-    if (!layoutActive) setHomeEditing(false);
-  }, [layoutActive]);
-  useEffect(() => () => setHomeEditing(false), []);
-
-  /* ---- Below 1000px (phones and tablets, Classic and New): card order ----
-     Its own key, separate from the desktop's. Without a saved order (or after
-     a reset) nothing below changes: the cards render exactly as always. */
-  const homeOrder = useHomeOrder(user?.id, !layoutActive);
-  const [arrangeOpen, setArrangeOpen] = useState(false);
+  /* ---- Customisable layout ----
+     At 1000px and up the cards are placed on a 12-column grid from the saved
+     layout — or from the default, which reproduces the old 6-column
+     arrangement to the pixel. Below 1000px (phones and tablets, Classic and
+     New) the saved card order applies, its own key; without one nothing
+     changes. See CardBoard. */
+  const board = useCardBoard(HOME_BOARD, user?.id);
+  const { placed } = board;
 
   const { data, initialLoading, isValidating, error, refresh } = useExcelQuery<DashboardSummary>(
     '/api/dashboard',
@@ -711,119 +650,13 @@ export function DashboardPage({
     ),
   };
 
-  /* A collapsed card on Home: its title and a way back. Expanding saves. */
-  const collapsedBar = (id: HomeCardId, sizeClass: string) => {
-    const def = HOME_CARDS.find((item) => item.id === id)!;
-    const title = t(def.titleKey);
-    return (
-      <section className={cx('card lcollapsed', sizeClass)} aria-label={title}>
-        <span className="lcollapsed-title truncate">{title}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-expanded={false}
-          aria-label={t('layout.expandCard', { title })}
-          onClick={() =>
-            isPlaced(gridLayout)
-              ? saveGridLayout(setGridCardFlags(gridLayout, id, { collapsed: false }))
-              : saveLayout(updateCard(layout, HOME_CARDS, id, { collapsed: false }))
-          }
-        >
-          <Icon icon={ChevronDown} size="sm" />
-          {t('layout.expand')}
-        </Button>
-      </section>
-    );
-  };
-
-  /* Below 1000px: the registry's own order, no size classes — the bento as it
-     always was. At 1000px and up: the layout's order and drawn widths, hidden
-     cards left out. A saved custom layout also turns off `dense`, so a card
-     stays exactly where it was put instead of back-filling an earlier gap. */
-  const placed = layoutActive
-    ? layout.cards
-        .filter((card) => !card.hidden)
-        .map((card) => ({ id: card.id, sizeClass: `lspan-${spans[card.id] ?? card.w}`, tall: card.h === 'tall', collapsed: !!card.collapsed }))
-    : homeOrder.isCustom
-      ? orderedCards(visibleIds(homeOrder.order))
-      : HOME_CARDS.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
-
-  /* A phone order says nothing about sizes. On a tablet the two half cards
-     sit side by side only when they are next to each other; one on its own
-     is drawn full width there (`mspan-full`, which does nothing on a phone). */
-  function orderedCards(ids: HomeCardId[]) {
-    const full = unpairedHalves(ids, HOME_TABLET_HALVES);
-    return ids.map((id) => ({ id, sizeClass: full.has(id) ? 'mspan-full' : '', tall: false, collapsed: false }));
-  }
-  const openArrange = () => setArrangeOpen(true);
-
-  /* A placed layout: each card in its own cells, sized in rows, its content
-     filling exactly that. Cards are in reading order, so Tab and a screen
-     reader go top to bottom, left to right. */
-  const plainBento = placedLayout ? (
-    <div ref={setGridElement} className="bento layout-12 is-custom is-placed">
-      {readingOrder(placedLayout.cards).map((card) => (
-        <div key={card.id} className="lplace" style={gridArea(card)}>
-          {card.collapsed ? collapsedBar(card.id, '') : homeCards[card.id]('', false, true)}
-        </div>
-      ))}
-    </div>
-  ) : !layoutActive && placed.length === 0 ? (
-    /* Every card hidden on a phone: the hero stays, with a way back. */
-    <div className="home-arrange-empty">
-      <p>{t('arrange.allHidden')}</p>
-      <Button size="sm" onClick={openArrange}>
-        <Icon icon={ListOrdered} size="sm" />
-        {t('arrange.open')}
-      </Button>
-    </div>
-  ) : (
-    <div
-      ref={setGridElement}
-      className={cx('bento', layoutActive && 'layout-12', layoutActive && isCustom && 'is-custom')}
-    >
-      {placed.map((item) => (
-        <Fragment key={item.id}>
-          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : homeCards[item.id](item.sizeClass, item.tall, false)}
-        </Fragment>
-      ))}
-    </div>
-  );
-
-  const finishEditing = (next: GridLayout<HomeCardId> | null) => {
-    if (next && serializeGridLayout(next) !== draftStart.current) {
-      saveGridLayout(next);
-      toast.success(t('layout.saved'));
-    }
-    setHomeEditing(false);
-  };
-
   const bento = (
-    <>
-    {/* ---- Bento: panels sized by importance rather than a uniform grid ---- */}
-    {editing && draft ? (
-      <Suspense fallback={plainBento}>
-        <CardLayoutEditor
-          registry={HOME_CARDS}
-          draft={draft}
-          onChange={(next) => setDraft(next as GridLayout<HomeCardId>)}
-          metrics={gridMetrics}
-          renderCard={(id) => homeCards[id as HomeCardId]('', false, true)}
-          gridRef={setGridElement}
-          gridClassName="bento layout-12 is-custom is-placed"
-          onDone={() => finishEditing(draft)}
-          onCancel={() => finishEditing(null)}
-          onReset={() => {
-            resetLayout();
-            setHomeEditing(false);
-            toast.success(t('layout.resetDone'));
-          }}
-        />
-      </Suspense>
-    ) : (
-      plainBento
-    )}
-    </>
+    <CardBoardGrid
+      board={board}
+      renderCard={(id, sizeClass, tall, fill) => homeCards[id](sizeClass, tall, fill)}
+      /* Every card hidden on a phone: the hero stays, with a way back. */
+      empty={<CardBoardArrangeEmpty board={board} />}
+    />
   );
 
   /* "Good evening, Nob" — or just "Good evening" without a name. */
@@ -958,12 +791,7 @@ export function DashboardPage({
           {bento}
           {/* In the sheet's bottom padding, so Home's layout does not move;
               when every card is hidden the empty state has its own. */}
-          {placed.length > 0 && (
-            <button type="button" className="home-arrange-link" onClick={openArrange}>
-              <Icon icon={ListOrdered} size="sm" />
-              {t('arrange.open')}
-            </button>
-          )}
+          {placed.length > 0 && <CardBoardArrangeLink board={board} />}
         </div>
       ) : (
         bento
@@ -972,24 +800,7 @@ export function DashboardPage({
       {/* The chunk is only fetched once the button is pressed, and the
           component itself holds no subscription and issues no request until
           its own Run calculation button is pressed. */}
-      {arrangeOpen && (
-        <Suspense fallback={null}>
-          <HomeArrangeSheet
-            order={homeOrder.order}
-            onClose={() => setArrangeOpen(false)}
-            onSave={(next) => {
-              homeOrder.save(next);
-              setArrangeOpen(false);
-              toast.success(t('arrange.saved'));
-            }}
-            onReset={() => {
-              homeOrder.reset();
-              setArrangeOpen(false);
-              toast.success(t('arrange.resetDone'));
-            }}
-          />
-        </Suspense>
-      )}
+      <CardBoardArrange board={board} />
 
       {taxOpen && (
         <Suspense fallback={null}>

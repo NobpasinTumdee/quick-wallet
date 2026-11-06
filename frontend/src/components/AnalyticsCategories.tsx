@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 
+import { FILL_THROTTLE_MS, useFillHeight } from '../hooks/useFillHeight';
 import { CategorySlice, categoryComposition } from '../lib/analyticsMath';
 import { formatPercent } from '../lib/format';
 import { MoneyFormatter } from '../state/SettingsContext';
@@ -122,12 +123,16 @@ function TreeTip({
 export function AnalyticsCategories({
   transactions,
   money,
+  fill = false,
 }: {
   transactions: Transaction[];
   money: MoneyFormatter;
+  /** Sized in grid rows (a placed card): the treemap takes the height left. */
+  fill?: boolean;
 }) {
   const { t } = useTranslation();
   const { slices } = categoryComposition(transactions, 7, t('analytics.categoriesOther'));
+  const { rootRef, height: fitHeight } = useFillHeight(fill, '.recharts-responsive-container', 160, slices.length);
 
   if (!slices.length) return null;
 
@@ -142,8 +147,8 @@ export function AnalyticsCategories({
   }));
 
   return (
-    <div className="atree">
-      <ResponsiveContainer width="100%" height={240}>
+    <div ref={rootRef} className="atree">
+      <ResponsiveContainer width="100%" height={fitHeight ?? 240} debounce={fill ? FILL_THROTTLE_MS : 0}>
         <Treemap
           data={data}
           dataKey="size"

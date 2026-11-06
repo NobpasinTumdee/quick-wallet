@@ -17371,11 +17371,28 @@ table.data.tx-table tbody tr.tx-day-row:hover {
 
 /* New layout: the link sits in the content sheet's bottom padding (44px),
    out of the flow, so Home's cards and height do not move at all. */
-.home-arrange-link {
+.home-arrange-link,
+.page-arrange {
   display: none;
 }
 
 @media (max-width: 999px) {
+  /* Analytics: no content sheet, so a zero-height anchor after the cards. Its
+     negative margin takes back the page's gap, so the page is exactly as tall
+     as before, and the link hangs in the page's bottom padding (44px). */
+  :root.ui-mobile-v2 .page > .page-arrange {
+    display: block;
+    position: relative;
+    height: 0;
+    margin-top: calc(-1 * var(--space-5));
+  }
+
+  :root.ui-mobile-v2 .page-arrange > .home-arrange-link {
+    top: 0;
+    bottom: auto;
+  }
+
+  :root.ui-mobile-v2 .page-arrange > .home-arrange-link,
   :root.ui-mobile-v2 .home-sheet > .home-arrange-link {
     position: absolute;
     bottom: 0;
@@ -17396,6 +17413,7 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     -webkit-tap-highlight-color: transparent;
   }
 
+  :root.ui-mobile-v2 .page-arrange > .home-arrange-link:focus-visible,
   :root.ui-mobile-v2 .home-sheet > .home-arrange-link:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -4px;

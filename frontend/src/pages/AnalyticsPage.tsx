@@ -1,20 +1,32 @@
 import { ArrowUpRight, ChartNoAxesCombined, Database } from 'lucide-react';
-import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { AnalyticsHeatmap } from '../components/AnalyticsHeatmap';
-import { AnalyticsPayees } from '../components/AnalyticsPayees';
-import { CategoryBoxPlotCard } from '../components/CategoryBoxPlotCard';
-import { CategoryPieChartCard } from '../components/CategoryPieChartCard';
+import { renderAnalyticsCard } from '../components/AnalyticsCards';
+import {
+  CardBoardArrange,
+  CardBoardArrangeEmpty,
+  CardBoardArrangeLink,
+  CardBoardConfig,
+  CardBoardGrid,
+  useCardBoard,
+} from '../components/CardBoard';
 import { Icon } from '../components/Icon';
-import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { Card, EmptyState } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
-import { formatPeriod } from '../lib/format';
+import {
+  ANALYTICS_CARDS,
+  ANALYTICS_LAYOUT_PAGE,
+  ANALYTICS_TABLET_HALVES,
+  type AnalyticsCardId,
+} from '../lib/layout/analyticsCards';
+import { ANALYTICS_ARRANGE_ENTRY, ANALYTICS_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
+import { ANALYTICS_EDIT_PAGE } from '../lib/layout/homeEditStore';
+import { cx } from '../lib/format';
+import { ANALYTICS_ORDER_FORMAT } from '../lib/layout/layoutFormats';
 import { Route, navigate } from '../lib/router';
+import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Transaction, WalletBalance } from '../types';
-import { lazyWithRetry } from '../lib/lazyWithRetry';
 
 /**
  * The analytics hub.
@@ -36,20 +48,24 @@ import { lazyWithRetry } from '../lib/lazyWithRetry';
  * nothing — the rows are warm — and `warmRoute` primes them from a hover.
  */
 
-/* Recharts is ~300kB and three of these cards need it. Split so the route pays
-   for it on arrival rather than every other screen paying at boot. */
-const CashFlowSankey = lazyWithRetry(() =>
-  import('../components/CashFlowSankey').then((m) => ({ default: m.CashFlowSankey })),
-);
-const NetWorthProjection = lazyWithRetry(() =>
-  import('../components/NetWorthProjection').then((m) => ({ default: m.NetWorthProjection })),
-);
-const AnalyticsSavingsRate = lazyWithRetry(() =>
-  import('../components/AnalyticsSavingsRate').then((m) => ({ default: m.AnalyticsSavingsRate })),
-);
-const AnalyticsCategories = lazyWithRetry(() =>
-  import('../components/AnalyticsCategories').then((m) => ({ default: m.AnalyticsCategories })),
-);
+/** The Analytics cards and where their layouts are kept (see CardBoard). */
+const ANALYTICS_BOARD: CardBoardConfig<AnalyticsCardId> = {
+  editPage: ANALYTICS_EDIT_PAGE,
+  gridPage: ANALYTICS_LAYOUT_PAGE,
+  orderFormat: ANALYTICS_ORDER_FORMAT,
+  registry: ANALYTICS_CARDS,
+  halves: ANALYTICS_TABLET_HALVES,
+  /* The Deep Analytics link: first, full width, never moved. */
+  leadCount: 1,
+  arrange: { texts: ANALYTICS_ARRANGE_TEXTS, entry: ANALYTICS_ARRANGE_ENTRY },
+  editorTexts: {
+    editTitle: 'layout.editTitleAnalytics',
+    resetTitle: 'layout.resetTitleAnalytics',
+    hiddenNone: 'layout.hiddenNoneAnalytics',
+    announceStart: 'layout.announceStartAnalytics',
+  },
+  messages: { saved: 'layout.saved', resetDone: 'layout.resetDone' },
+};
 
 export function AnalyticsPage({
   period,
@@ -66,6 +82,8 @@ export function AnalyticsPage({
   const { data, initialLoading } = useExcelQuery<DashboardSummary>('/api/dashboard', { period });
   const monthTransactions = useExcelDB<Transaction>('transactions', { period });
   const wallets = useExcelDB<WalletBalance>('wallets');
+  const { user } = useAuth();
+  const board = useCardBoard(ANALYTICS_BOARD, user?.id);
 
   const trend = data?.trend ?? [];
 
@@ -79,7 +97,8 @@ export function AnalyticsPage({
   const deep = (
     <button
       type="button"
-      className="deep-entry bento-item--full"
+      /* Full width on the 12-column grid too (lspan-12; nothing below 1000px). */
+      className={cx('deep-entry bento-item--full', board.layoutActive && 'lspan-12')}
       onClick={() => (onNavigate ?? navigate)('deep-analytics')}
       aria-label={t('explorer.entryAria')}
     >
@@ -127,106 +146,33 @@ export function AnalyticsPage({
   }
 
   return (
-    <div className="bento">
-      {deep}
-
-      {/* First, and full width. Every other widget here looks backwards at
-          money already gone; this is the only one that looks forward, and a
-          bottleneck three weeks out is worth more than any of them. Full width
-          because the grid is seven columns of calendar plus an insights row —
-          it does not tile into a half. */}
-      <SubscriptionHeatmapCard period={period} className="bento-item--full" onNavigate={onNavigate} />
-
-      <Card
-        className="bento-item"
-        title={t('analytics.savingsRateTitle')}
-        subtitle={t('analytics.savingsRateSubtitle')}
-      >
-        <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
-          <AnalyticsSavingsRate trend={trend} money={money} locale={locale} />
-        </Suspense>
-      </Card>
-
-      {/* Full width: twelve months of a time series, the same argument the
-          income-vs-spending chart makes on the Overview screen. It also keeps
-          the half-card count even — an odd one strands itself beside a
-          three-column hole. */}
-
-      {/* Paired with the treemap on purpose. The two read the same
-          composition differently: a donut is good at "what share", a treemap at
-          "how do the small ones compare", and side by side neither has to be
-          both. They share `categoryComposition`, so the parts always agree. */}
-      <CategoryPieChartCard className="bento-item--half" period={period} />
-
-      <Card
-        className="bento-item--half"
-        title={t('analytics.categoriesTitle')}
-        subtitle={t('analytics.categoriesSubtitle')}
-      >
-        <Suspense fallback={<div className="atree atree--loading" aria-hidden="true" />}>
-          <AnalyticsCategories transactions={monthTransactions.items} money={money} />
-        </Suspense>
-      </Card>
-
-      <Card
-        className="bento-item--half"
-        title={t('analytics.heatmapTitle')}
-        subtitle={formatPeriod(period, locale)}
-      >
-        <AnalyticsHeatmap
-          transactions={monthTransactions.items}
-          period={period}
-          money={money}
-          locale={locale}
-        />
-      </Card>
-
-      {/* Full width: the x-axis is one band per category and the plot scrolls
-          horizontally when it runs out of room, so a half-card would put it in
-          a scroller at every breakpoint. */}
-      <CategoryBoxPlotCard period={period} className="bento-item--full" />
-
-      <Card
-        className="bento-item--half"
-        title={t('analytics.merchantsTitle')}
-        subtitle={t('analytics.merchantsSubtitle')}
-        padded={false}
-      >
-        <AnalyticsPayees transactions={monthTransactions.items} money={money} locale={locale} />
-      </Card>
-
-      {/* Full width: a four-column table is the widget here that gains most
-          from the extra room, and it pairs the heatmap with the treemap as the
-          screen's only half-cards. */}
-
-      {/* ---- Migrated off the Overview screen ---- */}
-      <Suspense
-        fallback={<div className="card bento-item--full sankey-placeholder" aria-hidden="true" />}
-      >
-        <CashFlowSankey
-          className="bento-item--full"
-          transactions={monthTransactions.items}
-          wallets={wallets.items}
-          period={period}
-          loading={monthTransactions.initialLoading}
-          stale={monthTransactions.isValidating}
-        />
-      </Suspense>
-
-      <Card
-        className="bento-item--full"
-        title={t('analytics.projectionTitle')}
-        subtitle={t('analytics.projectionSubtitle')}
-      >
-        <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
-          <NetWorthProjection
-            startingNetWorth={data?.netWorth ?? 0}
-            trend={trend}
-            money={money}
-            locale={locale}
-          />
-        </Suspense>
-      </Card>
-    </div>
+    <>
+    <CardBoardGrid
+      board={board}
+      lead={deep}
+      renderCard={(id, sizeClass, _tall, fill) =>
+        renderAnalyticsCard(id, sizeClass, {
+          t,
+          period,
+          locale,
+          money,
+          data,
+          monthTransactions,
+          wallets: wallets.items,
+          onNavigate,
+        }, fill)
+      }
+      /* Every card hidden on a phone: the Deep Analytics link stays, with a way back. */
+      empty={<CardBoardArrangeEmpty board={board} />}
+    />
+    {/* New layout: the link sits in the page's bottom padding, out of the
+        flow, so the cards and the page's height do not move (see CSS). */}
+    {!board.layoutActive && board.placed.length > 0 && (
+      <div className="page-arrange">
+        <CardBoardArrangeLink board={board} />
+      </div>
+    )}
+    <CardBoardArrange board={board} />
+    </>
   );
 }

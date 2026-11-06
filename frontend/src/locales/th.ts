@@ -1189,6 +1189,12 @@ export const th: TranslationSchema = {
     announceStart: 'กำลังปรับแต่งหน้าแรก',
     saved: 'บันทึกเลย์เอาต์แล้ว',
     resetDone: 'คืนค่าเลย์เอาต์เริ่มต้นแล้ว',
+    /* The same editor on the Analytics page. */
+    customizeLabelAnalytics: 'ปรับแต่งเลย์เอาต์หน้าวิเคราะห์',
+    editTitleAnalytics: 'ปรับแต่งหน้าวิเคราะห์',
+    resetTitleAnalytics: 'คืนหน้าวิเคราะห์เป็นเลย์เอาต์เริ่มต้น?',
+    hiddenNoneAnalytics: 'การ์ดทุกใบอยู่บนหน้าวิเคราะห์แล้ว',
+    announceStartAnalytics: 'กำลังปรับแต่งหน้าวิเคราะห์',
   },
 
   arrange: {
@@ -1211,6 +1217,31 @@ export const th: TranslationSchema = {
     saved: 'บันทึกลำดับหน้าภาพรวมแล้ว',
     resetDone: 'คืนค่าลำดับหน้าภาพรวมเป็นค่าเริ่มต้นแล้ว',
     allHidden: 'การ์ดทั้งหมดบนหน้าภาพรวมถูกซ่อนอยู่',
+    /* The same sheet for the Analytics page. */
+    titleAnalytics: 'จัดหน้าวิเคราะห์',
+    subtitleAnalytics: 'เลือกลำดับของการ์ดในหน้าวิเคราะห์ และเลือกว่าจะแสดงการ์ดใดบ้าง ใช้กับโทรศัพท์และแท็บเล็ต แยกจากเลย์เอาต์บนเดสก์ท็อป',
+    openAnalytics: 'จัดหน้าวิเคราะห์',
+    settingLabelAnalytics: 'การ์ดบนหน้าวิเคราะห์',
+    settingHintAnalytics: 'ลำดับของการ์ดบนหน้าวิเคราะห์ในโทรศัพท์และแท็บเล็ต และการ์ดที่แสดง ซิงค์ไปยังโทรศัพท์เครื่องอื่นของคุณ',
+    showAnalytics: 'แสดง {{title}} บนหน้าวิเคราะห์',
+    resetTitleAnalytics: 'คืนค่าหน้าวิเคราะห์เป็นลำดับเริ่มต้น?',
+    resetBodyAnalytics: 'การ์ดทุกใบจะกลับไปอยู่ในลำดับเดิม และการ์ดที่ซ่อนไว้จะกลับมาแสดง มีผลกับโทรศัพท์และแท็บเล็ตของคุณ ไม่กระทบเลย์เอาต์บนเดสก์ท็อป',
+    savedAnalytics: 'บันทึกลำดับหน้าวิเคราะห์แล้ว',
+    resetDoneAnalytics: 'คืนค่าลำดับหน้าวิเคราะห์เป็นค่าเริ่มต้นแล้ว',
+    allHiddenAnalytics: 'การ์ดทั้งหมดบนหน้าวิเคราะห์ถูกซ่อนอยู่',
+  },
+
+  /* Card names in the editors (Customize, Arrange, Settings) — unambiguous across pages. */
+  catalog: {
+    bills: 'บิลที่กำลังจะถึง',
+    savingsRate: 'อัตราการออม',
+    categoryPie: 'แผนภูมิสัดส่วนรายจ่าย',
+    categoryTree: 'แผนภาพสัดส่วนหมวดหมู่',
+    spendHeatmap: 'การใช้จ่ายรายวัน',
+    categoryBoxplot: 'การกระจายของรายจ่าย',
+    payees: 'ร้านค้าที่จ่ายบ่อยที่สุด',
+    sankey: 'แผนภาพกระแสเงิน',
+    projection: 'คาดการณ์มูลค่าสุทธิ',
   },
 
   analytics: {

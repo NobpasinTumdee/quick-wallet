@@ -1223,6 +1223,12 @@ export const en = {
     announceStart: 'Customizing Home',
     saved: 'Layout saved',
     resetDone: 'Layout reset to default',
+    /* The same editor on the Analytics page. */
+    customizeLabelAnalytics: 'Customize the Analytics layout',
+    editTitleAnalytics: 'Customize Analytics',
+    resetTitleAnalytics: 'Reset Analytics to the default layout?',
+    hiddenNoneAnalytics: 'Every card is on Analytics',
+    announceStartAnalytics: 'Customizing Analytics',
   },
 
   /* Arrange Home: card order and visibility on phones and tablets. */
@@ -1246,6 +1252,31 @@ export const en = {
     saved: 'Home order saved',
     resetDone: 'Home order reset to default',
     allHidden: 'All Home cards are hidden.',
+    /* The same sheet for the Analytics page. */
+    titleAnalytics: 'Arrange Analytics',
+    subtitleAnalytics: 'Choose the order of the Analytics cards, and which ones show. This is for phones and tablets; the desktop layout is separate.',
+    openAnalytics: 'Arrange Analytics',
+    settingLabelAnalytics: 'Analytics cards',
+    settingHintAnalytics: 'The order of the cards on Analytics on phones and tablets, and which ones show. Syncs to your other phones.',
+    showAnalytics: 'Show {{title}} on Analytics',
+    resetTitleAnalytics: 'Reset Analytics to the default order?',
+    resetBodyAnalytics: 'Every card goes back to its original order, and hidden cards come back. This applies to your phones and tablets; the desktop layout is not affected.',
+    savedAnalytics: 'Analytics order saved',
+    resetDoneAnalytics: 'Analytics order reset to default',
+    allHiddenAnalytics: 'All Analytics cards are hidden.',
+  },
+
+  /* Card names in the editors (Customize, Arrange, Settings) — unambiguous across pages. */
+  catalog: {
+    bills: 'Upcoming bills',
+    savingsRate: 'Savings rate',
+    categoryPie: 'Expense share chart',
+    categoryTree: 'Category treemap',
+    spendHeatmap: 'Spending by day',
+    categoryBoxplot: 'Spending distribution',
+    payees: 'Top payees',
+    sankey: 'Cash-flow diagram',
+    projection: 'Net-worth projection',
   },
 
   analytics: {

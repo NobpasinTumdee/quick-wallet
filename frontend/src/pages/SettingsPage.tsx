@@ -33,7 +33,14 @@ import { MobileLayout, useMobileLayout, useMobileV2 } from '../lib/mobileLayout'
 import { useNumberPadSetting } from '../lib/numberPad';
 import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
-import { useHomeOrder } from '../lib/layout/useHomeOrder';
+import { ANALYTICS_ARRANGE_ENTRY, ANALYTICS_ARRANGE_TEXTS, HOME_ARRANGE_ENTRY, HOME_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
+import type { ArrangeEntryTexts, ArrangeTexts } from '../lib/layout/arrangeTexts';
+import { ANALYTICS_CARDS } from '../lib/layout/analyticsCards';
+import type { CatalogCardDef, CatalogCardId } from '../lib/layout/cardCatalog';
+import { HOME_CARDS } from '../lib/layout/homeCards';
+import { ANALYTICS_ORDER_FORMAT, HOME_ORDER_FORMAT, type SyncedLayoutFormat } from '../lib/layout/layoutFormats';
+import type { CardOrder } from '../lib/layout/orderModel';
+import { useCardOrder } from '../lib/layout/useHomeOrder';
 import { toast } from '../lib/toast';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
@@ -186,8 +193,22 @@ export function SettingsPage() {
           {/* The same kind of setting: immediate, per device, phone only. */}
           <MobileLayoutSetting />
 
-          {/* Phones and tablets only: at 1000px and up Home has Customize. */}
-          <HomeArrangeSetting />
+          {/* Phones and tablets only: at 1000px and up Home and Analytics
+              have Customize. */}
+          <ArrangeSetting
+            id="arrange-setting"
+            format={HOME_ORDER_FORMAT}
+            registry={HOME_CARDS}
+            texts={HOME_ARRANGE_TEXTS}
+            entry={HOME_ARRANGE_ENTRY}
+          />
+          <ArrangeSetting
+            id="arrange-analytics-setting"
+            format={ANALYTICS_ORDER_FORMAT}
+            registry={ANALYTICS_CARDS}
+            texts={ANALYTICS_ARRANGE_TEXTS}
+            entry={ANALYTICS_ARRANGE_ENTRY}
+          />
 
           <Field label={t('settings.locale')} hint={t('settings.localeHint')}>
             <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
@@ -483,14 +504,27 @@ function NumberPadSwitch() {
   );
 }
 
-const HomeArrangeSheet = lazyWithRetry(() => import('../components/HomeArrangeSheet'));
+const ArrangeSheet = lazyWithRetry(() => import('../components/ArrangeSheet'));
 
-/** Opens Arrange Home — the same sheet as the link on Home in the New layout. */
-function HomeArrangeSetting() {
+/** Opens a page's Arrange sheet (Home, Analytics) — the same sheet as the
+    page's own link in the New layout. Phones and tablets only. */
+function ArrangeSetting<Id extends CatalogCardId>({
+  id,
+  format,
+  registry,
+  texts,
+  entry,
+}: {
+  id: string;
+  format: SyncedLayoutFormat<CardOrder<Id>>;
+  registry: readonly CatalogCardDef<Id>[];
+  texts: ArrangeTexts;
+  entry: ArrangeEntryTexts;
+}) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const desktop = useMediaQuery(SIDEBAR_QUERY);
-  const { order, save, reset, isCustom } = useHomeOrder(user?.id, !desktop);
+  const { order, save, reset, isCustom } = useCardOrder(format, registry, user?.id, !desktop);
   const [open, setOpen] = useState(false);
   if (desktop) return null;
   const hidden = order.cards.filter((card) => card.hidden).length;
@@ -501,36 +535,38 @@ function HomeArrangeSetting() {
       : t('arrange.summaryCustom');
   return (
     /* Field's look without its <label>, which would rename the button. */
-    <div className="field span-2" role="group" aria-labelledby="arrange-setting-label">
-      <span className="field-label" id="arrange-setting-label">
-        {t('arrange.settingLabel')}
+    <div className="field span-2" role="group" aria-labelledby={`${id}-label`}>
+      <span className="field-label" id={`${id}-label`}>
+        {t(entry.settingLabel)}
       </span>
       <div className="arrange-setting">
-        <span className="arrange-setting-summary" id="arrange-setting-summary">
+        <span className="arrange-setting-summary" id={`${id}-summary`}>
           {summary}
         </span>
-        <Button type="button" size="sm" aria-describedby="arrange-setting-summary arrange-setting-hint" onClick={() => setOpen(true)}>
+        <Button type="button" size="sm" aria-describedby={`${id}-summary ${id}-hint`} onClick={() => setOpen(true)}>
           <Icon icon={ListOrdered} size="sm" />
-          {t('arrange.open')}
+          {t(entry.open)}
         </Button>
       </div>
-      <span className="field-hint" id="arrange-setting-hint">
-        {t('arrange.settingHint')}
+      <span className="field-hint" id={`${id}-hint`}>
+        {t(entry.settingHint)}
       </span>
       {open && (
         <Suspense fallback={null}>
-          <HomeArrangeSheet
-            order={order}
+          <ArrangeSheet
+            registry={registry as unknown as readonly CatalogCardDef<CatalogCardId>[]}
+            texts={texts}
+            order={order as unknown as CardOrder<CatalogCardId>}
             onClose={() => setOpen(false)}
-            onSave={(next) => {
-              save(next);
+            onSave={(next: CardOrder<CatalogCardId>) => {
+              save(next as unknown as CardOrder<Id>);
               setOpen(false);
-              toast.success(t('arrange.saved'));
+              toast.success(t(entry.saved));
             }}
             onReset={() => {
               reset();
               setOpen(false);
-              toast.success(t('arrange.resetDone'));
+              toast.success(t(entry.resetDone));
             }}
           />
         </Suspense>

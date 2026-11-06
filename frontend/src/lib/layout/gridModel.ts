@@ -500,10 +500,30 @@ export function rowsPixels(h: number, gap: number): number {
 }
 
 /**
+ * Where each card is drawn, in pixels from the grid's content box: its top
+ * and left edges. `pitch` is one column plus a gap.
+ */
+export interface DrawnPositions {
+  boxes: Readonly<Record<string, { top: number; left: number }>>;
+  pitch: number;
+}
+
+/**
  * A flow layout as a placed one, from what is on screen: each card where the
  * flow put it (`spans`, the widths as drawn) and as tall as it measures,
  * rounded to whole rows and kept within its limits. A collapsed card keeps
  * its default height for when it is expanded. Placed layouts pass through.
+ *
+ * With `drawn` (every visible card's measured position), the cards keep the
+ * columns they are drawn in and their order down each column — including a
+ * grid that back-fills an earlier gap with a later card, which order alone
+ * cannot reproduce. Cards drawn at the same top share a row (grid rows line
+ * up), and each row starts below the tallest card of the row above, as when
+ * packing in order. A placed grid lets cards rise into any gap above them,
+ * so where a card would rise into the space beside a taller neighbour, the
+ * shorter card above it is made as tall as its row (within its limits) and
+ * the card stays put. Without `drawn` (or when a card was not measured),
+ * rows are packed in order.
  */
 export function placeFlowLayout<Id extends string>(
   layout: GridLayout<Id>,
@@ -511,10 +531,10 @@ export function placeFlowLayout<Id extends string>(
   spans: Readonly<Record<string, number>>,
   heights: Readonly<Record<string, number>>,
   gap: number,
+  drawn?: DrawnPositions,
 ): GridLayout<Id> {
   if (isPlaced(layout)) return layout;
   const visible = layout.cards.filter((card) => !card.hidden);
-  const rows = packRows(visible.map((card) => ({ id: card.id, span: spans[card.id] ?? card.w })));
   const position = new Map<string, { x: number; y: number }>();
   let top = 0;
   const sizes = new Map<string, number>();
@@ -525,16 +545,61 @@ export function placeFlowLayout<Id extends string>(
     const h = card.collapsed || card.hidden || !(measured > 0) ? def.defaultH : rowsForPixels(measured, gap);
     sizes.set(card.id, clamp(h, def.minH, def.maxH));
   }
-  for (const row of rows) {
-    let x = 0;
-    let tallest = 1;
-    for (const id of row.ids) {
-      const card = visible.find((item) => item.id === id)!;
-      position.set(id, { x, y: top });
-      x += spans[id] ?? card.w;
-      tallest = Math.max(tallest, rowsOf({ h: sizes.get(id), collapsed: card.collapsed }));
+  const measured = drawn && drawn.pitch > 0 && visible.length > 0 && visible.every((card) => drawn.boxes[card.id]);
+  if (measured) {
+    /* Bands of cards drawn at the same top (within a few pixels), top down. */
+    const items = visible
+      .map((card) => {
+        const box = drawn.boxes[card.id];
+        const w = Math.min(GRID_COLUMNS, spans[card.id] ?? card.w);
+        const x = clamp(Math.round(box.left / drawn.pitch), 0, GRID_COLUMNS - w);
+        return { card, top: box.top, x, w, h: rowsOf({ h: sizes.get(card.id), collapsed: card.collapsed }) };
+      })
+      .sort((a, b) => a.top - b.top || a.x - b.x);
+    const placedItems: { id: Id; x: number; w: number; y: number; h: number }[] = [];
+    let index = 0;
+    while (index < items.length) {
+      const band = [items[index]];
+      while (index + band.length < items.length && Math.abs(items[index + band.length].top - items[index].top) <= 4) {
+        band.push(items[index + band.length]);
+      }
+      const across = (a: { x: number; w: number }, b: { x: number; w: number }) => a.x < b.x + b.w && b.x < a.x + a.w;
+      for (const item of band) {
+        /* The cards above in its columns that end short of this row: the
+           lowest of each column range, so nothing is stretched across another. */
+        const above = placedItems.filter((other) => across(other, item));
+        if (above.length && Math.max(...above.map((other) => other.y + other.h)) < top) {
+          for (const other of above) {
+            const lowest = !placedItems.some((next) => next !== other && next.y > other.y && across(next, other));
+            const def = defOf(registry, other.id);
+            if (!lowest || !def || other.y + other.h >= top) continue;
+            other.h = Math.min(def.maxH, top - other.y);
+            sizes.set(other.id, other.h);
+          }
+        }
+      }
+      let tallest = 1;
+      for (const item of band) {
+        position.set(item.card.id, { x: item.x, y: top });
+        placedItems.push({ id: item.card.id, x: item.x, w: item.w, y: top, h: item.h });
+        tallest = Math.max(tallest, item.h);
+      }
+      top += tallest;
+      index += band.length;
     }
-    top += tallest;
+  } else {
+    const rows = packRows(visible.map((card) => ({ id: card.id, span: spans[card.id] ?? card.w })));
+    for (const row of rows) {
+      let x = 0;
+      let tallest = 1;
+      for (const id of row.ids) {
+        const card = visible.find((item) => item.id === id)!;
+        position.set(id, { x, y: top });
+        x += spans[id] ?? card.w;
+        tallest = Math.max(tallest, rowsOf({ h: sizes.get(id), collapsed: card.collapsed }));
+      }
+      top += tallest;
+    }
   }
   const cards = layout.cards.map((card) => {
     const def = defOf(registry, card.id)!;

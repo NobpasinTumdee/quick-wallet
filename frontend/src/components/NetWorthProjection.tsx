@@ -18,6 +18,7 @@ import {
   estimateMonthlySavings,
   projectNetWorth,
 } from '../lib/projectionMath';
+import { FILL_THROTTLE_MS, useFillHeight } from '../hooks/useFillHeight';
 import { cx, formatPercent } from '../lib/format';
 import { MoneyFormatter } from '../state/SettingsContext';
 import { Icon } from './Icon';
@@ -72,6 +73,8 @@ interface Props {
   trend: TrendMonth[];
   money: MoneyFormatter;
   locale: string;
+  /** Sized in grid rows (a placed card): the plot takes the height left. */
+  fill?: boolean;
 }
 
 function ProjectionTip({
@@ -120,8 +123,9 @@ function ProjectionTip({
   );
 }
 
-export function NetWorthProjection({ startingNetWorth, trend, money, locale }: Props) {
+export function NetWorthProjection({ startingNetWorth, trend, money, locale, fill = false }: Props) {
   const gradientId = useId();
+  const { rootRef, height: fitHeight } = useFillHeight(fill, '.proj-plot', 160);
 
   const estimate = useMemo(() => estimateMonthlySavings(trend), [trend]);
 
@@ -163,7 +167,7 @@ export function NetWorthProjection({ startingNetWorth, trend, money, locale }: P
   const contributionCeiling = Math.max(2_000, Math.ceil(Math.abs(estimate.monthly) * 3));
 
   return (
-    <div className="proj">
+    <div ref={rootRef} className="proj">
       {/* ---- The headline. Also the relief for a sub-3:1 fill contrast: every
               band's value is available as text, not only as colour. ---- */}
       <div className="proj-headline">
@@ -194,7 +198,7 @@ export function NetWorthProjection({ startingNetWorth, trend, money, locale }: P
 
       {/* ---- The plot ---- */}
       <div className="proj-plot">
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={fitHeight ?? 220} debounce={fill ? FILL_THROTTLE_MS : 0}>
           <AreaChart data={projection.points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
             <defs>
               {/* Stops are styled in CSS so all thirteen themes reach them. */}

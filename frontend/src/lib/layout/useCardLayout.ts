@@ -14,7 +14,7 @@ export { gridLayoutFormat, layoutStorageKey } from './layoutFormats';
 /** This device's layout: see `gridLayoutFormat`. The default when nothing is stored. */
 export function readLocalLayout<Id extends string>(
   page: string,
-  legacyPage: string,
+  legacyPage: string | undefined,
   userId: string | undefined,
   registry: readonly GridCardDef<Id>[],
 ): GridLayout<Id> {
@@ -34,7 +34,7 @@ export function writeLocalLayout<Id extends string>(page: string, userId: string
  */
 export function useCardLayout<Id extends string>(
   page: string,
-  legacyPage: string,
+  legacyPage: string | undefined,
   userId: string | undefined,
   registry: readonly GridCardDef<Id>[],
   /** Talk to the server at all. Off where the layout does not apply (below

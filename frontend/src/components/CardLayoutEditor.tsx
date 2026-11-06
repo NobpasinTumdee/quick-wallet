@@ -97,7 +97,24 @@ export interface CardLayoutEditorProps {
   onDone: () => void;
   onCancel: () => void;
   onReset: () => void;
+  /** The texts that name the page (Home by default). */
+  texts?: EditorTexts;
 }
+
+/** The editor's texts that say which page is being customised. */
+export interface EditorTexts {
+  editTitle: TranslationKey;
+  resetTitle: TranslationKey;
+  hiddenNone: TranslationKey;
+  announceStart: TranslationKey;
+}
+
+export const HOME_EDITOR_TEXTS: EditorTexts = {
+  editTitle: 'layout.editTitle',
+  resetTitle: 'layout.resetTitle',
+  hiddenNone: 'layout.hiddenNone',
+  announceStart: 'layout.announceStart',
+};
 
 type Edge = 'e' | 's' | 'se';
 
@@ -293,6 +310,7 @@ export default function CardLayoutEditor({
   onDone,
   onCancel,
   onReset,
+  texts = HOME_EDITOR_TEXTS,
 }: CardLayoutEditorProps) {
   const { t } = useTranslation();
   const helpId = useId();
@@ -369,7 +387,7 @@ export default function CardLayoutEditor({
     heading.current?.focus({ preventScroll: true });
     const bar = heading.current?.closest<HTMLElement>('.layout-editbar');
     if (bar && bar.getBoundingClientRect().top > window.innerHeight - 80) bar.scrollIntoView({ block: 'center' });
-    announce(t('layout.announceStart'));
+    announce(t(texts.announceStart));
   }, [announce, t]);
 
   /* ---- The bar sits under the sticky top bar, whatever its height. ---- */
@@ -959,7 +977,7 @@ export default function CardLayoutEditor({
       <div className="layout-editbar" style={{ top: barTop }} role="region" aria-labelledby={titleId}>
         <div className="layout-editbar-text">
           <h2 id={titleId} ref={heading} tabIndex={-1} className="layout-editbar-title">
-            {t('layout.editTitle')}
+            {t(texts.editTitle)}
           </h2>
           <p id={helpId} className="layout-editbar-hint">
             {t('layout.editHint')}
@@ -975,7 +993,7 @@ export default function CardLayoutEditor({
         <div className="layout-editbar-tray" role="group" aria-label={t('layout.hiddenTray')}>
           <span className="section-label">{t('layout.hiddenTray')}</span>
           {hidden.length === 0 ? (
-            <span className="layout-editbar-none">{t('layout.hiddenNone')}</span>
+            <span className="layout-editbar-none">{t(texts.hiddenNone)}</span>
           ) : (
             hidden.map((card) => {
               const def = defOf(card.id);
@@ -1050,7 +1068,7 @@ export default function CardLayoutEditor({
 
       <ConfirmDialog
         open={confirmReset}
-        title={t('layout.resetTitle')}
+        title={t(texts.resetTitle)}
         body={t('layout.resetBody')}
         confirmLabel={t('layout.resetConfirm')}
         cancelLabel={t('layout.cancel')}

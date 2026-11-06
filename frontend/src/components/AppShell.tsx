@@ -34,7 +34,13 @@ import { useStoredBoolean } from '../hooks/useStoredBoolean';
 import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { QuickLink, hasQuickLinkParams, parseQuickLink, resolveQuickLink, stripQuickLink } from '../lib/quickLink';
 import { useMobileV2, useTopbarHeightVar } from '../lib/mobileLayout';
-import { setHomeEditing, useHomeEditing } from '../lib/layout/homeEditStore';
+import {
+  ANALYTICS_EDIT_PAGE,
+  HOME_EDIT_PAGE,
+  setLayoutEditing,
+  useLayoutAvailable,
+  useLayoutEditing,
+} from '../lib/layout/homeEditStore';
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
@@ -498,11 +504,15 @@ export function AppShell() {
   );
   const showPeriodPicker = route === 'dashboard' || route === 'budgets' || route === 'transactions';
 
-  /* Customize Home: desktop with the sidebar only, and only on Home. When edit
-     mode ends, focus comes back here rather than being dropped on <body>. */
+  /* Customize: desktop with the sidebar only, on Home and (once its cards are
+     on screen) on Analytics. When edit mode ends, focus comes back here
+     rather than being dropped on <body>. */
   const sidebarLayout = useMediaQuery(SIDEBAR_QUERY);
-  const homeEditing = useHomeEditing();
-  const showCustomize = route === 'dashboard' && sidebarLayout;
+  const editPage = route === 'analytics' ? ANALYTICS_EDIT_PAGE : HOME_EDIT_PAGE;
+  const homeEditing = useLayoutEditing(editPage);
+  const analyticsReady = useLayoutAvailable(ANALYTICS_EDIT_PAGE);
+  const showCustomize = sidebarLayout && (route === 'dashboard' || (route === 'analytics' && analyticsReady));
+  const customizeLabel = route === 'analytics' ? t('layout.customizeLabelAnalytics') : t('layout.customizeLabel');
   const customizeButton = useRef<HTMLButtonElement | null>(null);
   const wasEditing = useRef(homeEditing);
   useEffect(() => {
@@ -633,9 +643,9 @@ export function AppShell() {
                 className="btn btn--ghost btn--sm topbar-customize"
                 aria-pressed={homeEditing}
                 disabled={homeEditing}
-                aria-label={t('layout.customizeLabel')}
-                title={t('layout.customizeLabel')}
-                onClick={() => setHomeEditing(true)}
+                aria-label={customizeLabel}
+                title={customizeLabel}
+                onClick={() => setLayoutEditing(editPage, true)}
               >
                 <Icon icon={LayoutPanelTop} size="sm" />
                 <span>{t('layout.customize')}</span>

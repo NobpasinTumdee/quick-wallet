@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { FILL_THROTTLE_MS, useFillHeight } from '../hooks/useFillHeight';
 import { SavingsRatePoint, savingsRateSeries } from '../lib/analyticsMath';
 import { TrendMonth } from '../lib/projectionMath';
 import { formatPercent, formatPeriod } from '../lib/format';
@@ -70,14 +71,18 @@ export function AnalyticsSavingsRate({
   trend,
   money,
   locale,
+  fill = false,
 }: {
   trend: TrendMonth[];
   money: MoneyFormatter;
   locale: string;
+  /** Sized in grid rows (a placed card): the plot takes the height left. */
+  fill?: boolean;
 }) {
   const { t } = useTranslation();
   const gradientId = useId();
   const series = savingsRateSeries(trend);
+  const { rootRef, height: fitHeight } = useFillHeight(fill, '.recharts-responsive-container', 120, series.points.length);
 
   /* Months with no income carry `null`, not 0. Recharts only breaks a line on a
      genuine null — a 0 would be drawn as "saved nothing", which is a claim the
@@ -88,7 +93,7 @@ export function AnalyticsSavingsRate({
   }));
 
   return (
-    <div className="arate">
+    <div ref={rootRef} className="arate">
       <div className="arate-head">
         <div className="arate-figure">
           <span className="section-label">{t('analytics.savingsRateTitle')}</span>
@@ -102,7 +107,7 @@ export function AnalyticsSavingsRate({
         </span>
       </div>
 
-      <ResponsiveContainer width="100%" height={180}>
+      <ResponsiveContainer width="100%" height={fitHeight ?? 180} debounce={fill ? FILL_THROTTLE_MS : 0}>
         <AreaChart data={plot} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id={`${gradientId}-rate`} x1="0" y1="0" x2="0" y2="1">

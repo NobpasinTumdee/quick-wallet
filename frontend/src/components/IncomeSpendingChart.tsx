@@ -28,7 +28,7 @@
  */
 
 import { ChartArea, ChartColumn, ChartLine, Equal, TrendingDown, TrendingUp } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -51,6 +51,7 @@ import {
   TrendPoint,
   buildMonthlyCashFlow,
 } from '../lib/cashflow';
+import { FILL_THROTTLE_MS, useFillHeight } from '../hooks/useFillHeight';
 import { cx } from '../lib/format';
 import { MoneyFormatter, useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Transaction } from '../types';
@@ -64,8 +65,6 @@ import { Card, EmptyState, Segmented } from './ui';
 const CHART_HEIGHT = 268;
 /** The shortest plot a filling chart is given, however small its card. */
 const MIN_FILL_HEIGHT = 140;
-/** Filling a card: how often a change of its size re-measures the plot. */
-const FILL_THROTTLE_MS = 120;
 /** Room for two bars, two compact labels and a month tick without collisions. */
 const MONTH_WIDTH = 92;
 /** Headroom above the tallest mark so its label is not clipped by the frame. */
@@ -303,41 +302,7 @@ export function IncomeSpendingChart({
      (a card being resized in edit mode, the window) are followed at most
      every FILL_THROTTLE_MS, first and last included, so a resize never
      re-draws the chart on every frame. */
-  const chartRoot = useRef<HTMLDivElement | null>(null);
-  const [fitHeight, setFitHeight] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const root = chartRoot.current;
-    const body = root?.parentElement;
-    if (!fillHeight || !root || !body) return undefined;
-    const measure = () => {
-      const plot = root.querySelector<HTMLElement>('.ischart-plot');
-      if (!plot) return;
-      const style = getComputedStyle(body);
-      const room = body.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
-      const chrome = root.offsetHeight - plot.offsetHeight;
-      const next = Math.max(MIN_FILL_HEIGHT, Math.floor(room - chrome));
-      setFitHeight((current) => (current === next ? current : next));
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    let timer = 0;
-    let last = 0;
-    const run = () => {
-      timer = 0;
-      last = Date.now();
-      measure();
-    };
-    const observer = new ResizeObserver(() => {
-      if (timer) return;
-      const wait = Math.max(0, FILL_THROTTLE_MS - (Date.now() - last));
-      timer = window.setTimeout(run, wait);
-    });
-    observer.observe(body);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timer);
-    };
-  }, [fillHeight, flow.hasData]);
+  const { rootRef: chartRoot, height: fitHeight } = useFillHeight(fillHeight, '.ischart-plot', MIN_FILL_HEIGHT, flow.hasData);
   const plotHeight = fillHeight && fitHeight !== null ? fitHeight : chartHeight;
 
   const gradient = (series: 'income' | 'expense') => `${uid}-${series}`;
