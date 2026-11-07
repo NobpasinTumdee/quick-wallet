@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
-import { HOME_CARDS } from './homeCards';
+import { HOME_BOARD_CARDS } from './homeCards';
 import { type CardOrder, type OrderCardDef, defaultOrder, isDefaultOrder } from './orderModel';
 import { HOME_ORDER_FORMAT, type SyncedLayoutFormat } from './layoutFormats';
 import { useSyncedLayout } from './useSyncedLayout';
@@ -26,7 +26,7 @@ export function useCardOrder<Id extends string>(
 
 /** Home's order (layout.home-mobile). */
 export function useHomeOrder(userId: string | undefined, enabled: boolean) {
-  return useCardOrder(HOME_ORDER_FORMAT, HOME_CARDS, userId, enabled);
+  return useCardOrder(HOME_ORDER_FORMAT, HOME_BOARD_CARDS, userId, enabled);
 }
 
 export { HOME_ORDER_FORMAT } from './layoutFormats';

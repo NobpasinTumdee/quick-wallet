@@ -39,6 +39,8 @@ export interface AnalyticsCardContext {
   monthTransactions: { items: Transaction[]; initialLoading: boolean; isValidating: boolean };
   wallets: WalletBalance[];
   onNavigate?: (route: Route) => void;
+  /** Home only: an extra control at the end of each card's header (Open in Analytics). */
+  headerExtra?: ReactNode;
 }
 
 /**
@@ -55,7 +57,7 @@ export function renderAnalyticsCard(
   ctx: AnalyticsCardContext,
   fill = false,
 ): ReactNode {
-  const { t, period, locale, money, data, monthTransactions, wallets, onNavigate } = ctx;
+  const { t, period, locale, money, data, monthTransactions, wallets, onNavigate, headerExtra } = ctx;
   const trend = data?.trend ?? [];
   switch (id) {
     /* First, and full width. Every other widget here looks backwards at money
@@ -64,7 +66,7 @@ export function renderAnalyticsCard(
        grid is seven columns of calendar plus an insights row — it does not
        tile into a half. */
     case 'bills':
-      return <SubscriptionHeatmapCard period={period} className={cx('bento-item--full', sizeClass)} onNavigate={onNavigate} />;
+      return <SubscriptionHeatmapCard period={period} className={cx('bento-item--full', sizeClass)} onNavigate={onNavigate} headerExtra={headerExtra} />;
 
     case 'savingsRate':
       return (
@@ -72,6 +74,7 @@ export function renderAnalyticsCard(
           className={cx('bento-item', sizeClass)}
           title={t('analytics.savingsRateTitle')}
           subtitle={t('analytics.savingsRateSubtitle')}
+          actions={headerExtra}
         >
           <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
             <AnalyticsSavingsRate trend={trend} money={money} locale={locale} fill={fill} />
@@ -84,7 +87,7 @@ export function renderAnalyticsCard(
        small ones compare", and side by side neither has to be both. They
        share `categoryComposition`, so the parts always agree. */
     case 'categoryPie':
-      return <CategoryPieChartCard className={cx('bento-item--half', sizeClass)} period={period} />;
+      return <CategoryPieChartCard className={cx('bento-item--half', sizeClass)} period={period} headerExtra={headerExtra} />;
 
     case 'categoryTree':
       return (
@@ -92,6 +95,7 @@ export function renderAnalyticsCard(
           className={cx('bento-item--half', sizeClass)}
           title={t('analytics.categoriesTitle')}
           subtitle={t('analytics.categoriesSubtitle')}
+          actions={headerExtra}
         >
           <Suspense fallback={<div className="atree atree--loading" aria-hidden="true" />}>
             <AnalyticsCategories transactions={monthTransactions.items} money={money} fill={fill} />
@@ -105,6 +109,7 @@ export function renderAnalyticsCard(
           className={cx('bento-item--half', sizeClass)}
           title={t('analytics.heatmapTitle')}
           subtitle={formatPeriod(period, locale)}
+          actions={headerExtra}
         >
           <AnalyticsHeatmap transactions={monthTransactions.items} period={period} money={money} locale={locale} />
         </Card>
@@ -114,7 +119,7 @@ export function renderAnalyticsCard(
        horizontally when it runs out of room, so a half-card would put it in
        a scroller at every breakpoint. */
     case 'categoryBoxplot':
-      return <CategoryBoxPlotCard period={period} className={cx('bento-item--full', sizeClass)} />;
+      return <CategoryBoxPlotCard period={period} className={cx('bento-item--full', sizeClass)} headerExtra={headerExtra} />;
 
     case 'payees':
       return (
@@ -122,6 +127,7 @@ export function renderAnalyticsCard(
           className={cx('bento-item--half', sizeClass)}
           title={t('analytics.merchantsTitle')}
           subtitle={t('analytics.merchantsSubtitle')}
+          actions={headerExtra}
           padded={false}
         >
           <AnalyticsPayees transactions={monthTransactions.items} money={money} locale={locale} />
@@ -141,6 +147,7 @@ export function renderAnalyticsCard(
             period={period}
             loading={monthTransactions.initialLoading}
             stale={monthTransactions.isValidating}
+            headerExtra={headerExtra}
           />
         </Suspense>
       );
@@ -151,6 +158,7 @@ export function renderAnalyticsCard(
           className={cx('bento-item--full', sizeClass)}
           title={t('analytics.projectionTitle')}
           subtitle={t('analytics.projectionSubtitle')}
+          actions={headerExtra}
         >
           <Suspense fallback={<div className="proj proj--loading" aria-hidden="true" />}>
             <NetWorthProjection startingNetWorth={data?.netWorth ?? 0} trend={trend} money={money} locale={locale} fill={fill} />

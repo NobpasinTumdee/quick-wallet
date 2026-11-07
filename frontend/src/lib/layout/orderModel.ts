@@ -27,10 +27,17 @@ export interface CardOrder<Id extends string = string> {
 /** Only the id matters here: the order is the registry's own. */
 export interface OrderCardDef<Id extends string = string> {
   id: Id;
+  /** Another page's card, there only once added (see the addable flag in layoutModel.ts). */
+  addable?: true;
+}
+
+/** The page's own cards, in order: the registry without the addable ones. */
+function own<D extends OrderCardDef>(registry: readonly D[]): readonly D[] {
+  return registry.some((def) => def.addable) ? registry.filter((def) => !def.addable) : registry;
 }
 
 export function defaultOrder<Id extends string>(registry: readonly OrderCardDef<Id>[], updatedAt = 0): CardOrder<Id> {
-  return { v: 1, format: 'order', updatedAt, cards: registry.map((def) => ({ id: def.id })) };
+  return { v: 1, format: 'order', updatedAt, cards: own(registry).map((def) => ({ id: def.id })) };
 }
 
 function stampOf(value: unknown): number {
@@ -73,11 +80,12 @@ export function sanitizeOrder<Id extends string>(raw: unknown, registry: readonl
     cards.push(card);
   }
 
-  registry.forEach((def, index) => {
+  const base = own(registry);
+  base.forEach((def, index) => {
     if (seen.has(def.id)) return;
     let at = 0;
     for (let before = index - 1; before >= 0; before--) {
-      const found = cards.findIndex((card) => card.id === registry[before].id);
+      const found = cards.findIndex((card) => card.id === base[before].id);
       if (found >= 0) {
         at = found + 1;
         break;
@@ -103,10 +111,25 @@ export function serializeOrder(order: CardOrder): string {
 
 /** True when the order is the registry's, nothing hidden — whatever its time or reset flag. */
 export function isDefaultOrder<Id extends string>(order: CardOrder<Id>, registry: readonly OrderCardDef<Id>[]): boolean {
+  const base = own(registry);
   return (
-    order.cards.length === registry.length &&
-    order.cards.every((card, index) => card.id === registry[index].id && !card.hidden)
+    order.cards.length === base.length &&
+    order.cards.every((card, index) => card.id === base[index].id && !card.hidden)
   );
+}
+
+/** Adds an addable card at the end (shown); nothing if it is already there. */
+export function addToOrder<Id extends string>(order: CardOrder<Id>, id: Id): CardOrder<Id> {
+  if (order.cards.some((card) => card.id === id)) return order;
+  const { reset: _reset, ...rest } = order;
+  return { ...rest, cards: [...order.cards, { id }] };
+}
+
+/** Takes a card out of the order altogether (an added card being removed). */
+export function removeFromOrder<Id extends string>(order: CardOrder<Id>, id: Id): CardOrder<Id> {
+  if (!order.cards.some((card) => card.id === id)) return order;
+  const { reset: _reset, ...rest } = order;
+  return { ...rest, cards: order.cards.filter((card) => card.id !== id) };
 }
 
 /** The same order (ids and hidden flags), ignoring time and reset. */

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CategoryPieChart } from './CategoryPieChart';
@@ -36,9 +37,12 @@ import { Card, Skeleton } from './ui';
 export function CategoryPieChartCard({
   period,
   className,
+  headerExtra,
 }: {
   period: string;
   className?: string;
+  /** Home only: an extra control at the end of the header (Open in Analytics). */
+  headerExtra?: ReactNode;
 }) {
   const { t } = useTranslation();
   const money = useMoneyFormatter();
@@ -52,7 +56,16 @@ export function CategoryPieChartCard({
       className={className}
       title={t('pie.title')}
       subtitle={t('pie.subtitle')}
-      actions={<RangePicker state={range} />}
+      actions={
+        headerExtra ? (
+          <div className="cluster">
+            <RangePicker state={range} />
+            {headerExtra}
+          </div>
+        ) : (
+          <RangePicker state={range} />
+        )
+      }
     >
       {range.rows.initialLoading ? (
         <Skeleton rows={4} />

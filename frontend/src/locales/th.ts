@@ -1195,6 +1195,13 @@ export const th: TranslationSchema = {
     resetTitleAnalytics: 'คืนหน้าวิเคราะห์เป็นเลย์เอาต์เริ่มต้น?',
     hiddenNoneAnalytics: 'การ์ดทุกใบอยู่บนหน้าวิเคราะห์แล้ว',
     announceStartAnalytics: 'กำลังปรับแต่งหน้าวิเคราะห์',
+    fromAnalytics: 'จากหน้าวิเคราะห์',
+    fromAnalyticsNone: 'การ์ดจากหน้าวิเคราะห์อยู่บนหน้าภาพรวมครบแล้ว',
+    addFromAnalytics: 'เพิ่ม {{title}} ในหน้าภาพรวม ขนาด {{w}} × {{h}}',
+    removeCard: 'นำ {{title}} ออกจากหน้าภาพรวม',
+    remove: 'นำออกจากหน้าภาพรวม',
+    announceAdded: 'เพิ่ม {{title}} ในหน้าภาพรวมแล้ว',
+    announceRemoved: 'นำ {{title}} ออกจากหน้าภาพรวมแล้ว',
   },
 
   arrange: {
@@ -1229,6 +1236,13 @@ export const th: TranslationSchema = {
     savedAnalytics: 'บันทึกลำดับหน้าวิเคราะห์แล้ว',
     resetDoneAnalytics: 'คืนค่าลำดับหน้าวิเคราะห์เป็นค่าเริ่มต้นแล้ว',
     allHiddenAnalytics: 'การ์ดทั้งหมดบนหน้าวิเคราะห์ถูกซ่อนอยู่',
+    fromAnalytics: 'จากหน้าวิเคราะห์',
+    fromAnalyticsHint: 'เพิ่มสำเนาของการ์ดจากหน้าวิเคราะห์ไว้บนหน้าภาพรวม หน้าวิเคราะห์ยังคงมีการ์ดของตัวเอง',
+    fromAnalyticsNone: 'การ์ดจากหน้าวิเคราะห์อยู่บนหน้าภาพรวมครบแล้ว',
+    fromAnalyticsTag: 'จากหน้าวิเคราะห์',
+    add: 'เพิ่ม',
+    addCard: 'เพิ่ม {{title}} ในหน้าภาพรวม',
+    removeCard: 'นำ {{title}} ออกจากหน้าภาพรวม',
   },
 
   /* Card names in the editors (Customize, Arrange, Settings) — unambiguous across pages. */
@@ -1242,6 +1256,9 @@ export const th: TranslationSchema = {
     payees: 'ร้านค้าที่จ่ายบ่อยที่สุด',
     sankey: 'แผนภาพกระแสเงิน',
     projection: 'คาดการณ์มูลค่าสุทธิ',
+    openInAnalytics: 'เปิด {{title}} ในหน้าวิเคราะห์',
+    openInAnalyticsShort: 'เปิดในหน้าวิเคราะห์',
+    loadingCard: 'กำลังโหลด {{title}}',
   },
 
   analytics: {

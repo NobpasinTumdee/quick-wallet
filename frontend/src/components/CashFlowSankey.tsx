@@ -16,7 +16,7 @@
  */
 
 import { ArrowRight, Table2, Waypoints } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   Sankey,
@@ -302,6 +302,7 @@ export function CashFlowSankey({
   loading = false,
   stale = false,
   className,
+  headerExtra,
 }: {
   transactions: Transaction[];
   wallets: WalletBalance[];
@@ -311,6 +312,8 @@ export function CashFlowSankey({
   /** Refetching over data already on screen: dim, never re-skeleton. */
   stale?: boolean;
   className?: string;
+  /** Home only: an extra control at the end of the header (Open in Analytics). */
+  headerExtra?: ReactNode;
 }) {
   const money = useMoneyFormatter();
   const [view, setView] = useState<'chart' | 'table'>('chart');
@@ -355,15 +358,30 @@ export function CashFlowSankey({
       title="Where the money moved"
       subtitle={subtitle}
       actions={
-        <Segmented<'chart' | 'table'>
-          value={view}
-          ariaLabel="Cash flow view"
-          onChange={setView}
-          options={[
-            { value: 'chart', label: <Icon icon={Waypoints} size="sm" label="Diagram" /> },
-            { value: 'table', label: <Icon icon={Table2} size="sm" label="Table" /> },
-          ]}
-        />
+        headerExtra ? (
+          <div className="cluster">
+            <Segmented<'chart' | 'table'>
+              value={view}
+              ariaLabel="Cash flow view"
+              onChange={setView}
+              options={[
+                { value: 'chart', label: <Icon icon={Waypoints} size="sm" label="Diagram" /> },
+                { value: 'table', label: <Icon icon={Table2} size="sm" label="Table" /> },
+              ]}
+            />
+            {headerExtra}
+          </div>
+        ) : (
+          <Segmented<'chart' | 'table'>
+            value={view}
+            ariaLabel="Cash flow view"
+            onChange={setView}
+            options={[
+              { value: 'chart', label: <Icon icon={Waypoints} size="sm" label="Diagram" /> },
+              { value: 'table', label: <Icon icon={Table2} size="sm" label="Table" /> },
+            ]}
+          />
+        )
       }
     >
       {!flow.hasData ? (

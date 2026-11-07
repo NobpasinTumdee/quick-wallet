@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { HeatmapRange, useHeatmapData } from '../hooks/useHeatmapData';
@@ -68,9 +68,12 @@ export function SubscriptionHeatmapCard({
   period,
   className,
   onNavigate,
+  headerExtra,
 }: {
   period: string;
   className?: string;
+  /** Home only: an extra control at the end of the header (Open in Analytics). */
+  headerExtra?: ReactNode;
   /** Supplied where the shell can route; the picker link is hidden without it. */
   onNavigate?: (route: Route) => void;
 }) {
@@ -122,6 +125,7 @@ export function SubscriptionHeatmapCard({
                 : t('liability.paydaySet')}
             </Button>
           )}
+          {headerExtra}
         </div>
       }
     >

@@ -1,5 +1,6 @@
 import { type AnalyticsCardId, ANALYTICS_CARDS, ANALYTICS_ORDER_PAGE } from './analyticsCards';
-import { type HomeCardId, HOME_CARDS, HOME_ORDER_PAGE } from './homeCards';
+import type { CatalogCardId } from './cardCatalog';
+import { HOME_BOARD_CARDS, HOME_ORDER_PAGE } from './homeCards';
 import { type GridCardDef, type GridLayout, defaultGridLayout, migrateV1, sanitizeGridLayout, serializeGridLayout } from './gridModel';
 import { type CardDef, type CardLayout, sanitizeLayout } from './layoutModel';
 import type { RemotePref } from './layoutSync';
@@ -94,8 +95,8 @@ export function orderFormat<Id extends string>(
   };
 }
 
-/** Home's (layout.home-mobile). */
-export const HOME_ORDER_FORMAT: SyncedLayoutFormat<CardOrder<HomeCardId>> = orderFormat(HOME_ORDER_PAGE, HOME_CARDS);
+/** Home's (layout.home-mobile): its own cards and any Analytics cards added to it. */
+export const HOME_ORDER_FORMAT: SyncedLayoutFormat<CardOrder<CatalogCardId>> = orderFormat(HOME_ORDER_PAGE, HOME_BOARD_CARDS);
 
 /** Analytics' (layout.analytics-mobile). */
 export const ANALYTICS_ORDER_FORMAT: SyncedLayoutFormat<CardOrder<AnalyticsCardId>> = orderFormat(ANALYTICS_ORDER_PAGE, ANALYTICS_CARDS);

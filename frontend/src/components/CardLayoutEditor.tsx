@@ -1,4 +1,4 @@
-import { Check, ChevronsDownUp, ChevronsUpDown, EyeOff, GripVertical, Info, MoreHorizontal, Plus, RotateCcw } from 'lucide-react';
+import { Check, ChevronsDownUp, ChevronsUpDown, EyeOff, GripVertical, Info, MoreHorizontal, Plus, RotateCcw, X } from 'lucide-react';
 import {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -783,7 +783,8 @@ export default function CardLayoutEditor({
     const def = defOf(id);
     if (!card || !def) return;
     const next = showGridCard(latest.current, registry, id, undefined, addSize(card, def));
-    commit(next, `${t('layout.announceShown', { title: titleOf(id) })}. ${placedText(next, id)}`, `[data-handle-for="${id}"]`);
+    const said = t(def.addable ? 'layout.announceAdded' : 'layout.announceShown', { title: titleOf(id) });
+    commit(next, `${said}. ${placedText(next, id)}`, `[data-handle-for="${id}"]`);
   };
 
   /* Inert marks the card's own content as display only. */
@@ -794,9 +795,44 @@ export default function CardLayoutEditor({
   /* ---- What gets drawn ---- */
 
   const shown = readingOrder(draft.cards);
-  const hidden = draft.cards.filter((card) => card.hidden);
+  const hiddenAll = draft.cards.filter((card) => card.hidden);
+  /* The page's own hidden cards; then, where the page can take another's
+     cards (Home), those not on it yet, in their own group. */
+  const hidden = hiddenAll.filter((card) => !defOf(card.id)?.addable);
+  const addable = hiddenAll.filter((card) => defOf(card.id)?.addable);
+  const hasAddable = registry.some((def) => def.addable);
   const menuCard = menuFor ? draft.cards.find((card) => card.id === menuFor && !card.hidden) : undefined;
   const menuAnchor = menuCard ? document.querySelector<HTMLElement>(`[data-menu-for="${menuCard.id}"]`) : null;
+
+  /** A tile in the panel: click to add at the first free spot, or drag it in. */
+  const widgetChip = (card: GridCard) => {
+    const def = defOf(card.id);
+    if (!def) return null;
+    const title = titleOf(card.id);
+    const size = addSize(card, def);
+    return (
+      <button
+        key={card.id}
+        type="button"
+        className={cx('layout-chip layout-widget', active?.id === card.id && 'is-dragging')}
+        data-show-for={card.id}
+        aria-label={t(def.addable ? 'layout.addFromAnalytics' : 'layout.showCard', { title, w: size.w, h: size.h })}
+        title={t('layout.addHint')}
+        onPointerDown={(event) => onPress(event, card.id, 'add')}
+        onDragStart={(event) => event.preventDefault()}
+        onClick={() => {
+          if (Date.now() < ignoreClicksUntil.current) return;
+          addCard(card.id);
+        }}
+      >
+        <Icon icon={Plus} size="sm" />
+        <span className="truncate">{title}</span>
+        <span className="layout-widget-size" aria-hidden="true">
+          · {size.w} × {size.h}
+        </span>
+      </button>
+    );
+  };
 
   const cardFrame = (card: GridCard) => {
     const id = card.id;
@@ -863,16 +899,22 @@ export default function CardLayoutEditor({
           >
             <Icon icon={card.collapsed ? ChevronsUpDown : ChevronsDownUp} size="sm" />
           </button>
+          {/* An added card (another page's) is removed rather than hidden: it goes
+              back to its group in the panel, and Done leaves it out. */}
           <button
             type="button"
             className="lcard-icon"
-            aria-label={t('layout.hideCard', { title })}
-            title={t('layout.hide')}
+            aria-label={t(def.addable ? 'layout.removeCard' : 'layout.hideCard', { title })}
+            title={t(def.addable ? 'layout.remove' : 'layout.hide')}
             onClick={() =>
-              commit(setGridCardFlags(latest.current, id, { hidden: true }), t('layout.announceHidden', { title }), `[data-show-for="${id}"]`)
+              commit(
+                setGridCardFlags(latest.current, id, { hidden: true }),
+                t(def.addable ? 'layout.announceRemoved' : 'layout.announceHidden', { title }),
+                `[data-show-for="${id}"]`,
+              )
             }
           >
-            <Icon icon={EyeOff} size="sm" />
+            <Icon icon={def.addable ? X : EyeOff} size="sm" />
           </button>
           <button
             type="button"
@@ -995,34 +1037,17 @@ export default function CardLayoutEditor({
           {hidden.length === 0 ? (
             <span className="layout-editbar-none">{t(texts.hiddenNone)}</span>
           ) : (
-            hidden.map((card) => {
-              const def = defOf(card.id);
-              if (!def) return null;
-              const title = titleOf(card.id);
-              const size = addSize(card, def);
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  className={cx('layout-chip layout-widget', active?.id === card.id && 'is-dragging')}
-                  data-show-for={card.id}
-                  aria-label={t('layout.showCard', { title, w: size.w, h: size.h })}
-                  title={t('layout.addHint')}
-                  onPointerDown={(event) => onPress(event, card.id, 'add')}
-                  onDragStart={(event) => event.preventDefault()}
-                  onClick={() => {
-                    if (Date.now() < ignoreClicksUntil.current) return;
-                    addCard(card.id);
-                  }}
-                >
-                  <Icon icon={Plus} size="sm" />
-                  <span className="truncate">{title}</span>
-                  <span className="layout-widget-size" aria-hidden="true">
-                    · {size.w} × {size.h}
-                  </span>
-                </button>
-              );
-            })
+            hidden.map((card) => widgetChip(card))
+          )}
+          {hasAddable && (
+            <>
+              <span className="section-label layout-editbar-group">{t('layout.fromAnalytics')}</span>
+              {addable.length === 0 ? (
+                <span className="layout-editbar-none">{t('layout.fromAnalyticsNone')}</span>
+              ) : (
+                addable.map((card) => widgetChip(card))
+              )}
+            </>
           )}
         </div>
 

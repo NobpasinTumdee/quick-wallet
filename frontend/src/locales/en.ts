@@ -1229,6 +1229,14 @@ export const en = {
     resetTitleAnalytics: 'Reset Analytics to the default layout?',
     hiddenNoneAnalytics: 'Every card is on Analytics',
     announceStartAnalytics: 'Customizing Analytics',
+    /* Analytics cards added to Home (copies; Analytics keeps its own). */
+    fromAnalytics: 'From Analytics',
+    fromAnalyticsNone: 'Every Analytics card is on Home',
+    addFromAnalytics: 'Add {{title}} to Home, {{w}} by {{h}}',
+    removeCard: 'Remove {{title}} from Home',
+    remove: 'Remove from Home',
+    announceAdded: '{{title}} added to Home',
+    announceRemoved: '{{title}} removed from Home',
   },
 
   /* Arrange Home: card order and visibility on phones and tablets. */
@@ -1264,6 +1272,14 @@ export const en = {
     savedAnalytics: 'Analytics order saved',
     resetDoneAnalytics: 'Analytics order reset to default',
     allHiddenAnalytics: 'All Analytics cards are hidden.',
+    /* Analytics cards on Home (copies; Analytics keeps its own). */
+    fromAnalytics: 'From Analytics',
+    fromAnalyticsHint: 'Add a copy of an Analytics card to Home. Analytics keeps its own.',
+    fromAnalyticsNone: 'Every Analytics card is on Home.',
+    fromAnalyticsTag: 'From Analytics',
+    add: 'Add',
+    addCard: 'Add {{title}} to Home',
+    removeCard: 'Remove {{title}} from Home',
   },
 
   /* Card names in the editors (Customize, Arrange, Settings) — unambiguous across pages. */
@@ -1277,6 +1293,10 @@ export const en = {
     payees: 'Top payees',
     sankey: 'Cash-flow diagram',
     projection: 'Net-worth projection',
+    /* On an Analytics card shown on Home. */
+    openInAnalytics: 'Open {{title}} in Analytics',
+    openInAnalyticsShort: 'Open in Analytics',
+    loadingCard: 'Loading {{title}}',
   },
 
   analytics: {

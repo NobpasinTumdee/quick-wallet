@@ -46,7 +46,9 @@ import {
   useCardBoard,
 } from '../components/CardBoard';
 import { HOME_ARRANGE_ENTRY, HOME_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
-import { HOME_CARDS, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE, HOME_TABLET_HALVES, HomeCardId } from '../lib/layout/homeCards';
+import { type CatalogCardId, isAnalyticsCardId } from '../lib/layout/cardCatalog';
+import type { HomeCardId } from '../lib/layout/homeCards';
+import { HOME_BOARD_CARDS, HOME_BOARD_HALVES, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE } from '../lib/layout/homeCards';
 import { HOME_EDIT_PAGE } from '../lib/layout/homeEditStore';
 import { HOME_ORDER_FORMAT } from '../lib/layout/layoutFormats';
 import { continueRecent } from '../lib/layout/recentRows';
@@ -66,18 +68,25 @@ const IncomeSpendingChart = lazyWithRetry(() =>
 const TALL_CHART_HEIGHT = 400;
 
 
+/* An Analytics card added to Home: its own chunk (the Analytics cards and
+   their charts), loaded only when a layout has one. */
+const HomeAnalyticsCard = lazyWithRetry(() =>
+  import('../components/HomeAnalyticsCard').then((m) => ({ default: m.HomeAnalyticsCard })),
+);
+
 const TaxCalculatorModal = lazyWithRetry(() =>
   import('../components/TaxCalculatorModal').then((m) => ({ default: m.TaxCalculatorModal })),
 );
 
 /** Home's cards and where their layouts are kept (see CardBoard). */
-const HOME_BOARD: CardBoardConfig<HomeCardId> = {
+const HOME_BOARD: CardBoardConfig<CatalogCardId> = {
   editPage: HOME_EDIT_PAGE,
   gridPage: HOME_LAYOUT_PAGE,
   legacyPage: HOME_LEGACY_LAYOUT_PAGE,
   orderFormat: HOME_ORDER_FORMAT,
-  registry: HOME_CARDS,
-  halves: HOME_TABLET_HALVES,
+  /* Home's own cards, then the Analytics cards that can be added to it. */
+  registry: HOME_BOARD_CARDS,
+  halves: HOME_BOARD_HALVES,
   messages: { saved: 'layout.saved', resetDone: 'layout.resetDone' },
   arrange: { texts: HOME_ARRANGE_TEXTS, entry: HOME_ARRANGE_ENTRY },
 };
@@ -653,7 +662,15 @@ export function DashboardPage({
   const bento = (
     <CardBoardGrid
       board={board}
-      renderCard={(id, sizeClass, tall, fill) => homeCards[id](sizeClass, tall, fill)}
+      renderCard={(id, sizeClass, tall, fill) =>
+        isAnalyticsCardId(id) ? (
+          <Suspense fallback={<div className={cx('card bento-item acard-skeleton', sizeClass)} aria-hidden="true" />}>
+            <HomeAnalyticsCard id={id} sizeClass={sizeClass} fill={fill} period={period} onNavigate={onNavigate} />
+          </Suspense>
+        ) : (
+          homeCards[id as HomeCardId](sizeClass, tall, fill)
+        )
+      }
       /* Every card hidden on a phone: the hero stays, with a way back. */
       empty={<CardBoardArrangeEmpty board={board} />}
     />

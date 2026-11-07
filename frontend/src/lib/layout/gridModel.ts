@@ -219,7 +219,7 @@ export function sanitizeGridLayout<Id extends string>(raw: unknown, registry: re
 
   let next = settle(cards);
   for (const def of registry) {
-    if (seen.has(def.id)) continue;
+    if (seen.has(def.id) || def.addable) continue;
     const w = Math.min(def.defaultW, GRID_COLUMNS);
     const spot = firstFreeSpot(next, w, def.defaultH);
     next = settle([...next, { id: def.id, x: spot.x, y: spot.y, w, h: def.defaultH }]);
@@ -449,6 +449,30 @@ export function showGridCard<Id extends string>(
   const shown: GridCard<Id> = { id, x: spot.x, y: spot.y, w, h };
   const cards = layout.cards.map((item) => (item.id === id ? shown : item));
   return withCards(layout, settle(cards, { id, rank: 'before' }));
+}
+
+/**
+ * Adds an addable card (another page's card, not yet in this layout): at
+ * (x, y) when dropped from the panel, otherwise at the first spot where it
+ * fits, at its default size (or `size`). Nothing if it is already there.
+ */
+export function addGridCard<Id extends string>(
+  layout: GridLayout<Id>,
+  registry: readonly GridCardDef<Id>[],
+  id: Id,
+  at?: { x: number; y: number },
+  size?: { w: number; h: number },
+): GridLayout<Id> {
+  const def = defOf(registry, id);
+  if (!def || layout.cards.some((item) => item.id === id)) return layout;
+  const fresh: GridCard<Id> = { id, w: Math.min(def.defaultW, GRID_COLUMNS), hidden: true };
+  return showGridCard(withCards(layout, [...layout.cards, fresh]), registry, id, at, size);
+}
+
+/** Takes a card out of the layout altogether (an added card being removed); the rest settles. */
+export function removeGridCard<Id extends string>(layout: GridLayout<Id>, id: Id): GridLayout<Id> {
+  if (!layout.cards.some((item) => item.id === id)) return layout;
+  return withCards(layout, settle(layout.cards.filter((item) => item.id !== id)));
 }
 
 /* ---- Narrow desktop screens ---- */

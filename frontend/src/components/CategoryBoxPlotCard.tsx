@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CategoryBoxPlot } from './CategoryBoxPlot';
@@ -44,9 +45,12 @@ import { Card, Skeleton } from './ui';
 export function CategoryBoxPlotCard({
   period,
   className,
+  headerExtra,
 }: {
   period: string;
   className?: string;
+  /** Home only: an extra control at the end of the header (Open in Analytics). */
+  headerExtra?: ReactNode;
 }) {
   const { t } = useTranslation();
   const { settings } = useSettings();
@@ -61,7 +65,16 @@ export function CategoryBoxPlotCard({
       className={className}
       title={t('boxplot.title')}
       subtitle={t('boxplot.subtitle')}
-      actions={<RangePicker state={range} />}
+      actions={
+        headerExtra ? (
+          <div className="cluster">
+            <RangePicker state={range} />
+            {headerExtra}
+          </div>
+        ) : (
+          <RangePicker state={range} />
+        )
+      }
     >
       {range.rows.initialLoading ? (
         <Skeleton rows={5} />

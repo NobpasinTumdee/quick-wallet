@@ -105,3 +105,24 @@ export const ANALYTICS_TABLET_HALVES: ReadonlySet<AnalyticsCardId> = new Set<Ana
   'spendHeatmap',
   'payees',
 ]);
+
+/**
+ * Home's board: its own cards, then every Analytics card as addable: a
+ * copy that is on Home only once added (the Customize panel's "From
+ * Analytics" group, the Arrange sheet's section). Never in Home's default,
+ * never inserted into a saved Home layout by itself, and dropped again when
+ * removed (layoutModel.ts, orderModel.ts). Home's own entries are exactly
+ * HOME_CATALOG, so every Home layout saved before reads the same.
+ */
+export const HOME_BOARD_CATALOG: readonly CatalogCardDef<CatalogCardId>[] = [
+  ...HOME_CATALOG,
+  ...ANALYTICS_CATALOG.map((def): CatalogCardDef<CatalogCardId> => ({ ...def, addable: true })),
+];
+
+/** Home's tablet halves, with the Analytics half cards once added. */
+export const HOME_BOARD_HALVES: ReadonlySet<CatalogCardId> = new Set<CatalogCardId>([...HOME_TABLET_HALVES, ...ANALYTICS_TABLET_HALVES]);
+
+/** Whether an id is an Analytics card (on Home: an added copy). */
+export function isAnalyticsCardId(id: string): id is AnalyticsCardId {
+  return ANALYTICS_CATALOG.some((def) => def.id === id);
+}

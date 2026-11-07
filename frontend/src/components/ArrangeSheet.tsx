@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, RotateCcw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -9,7 +9,15 @@ import { cx } from '../lib/format';
 import type { CatalogCardDef, CatalogCardId } from '../lib/layout/cardCatalog';
 import type { ArrangeTexts } from '../lib/layout/arrangeTexts';
 import { CARD_ICONS } from '../lib/layout/cardIcons';
-import { type CardOrder, isDefaultOrder, moveInOrder, sameOrder, setOrderHidden } from '../lib/layout/orderModel';
+import {
+  type CardOrder,
+  addToOrder,
+  isDefaultOrder,
+  moveInOrder,
+  removeFromOrder,
+  sameOrder,
+  setOrderHidden,
+} from '../lib/layout/orderModel';
 
 /**
  * Arranging a page's cards on phones and tablets ("Arrange Home", "Arrange
@@ -25,6 +33,11 @@ import { type CardOrder, isDefaultOrder, moveInOrder, sameOrder, setOrderHidden 
  * Edits are a draft. Done saves it (only if it differs); Cancel, Back, the
  * close button and the backdrop drop it. Reset asks first, then saves the
  * default as a marker so the user's other phones go back to it too.
+ *
+ * Where the page can take another page's cards (Analytics cards on Home),
+ * those not on it yet are listed under "From Analytics", each with Add; an
+ * added one joins the order at the end with ↑ / ↓ and Remove (instead of
+ * the switch: hiding an added card removes it, so one control does).
  */
 export default function ArrangeSheet<Id extends CatalogCardId>({
   registry,
@@ -50,7 +63,12 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
      button pressed — or on the other one when that end is now disabled. */
   const listRef = useRef<HTMLOListElement>(null);
   const pendingFocus = useRef<{ id: Id; dir: 'up' | 'down' } | null>(null);
+  /* After Add or Remove: the control that now stands for that card. */
+  const pendingSelector = useRef<string | null>(null);
   useEffect(() => {
+    const selector = pendingSelector.current;
+    pendingSelector.current = null;
+    if (selector) listRef.current?.parentElement?.querySelector<HTMLElement>(selector)?.focus();
     const want = pendingFocus.current;
     pendingFocus.current = null;
     if (!want || !listRef.current) return;
@@ -61,7 +79,10 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
     target?.focus();
   }, [draft]);
 
-  const title = (id: Id): string => t(registry.find((def) => def.id === id)!.titleKey);
+  const defOf = (id: Id) => registry.find((def) => def.id === id);
+  const title = (id: Id): string => t(defOf(id)!.titleKey);
+  const addable = registry.filter((def) => def.addable);
+  const notAdded = addable.filter((def) => !draft.cards.some((card) => card.id === def.id));
   const total = draft.cards.length;
 
   const move = (id: Id, dir: 'up' | 'down') => {
@@ -76,6 +97,18 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
   const toggle = (id: Id, show: boolean) => {
     setDraft(setOrderHidden(draft, id, !show));
     setAnnouncement(t(show ? 'layout.announceShown' : 'layout.announceHidden', { title: title(id) }));
+  };
+
+  const add = (id: Id) => {
+    setDraft(addToOrder(draft, id));
+    pendingSelector.current = `[data-remove="${id}"]`;
+    setAnnouncement(t('layout.announceAdded', { title: title(id) }));
+  };
+
+  const remove = (id: Id) => {
+    setDraft(removeFromOrder(draft, id));
+    pendingSelector.current = `[data-add="${id}"]`;
+    setAnnouncement(t('layout.announceRemoved', { title: title(id) }));
   };
 
   const done = () => {
@@ -115,6 +148,7 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
           {draft.cards.map((card, index) => {
             const name = title(card.id);
             const shown = !card.hidden;
+            const added = !!defOf(card.id)?.addable;
             return (
               <li key={card.id} className={cx('arrange-row', !shown && 'is-hidden')}>
                 <span className="arrange-icon" aria-hidden="true">
@@ -123,6 +157,7 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
                 <span className="arrange-name">
                   <span>{name}</span>
                   {!shown && <small>{t('arrange.hiddenTag')}</small>}
+                  {added && <small>{t('arrange.fromAnalyticsTag')}</small>}
                 </span>
                 <span className="arrange-actions">
                   <button
@@ -147,21 +182,66 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
                   >
                     <Icon icon={ArrowDown} size="sm" />
                   </button>
-                  <label className="arrange-switch sub-share-toggle">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={shown}
-                      aria-label={t(texts.show as 'arrange.show', { title: name })}
-                      onChange={(event) => toggle(card.id, event.target.checked)}
-                    />
-                    <span className="sub-share-track" aria-hidden="true" />
-                  </label>
+                  {added ? (
+                    <button
+                      type="button"
+                      className="arrange-move arrange-remove"
+                      data-remove={card.id}
+                      aria-label={t('arrange.removeCard', { title: name })}
+                      onClick={() => remove(card.id)}
+                    >
+                      <Icon icon={X} size="sm" />
+                    </button>
+                  ) : (
+                    <label className="arrange-switch sub-share-toggle">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={shown}
+                        aria-label={t(texts.show as 'arrange.show', { title: name })}
+                        onChange={(event) => toggle(card.id, event.target.checked)}
+                      />
+                      <span className="sub-share-track" aria-hidden="true" />
+                    </label>
+                  )}
                 </span>
               </li>
             );
           })}
         </ol>
+        {addable.length > 0 && (
+          <section className="arrange-addable" aria-labelledby="arrange-addable-title">
+            <h3 id="arrange-addable-title" className="section-label">
+              {t('arrange.fromAnalytics')}
+            </h3>
+            <p className="arrange-hint">{t('arrange.fromAnalyticsHint')}</p>
+            {notAdded.length === 0 ? (
+              <p className="arrange-hint">{t('arrange.fromAnalyticsNone')}</p>
+            ) : (
+              <ul className="arrange-list">
+                {notAdded.map((def) => {
+                  const name = t(def.titleKey);
+                  return (
+                    <li key={def.id} className="arrange-row">
+                      <span className="arrange-icon" aria-hidden="true">
+                        <Icon icon={CARD_ICONS[def.id]} size="sm" />
+                      </span>
+                      <span className="arrange-name">
+                        <span>{name}</span>
+                      </span>
+                      <span className="arrange-actions">
+                        <Button size="sm" data-add={def.id} aria-label={t('arrange.addCard', { title: name })} onClick={() => add(def.id)}>
+                          <Icon icon={Plus} size="sm" />
+                          {t('arrange.add')}
+                        </Button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {announcement}
         </div>

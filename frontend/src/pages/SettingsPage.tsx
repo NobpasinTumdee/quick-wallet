@@ -37,7 +37,7 @@ import { ANALYTICS_ARRANGE_ENTRY, ANALYTICS_ARRANGE_TEXTS, HOME_ARRANGE_ENTRY, H
 import type { ArrangeEntryTexts, ArrangeTexts } from '../lib/layout/arrangeTexts';
 import { ANALYTICS_CARDS } from '../lib/layout/analyticsCards';
 import type { CatalogCardDef, CatalogCardId } from '../lib/layout/cardCatalog';
-import { HOME_CARDS } from '../lib/layout/homeCards';
+import { HOME_BOARD_CARDS } from '../lib/layout/homeCards';
 import { ANALYTICS_ORDER_FORMAT, HOME_ORDER_FORMAT, type SyncedLayoutFormat } from '../lib/layout/layoutFormats';
 import type { CardOrder } from '../lib/layout/orderModel';
 import { useCardOrder } from '../lib/layout/useHomeOrder';
@@ -198,7 +198,7 @@ export function SettingsPage() {
           <ArrangeSetting
             id="arrange-setting"
             format={HOME_ORDER_FORMAT}
-            registry={HOME_CARDS}
+            registry={HOME_BOARD_CARDS}
             texts={HOME_ARRANGE_TEXTS}
             entry={HOME_ARRANGE_ENTRY}
           />

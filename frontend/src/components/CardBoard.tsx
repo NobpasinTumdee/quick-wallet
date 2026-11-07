@@ -25,12 +25,21 @@ import {
 } from '../lib/layout/gridModel';
 import { setLayoutAvailable, setLayoutEditing, useLayoutEditing } from '../lib/layout/homeEditStore';
 import type { SyncedLayoutFormat } from '../lib/layout/layoutFormats';
-import { CardLayout, updateCard } from '../lib/layout/layoutModel';
+import { CardLayout, ownCards, updateCard } from '../lib/layout/layoutModel';
 import { type CardOrder, isDefaultOrder, unpairedHalves, visibleIds } from '../lib/layout/orderModel';
 import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/useCardLayout';
 import { useCardOrder } from '../lib/layout/useHomeOrder';
 import { toast } from '../lib/toast';
 import type { TranslationKey } from '../locales/en';
+
+/* A card to bring into view once a page's cards are drawn (Open in Analytics
+   from a copy on Home): page name -> card id, taken once. */
+const pendingReveal = new Map<string, string>();
+
+/** Asks the board of `page` to scroll `id` into view when it next draws (the top if the card is not shown there). */
+export function revealCardOn(page: string, id: string) {
+  pendingReveal.set(page, id);
+}
 
 /* Edit mode for the desktop layout: its own chunk, loaded when Customize is
    pressed — almost no visit to a page ever needs it. */
@@ -156,8 +165,12 @@ export function useCardBoard<Id extends string>(config: CardBoardConfig<Id>, use
         gridMetrics.gap,
       );
     }
-    draftStart.current = serializeGridLayout(start);
-    setDraft(start);
+    /* Cards that can be added from another page (Analytics cards on Home) and
+       are not here yet join the draft hidden, so the panel offers them like
+       any hidden card; Done drops any still hidden (hiding one removes it). */
+    const missing = registry.filter((def) => def.addable && !start.cards.some((card) => card.id === def.id));
+    draftStart.current = serializeGridLayout(withoutHiddenAddable(start));
+    setDraft(missing.length ? { ...start, cards: [...start.cards, ...missing.map((def) => ({ id: def.id, w: def.defaultW, hidden: true as const }))] } : start);
   }
   if (!editing && draft) setDraft(null);
   const { editPage } = config;
@@ -182,7 +195,7 @@ export function useCardBoard<Id extends string>(config: CardBoardConfig<Id>, use
          the grid may back-fill a half card beside another, as it always has). */
       order.isCustom && !isDefaultOrder(order.order, registry)
       ? orderedCards(visibleIds(order.order))
-      : registry.map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
+      : ownCards(registry).map((def) => ({ id: def.id, sizeClass: '', tall: false, collapsed: false }));
 
   /* A phone order says nothing about sizes. On a tablet the two half cards
      sit side by side only when they are next to each other; one on its own
@@ -198,7 +211,14 @@ export function useCardBoard<Id extends string>(config: CardBoardConfig<Id>, use
       ? saveGridLayout(setGridCardFlags(gridLayout, id, { collapsed: false }))
       : saveLayout(updateCard(layout, registry, id, { collapsed: false }));
 
-  const finishEditing = (next: GridLayout<Id> | null, savedMessage: string) => {
+  /** An added card hidden in the editor is removed: it is not this page's own. */
+  function withoutHiddenAddable(next: GridLayout<Id>): GridLayout<Id> {
+    if (!next.cards.some((card) => card.hidden && registry.find((def) => def.id === card.id)?.addable)) return next;
+    return { ...next, cards: next.cards.filter((card) => !(card.hidden && registry.find((def) => def.id === card.id)?.addable)) };
+  }
+
+  const finishEditing = (draftLayout: GridLayout<Id> | null, savedMessage: string) => {
+    const next = draftLayout && withoutHiddenAddable(draftLayout);
     if (next && serializeGridLayout(next) !== draftStart.current) {
       saveGridLayout(next);
       toast.success(savedMessage);
@@ -254,6 +274,41 @@ export function CardBoardGrid<Id extends string>({
     return () => setLayoutAvailable(config.editPage, false);
   }, [config.editPage]);
 
+  /* Open in Analytics: the card asked for, once the grid is drawn. Its
+     element is found by position, so the page's markup needs no ids: a
+     placed grid has one wrapper per card in reading order, a flow grid the
+     cards themselves after any fixed lead. */
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const ids = placedLayout ? readingOrder(placedLayout.cards).map((card) => card.id as string) : placed.map((item) => item.id as string);
+  const leadInGrid = placedLayout || (!layoutActive && placed.length === 0) ? 0 : (config.leadCount ?? 0);
+  useEffect(() => {
+    const want = pendingReveal.get(config.editPage);
+    const grid = gridRef.current;
+    if (want === undefined || !grid) return undefined;
+    const index = ids.indexOf(want);
+    /* Taken inside the frame, so an effect that is cleaned up before it runs
+       (StrictMode, a quick re-render) leaves the request for the next one. */
+    const frame = window.requestAnimationFrame(() => {
+      if (pendingReveal.get(config.editPage) !== want) return;
+      pendingReveal.delete(config.editPage);
+      const target = index >= 0 ? (grid.children[leadInGrid + index] as HTMLElement | undefined) : undefined;
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (!target) {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        return;
+      }
+      /* Clear of the sticky top bar. */
+      const bar = document.querySelector<HTMLElement>('.topbar');
+      const offset = (bar?.getBoundingClientRect().height ?? 64) + 12;
+      window.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset), behavior: reduce ? 'auto' : 'smooth' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  });
+  const attachGrid = (element: HTMLDivElement | null) => {
+    gridRef.current = element;
+    setGridElement(element);
+  };
+
   /* A collapsed card: its title and a way back. Expanding saves. */
   const collapsedBar = (id: Id, sizeClass: string) => {
     const def = config.registry.find((item) => item.id === id)!;
@@ -281,7 +336,7 @@ export function CardBoardGrid<Id extends string>({
   const plainBento = placedLayout ? (
     <>
       {lead}
-      <div ref={setGridElement} className="bento layout-12 is-custom is-placed">
+      <div ref={attachGrid} className="bento layout-12 is-custom is-placed">
         {readingOrder(placedLayout.cards).map((card) => (
           <div key={card.id} className="lplace" style={gridArea(card)}>
             {card.collapsed ? collapsedBar(card.id, '') : renderCard(card.id, '', false, true)}
@@ -296,7 +351,7 @@ export function CardBoardGrid<Id extends string>({
     </>
   ) : (
     <div
-      ref={setGridElement}
+      ref={attachGrid}
       className={cx('bento', layoutActive && 'layout-12', layoutActive && isCustom && 'is-custom')}
     >
       {lead}

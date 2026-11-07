@@ -5,7 +5,7 @@ import { type CatalogCardDef, type HomeCardId, HOME_CATALOG } from './cardCatalo
  * order and at today's sizes, and the names its layouts are stored under.
  */
 export type { HomeCardId } from './cardCatalog';
-export { HOME_TABLET_HALVES } from './cardCatalog';
+export { HOME_BOARD_CATALOG as HOME_BOARD_CARDS, HOME_BOARD_HALVES, HOME_TABLET_HALVES } from './cardCatalog';
 
 export type HomeCardDef = CatalogCardDef<HomeCardId>;
 

@@ -44,6 +44,12 @@ export interface CardDef<Id extends string = string> {
   defaultW: ColumnSpan;
   /** Height steps, when the card has any; the first is the default. */
   heights?: readonly HeightStep[];
+  /**
+   * Another page's card that can be added here (an Analytics card on Home).
+   * It is never part of the default, never inserted into a saved layout that
+   * lacks it, and kept only where a saved layout already has it.
+   */
+  addable?: true;
 }
 
 export interface CardState<Id extends string = string> {
@@ -70,8 +76,14 @@ export interface CardLayout<Id extends string = string> {
 
 export const LAYOUT_VERSION = 1;
 
+/** The page's own cards: the registry without the ones that can only be added. */
+export function ownCards<D extends { addable?: true }>(registry: readonly D[]): readonly D[] {
+  return registry.some((def) => def.addable) ? registry.filter((def) => !def.addable) : registry;
+}
+
 /** The registry's own layout: its order, its default sizes, nothing hidden. */
-export function defaultLayout<Id extends string>(registry: readonly CardDef<Id>[], updatedAt = 0): CardLayout<Id> {
+export function defaultLayout<Id extends string>(all: readonly CardDef<Id>[], updatedAt = 0): CardLayout<Id> {
+  const registry = ownCards(all);
   return {
     v: 1,
     updatedAt,
@@ -137,14 +149,16 @@ export function sanitizeLayout<Id extends string>(raw: unknown, registry: readon
     cards.push(card);
   }
 
-  /* Cards the saved layout never heard of, at their default spot. */
-  registry.forEach((def, index) => {
+  /* Cards the saved layout never heard of, at their default spot (never an
+     addable one: those are only ever there because they were added). */
+  const own = ownCards(registry);
+  own.forEach((def, index) => {
     if (seen.has(def.id)) return;
     seen.add(def.id);
     const fresh: CardState<Id> = def.heights ? { id: def.id, w: def.defaultW, h: def.heights[0] } : { id: def.id, w: def.defaultW };
     let at = 0;
     for (let back = index - 1; back >= 0; back -= 1) {
-      const position = cards.findIndex((card) => card.id === registry[back].id);
+      const position = cards.findIndex((card) => card.id === own[back].id);
       if (position !== -1) {
         at = position + 1;
         break;
