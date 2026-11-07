@@ -1,10 +1,30 @@
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { currentPeriod, cx, shiftPeriod } from '../lib/format';
 import { Icon } from './Icon';
 import { Button, Modal } from './ui';
+
+/**
+ * A month's label that, when the month changes, slides in 6px from the side
+ * it is coming from (later months from the right) over 160ms — Full motion
+ * only; Reduced fades it, Off swaps it. Keyed on the month, so only a change
+ * replays it; a first render stays still.
+ */
+export function MonthLabel({ period, className, children }: { period: string; className?: string; children: ReactNode }) {
+  const shown = useRef(period);
+  const direction = useRef<'next' | 'prev' | undefined>(undefined);
+  if (shown.current !== period) {
+    direction.current = period > shown.current ? 'next' : 'prev';
+    shown.current = period;
+  }
+  return (
+    <span key={period} className={cx('month-swap', className)} data-dir={direction.current}>
+      {children}
+    </span>
+  );
+}
 
 /**
  * The month stepper in the new phone layout: "‹ Nov 2026 ›" on the top bar's
@@ -50,7 +70,7 @@ export function PeriodPill({
           aria-label={t('period.open', { month: monthLabel(period, locale, 'long') })}
           onClick={() => setOpen(true)}
         >
-          {label}
+          <MonthLabel period={period}>{label}</MonthLabel>
         </button>
         <button
           type="button"

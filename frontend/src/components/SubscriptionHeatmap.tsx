@@ -17,6 +17,7 @@ import { HeatmapDay, LiabilityKind, LiabilityYear } from '../lib/liabilityMath';
 import { TranslationKey } from '../locales';
 import { MoneyFormatter } from '../state/SettingsContext';
 import { Icon } from './Icon';
+import { scrollIntoViewMotion } from '../lib/motion';
 
 /**
  * A month of committed outgoings, as a calendar you can read at a glance.
@@ -103,7 +104,7 @@ export function SubscriptionHeatmap({
      fold. Only ever scrolls the panel into view, never the page to the top. */
   useEffect(() => {
     if (selected === null) return;
-    panelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    scrollIntoViewMotion(panelRef.current, { block: 'nearest' });
   }, [selected]);
 
   /* Locale-correct weekday initials, generated rather than hard-coded — a Thai

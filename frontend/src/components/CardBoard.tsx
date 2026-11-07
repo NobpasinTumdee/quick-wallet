@@ -33,6 +33,7 @@ import { useCardLayout, useEffectiveSpans, useGridMetrics } from '../lib/layout/
 import { useCardOrder } from '../lib/layout/useHomeOrder';
 import { toast } from '../lib/toast';
 import type { TranslationKey } from '../locales/en';
+import { scrollBehavior } from '../lib/motion';
 
 /* A card to bring into view once a page's cards are drawn (Open in Analytics
    from a copy on Home): page name -> card id, taken once. */
@@ -308,7 +309,6 @@ export function CardBoardGrid<Id extends string>({
       if (pendingReveal.get(config.editPage) !== want) return;
       pendingReveal.delete(config.editPage);
       const target = index >= 0 ? (grid.children[leadInGrid + index] as HTMLElement | undefined) : undefined;
-      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       if (!target) {
         window.scrollTo({ top: 0, behavior: 'auto' });
         return;
@@ -316,7 +316,7 @@ export function CardBoardGrid<Id extends string>({
       /* Clear of the sticky top bar. */
       const bar = document.querySelector<HTMLElement>('.topbar');
       const offset = (bar?.getBoundingClientRect().height ?? 64) + 12;
-      window.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset), behavior: reduce ? 'auto' : 'smooth' });
+      window.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset), behavior: scrollBehavior() });
     });
     return () => window.cancelAnimationFrame(frame);
   });

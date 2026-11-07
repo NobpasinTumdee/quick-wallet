@@ -80,7 +80,7 @@
   overscroll-behavior: contain;
   background: var(--glass-bg-strong);
   box-shadow: var(--shadow-xl);
-  animation: goals-drawer-in 240ms var(--ease-goal) both;
+  animation: goals-drawer-in var(--dur-sheet) var(--ease-goal) both;
 }
 
 @keyframes goals-panel-in {
@@ -1298,21 +1298,19 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gf-chip,
-  .gf-active-chip,
-  .gs-more,
-  .gs-month-bar,
-  .gs-row-bar,
-  .goal-section-caret {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .gf-chip,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gf-active-chip,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gs-more,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gs-month-bar,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gs-row-bar,
+:root:is([data-motion="reduced"], [data-motion="off"]) .goal-section-caret {
+  transition: none;
+}
 
-  .gf-chip:hover,
-  .gf-active-chip:hover,
-  .gs-more:hover {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .gf-chip:hover,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gf-active-chip:hover,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gs-more:hover {
+  transform: none;
 }
 
 /* ---- Section empty line ---- */

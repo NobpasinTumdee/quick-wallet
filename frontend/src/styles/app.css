@@ -141,7 +141,7 @@ body::before {
     radial-gradient(38% 34% at 88% 22%, var(--ambient-2) 0%, transparent 66%),
     radial-gradient(46% 40% at 62% 96%, var(--ambient-1) 0%, transparent 72%);
   /* Very slow drift keeps the surface alive without ever drawing attention. */
-  animation: ambient-drift 40s var(--ease-in-out) infinite alternate;
+  animation: ambient-drift var(--loop-ambient) var(--ease-in-out) infinite alternate;
   transition: opacity var(--dur-slow) var(--ease-out);
 }
 
@@ -427,18 +427,6 @@ body::after {
   margin: 0 auto;
 }
 
-/* Staggered entrance. Cheap, and it makes navigation feel composed rather
-   than instantaneous. */
-.page > * {
-  animation: reveal var(--dur-slow) var(--ease-out) both;
-}
-.page > *:nth-child(1) { animation-delay: 0ms; }
-.page > *:nth-child(2) { animation-delay: 45ms; }
-.page > *:nth-child(3) { animation-delay: 90ms; }
-.page > *:nth-child(4) { animation-delay: 135ms; }
-.page > *:nth-child(5) { animation-delay: 180ms; }
-.page > *:nth-child(n + 6) { animation-delay: 215ms; }
-
 /* ---- Mobile tab bar ---- */
 .tabbar {
   position: fixed;
@@ -629,13 +617,7 @@ body::after {
 
 .bento > * {
   min-width: 0;
-  animation: reveal var(--dur-slow) var(--ease-out) both;
 }
-.bento > *:nth-child(1) { animation-delay: 60ms; }
-.bento > *:nth-child(2) { animation-delay: 105ms; }
-.bento > *:nth-child(3) { animation-delay: 150ms; }
-.bento > *:nth-child(4) { animation-delay: 195ms; }
-.bento > *:nth-child(n + 5) { animation-delay: 230ms; }
 
 /* ==========================================================================
    6  Hero & metrics
@@ -868,7 +850,6 @@ body::after {
   overflow: hidden;
   transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
     border-color var(--dur-base) var(--ease-out);
-  animation: reveal var(--dur-slow) var(--ease-out) both;
 }
 
 .wallet-card::before {
@@ -1032,8 +1013,8 @@ body::after {
 }
 
 .btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.985);
-  transition-duration: 60ms;
+  transform: translateY(0) scale(var(--motion-press));
+  transition-duration: var(--dur-press);
 }
 
 .btn:disabled {
@@ -1111,7 +1092,7 @@ body::after {
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin var(--loop-spin) linear infinite;
 }
 
 /* ---- Fields ---- */
@@ -1514,7 +1495,7 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   font-size: 1.75rem;
   background: var(--accent-softer);
   border: 1px solid var(--glass-border);
-  animation: float 5s var(--ease-in-out) infinite alternate;
+  animation: float var(--loop-float) var(--ease-in-out) infinite alternate;
 }
 
 .empty h3 {
@@ -1633,10 +1614,8 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sk-band {
-    display: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .sk-band {
+  display: none;
 }
 
 /* ---- Shapes ---- */
@@ -1794,7 +1773,7 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
 /* A row that exists locally but hasn't been confirmed by the server yet. */
 .is-pending {
   opacity: 0.62;
-  animation: pending-pulse 1.6s var(--ease-in-out) infinite;
+  animation: pending-pulse var(--loop-pulse) var(--ease-in-out) infinite;
 }
 
 /* ==========================================================================
@@ -1856,7 +1835,7 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   border-bottom: 0;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: var(--shadow-xl);
-  animation: sheet-up var(--dur-slow) var(--ease-out);
+  animation: sheet-up var(--dur-sheet) var(--ease-out);
 }
 
 .modal-head {
@@ -2893,7 +2872,7 @@ tr:hover .row-actions,
 }
 
 .icon-spin {
-  animation: spin 800ms linear infinite;
+  animation: spin var(--loop-spin) linear infinite;
 }
 
 /* The dashboard opens on the hero rather than a page header, so its Refresh
@@ -3025,7 +3004,7 @@ tr:hover .row-actions,
     var(--surface-2) 63%
   );
   background-size: 400% 100%;
-  animation: balance-shimmer 1.4s ease-in-out infinite;
+  animation: balance-shimmer var(--loop-pulse) ease-in-out infinite;
 }
 
 @keyframes balance-shimmer {
@@ -3085,18 +3064,16 @@ tr:hover .row-actions,
   border-radius: 999px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .balance-track {
-    scroll-behavior: auto;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .balance-track {
+  scroll-behavior: auto;
+}
 
-  .balance-value-pending {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .balance-value-pending {
+  animation: none;
+}
 
-  .balance-dot > span {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .balance-dot > span {
+  transition: none;
 }
 
 .stat-label svg {
@@ -3478,12 +3455,12 @@ tr:hover .row-actions,
     var(--surface-2) 100%
   );
   background-size: 300% 100%;
-  animation: shimmer 1.6s var(--ease-in-out) infinite;
+  animation: shimmer var(--loop-pulse) var(--ease-in-out) infinite;
 }
 
 /* Stagger so the bars breathe as a group instead of pulsing in lockstep. */
-.candle-skeleton-bar:nth-child(3n) { animation-delay: 120ms; }
-.candle-skeleton-bar:nth-child(3n + 1) { animation-delay: 240ms; }
+.candle-skeleton-bar:nth-child(3n) { animation-delay: var(--dur-fade); }
+.candle-skeleton-bar:nth-child(3n + 1) { animation-delay: var(--dur-sheet); }
 
 /* ---- Overlays ----
    Frosted, so the chart stays faintly visible underneath: the message is
@@ -4021,7 +3998,7 @@ table.data.data--nested td {
   text-align: center;
   /* A single short fade. Long enough not to be a hard cut, short enough that
      the screen never feels like it is putting on a show. */
-  animation: boot-in 240ms var(--ease-out) both;
+  animation: boot-in var(--dur-sheet) var(--ease-out) both;
 }
 
 @keyframes boot-in {
@@ -4076,7 +4053,7 @@ table.data.data--nested td {
     var(--accent) 70%,
     transparent 100%
   );
-  animation: boot-sweep 1.4s var(--ease-in-out) infinite;
+  animation: boot-sweep var(--loop-pulse) var(--ease-in-out) infinite;
 }
 
 @keyframes boot-sweep {
@@ -4106,19 +4083,17 @@ table.data.data--nested td {
   line-height: 1.4;
   color: var(--text-faint);
   text-align: center;
-  animation: boot-in 240ms var(--ease-out) 90ms both;
+  animation: boot-in var(--dur-sheet) var(--ease-out) var(--dur-press) both;
 }
 
 /* ---- Reduced motion ----
    theme.css already disables every animation globally, which would leave the
    sweep frozen at 40% width — indistinguishable from a stalled 40% progress
    bar. Fill the track instead, dimmed, so the still reads as "working". */
-@media (prefers-reduced-motion: reduce) {
-  .boot-progress > span {
-    width: 100%;
-    background: var(--accent);
-    opacity: 0.45;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .boot-progress > span {
+  width: 100%;
+  background: var(--accent);
+  opacity: 0.45;
 }
 
 /* ==========================================================================
@@ -4370,7 +4345,7 @@ table.data.data--nested td {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   pointer-events: auto;
-  animation: toast-in var(--dur-base) var(--ease-spring) both;
+  animation: toast-in var(--dur-sheet) var(--ease-out) both;
 }
 
 .toast-icon {
@@ -4785,14 +4760,12 @@ table.data.data--nested td {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .qa-fab.is-armed {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .qa-fab.is-armed {
+  transform: none;
+}
 
-  .qa-option.is-active {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .qa-option.is-active {
+  transform: none;
 }
 
 
@@ -4952,7 +4925,7 @@ table.data.data--nested td {
   /* A 2px bright edge at the leading side, which is what sells it as a scan
      line rather than a moving gradient. */
   box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 65%, transparent);
-  animation: scan-sweep 1.25s var(--ease-in-out) infinite;
+  animation: scan-sweep var(--loop-pulse) var(--ease-in-out) infinite;
 }
 
 @keyframes scan-sweep {
@@ -4966,13 +4939,11 @@ table.data.data--nested td {
 
 /* Reduced motion still needs a "working" signal — a still bar, pulsing gently
    in opacity, rather than a line racing down the page. */
-@media (prefers-reduced-motion: reduce) {
-  .scan-laser {
-    top: 40%;
-    height: 20%;
-    animation: none;
-    opacity: 0.75;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .scan-laser {
+  top: 40%;
+  height: 20%;
+  animation: none;
+  opacity: 0.75;
 }
 
 .scan-body {
@@ -5432,7 +5403,7 @@ table.data.data--nested td {
 .goal-buy {
   position: relative;
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
-  animation: goal-buy-pulse 2.6s var(--ease-out) infinite;
+  animation: goal-buy-pulse var(--loop-beacon) var(--ease-out) infinite;
 }
 
 /* A slow ring rather than a flashing one: enough to draw the eye on arrival,
@@ -5536,10 +5507,8 @@ table.data.data--nested td {
 
 /* The pulse is an invitation, not information: without it the lit card and the
    primary button still say the same thing. */
-@media (prefers-reduced-motion: reduce) {
-  .goal-buy {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .goal-buy {
+  animation: none;
 }
 
 @media (max-width: 640px) {
@@ -6499,11 +6468,9 @@ line.arate-zero {
   color: var(--text-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pie-slice,
-  .pie-legend-item {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .pie-slice,
+:root:is([data-motion="reduced"], [data-motion="off"]) .pie-legend-item {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -6632,14 +6599,12 @@ line.arate-zero {
   max-width: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .deep-entry {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .deep-entry {
+  transition: none;
+}
 
-  .deep-entry:hover {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .deep-entry:hover {
+  transform: none;
 }
 
 /* ==========================================================================
@@ -6851,12 +6816,10 @@ line.arate-zero {
   color: var(--text-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .boxplot-band,
-  .boxplot-point,
-  .boxplot-readout {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .boxplot-band,
+:root:is([data-motion="reduced"], [data-motion="off"]) .boxplot-point,
+:root:is([data-motion="reduced"], [data-motion="off"]) .boxplot-readout {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -7298,17 +7261,15 @@ line.arate-zero {
   color: var(--text-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .liab-cell,
-  .liab-detail {
-    transition: none;
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .liab-cell,
+:root:is([data-motion="reduced"], [data-motion="off"]) .liab-detail {
+  transition: none;
+  animation: none;
+}
 
-  .liab-cell:hover,
-  .liab-cell.is-selected {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .liab-cell:hover,
+:root:is([data-motion="reduced"], [data-motion="off"]) .liab-cell.is-selected {
+  transform: none;
 }
 
 /* The payday selector in the card header. Compact because it sits beside the
@@ -7571,15 +7532,13 @@ line.arate-zero {
   color: var(--text-faint);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .liabyear-cell {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .liabyear-cell {
+  transition: none;
+}
 
-  .liabyear-cell:hover,
-  .liabyear-cell.is-selected {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .liabyear-cell:hover,
+:root:is([data-motion="reduced"], [data-motion="off"]) .liabyear-cell.is-selected {
+  transform: none;
 }
 
 /* ---- Category treemap ---- */
@@ -7745,7 +7704,6 @@ line.arate-zero {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   box-shadow: var(--shadow-lg);
-  animation: reveal var(--dur-slow) var(--ease-out) both;
 }
 
 /* The compass sits in a soft medallion rather than floating loose — the same
@@ -7965,19 +7923,17 @@ line.arate-zero {
   transform: scaleX(-1) translateX(2px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .menu-card,
-  .menu-card-chevron {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .menu-card,
+:root:is([data-motion="reduced"], [data-motion="off"]) .menu-card-chevron {
+  transition: none;
+}
 
-  .menu-card:hover {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .menu-card:hover {
+  transform: none;
+}
 
-  .menu-card:hover .menu-card-chevron {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .menu-card:hover .menu-card-chevron {
+  transform: none;
 }
 
 /* ==========================================================================
@@ -9172,12 +9128,10 @@ line.arate-zero {
 }
 
 /* Anyone who has asked for less motion keeps the glass and loses the fade. */
-@media (prefers-reduced-motion: reduce) {
-  .modal-backdrop::before,
-  .modal {
-    animation: none;
-    will-change: auto;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .modal-backdrop::before,
+:root:is([data-motion="reduced"], [data-motion="off"]) .modal {
+  animation: none;
+  will-change: auto;
 }
 
 @keyframes fade {
@@ -9238,7 +9192,7 @@ line.arate-zero {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.97);
+    transform: translateY(var(--motion-rise)) scale(0.98);
   }
   to {
     opacity: 1;
@@ -9355,7 +9309,7 @@ line.arate-zero {
     height: 100vh;
     width: var(--sidebar-width);
     overflow: hidden;
-    transition: width 0.3s ease;
+    transition: width var(--dur-slow) var(--ease-out);
     padding: var(--space-5) var(--space-3) var(--space-4);
     background: var(--glass-bg-subtle);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -9780,7 +9734,7 @@ line.arate-zero {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 var(--accent);
-  animation: preview-pulse 2s var(--ease-out) infinite;
+  animation: preview-pulse var(--loop-beacon) var(--ease-out) infinite;
 }
 
 @keyframes preview-pulse {
@@ -10316,7 +10270,6 @@ line.arate-zero {
   overflow: hidden;
   text-align: left;
   color: inherit;
-  animation: reveal var(--dur-slow) var(--ease-out) both;
 }
 
 /* A single diagonal highlight sweeping the face. Its own element rather than a
@@ -10632,14 +10585,12 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .vcard,
-  .vcard-sheen,
-  .vcard-meter-fill,
-  .vcard--interactive {
-    animation: none;
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .vcard,
+:root:is([data-motion="reduced"], [data-motion="off"]) .vcard-sheen,
+:root:is([data-motion="reduced"], [data-motion="off"]) .vcard-meter-fill,
+:root:is([data-motion="reduced"], [data-motion="off"]) .vcard--interactive {
+  animation: none;
+  transition: none;
 }
 
 /* ==========================================================================
@@ -10918,29 +10869,28 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gnav-item,
-  .gnav-trigger,
-  .gnav-trigger-icon {
-    transition-duration: 1ms;
-    transition-delay: 0ms !important;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-item,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-trigger,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-trigger-icon {
+  transition-duration: 1ms;
+  transition-delay: 0ms !important;
+}
 
-  /* Fade rather than fly, but still collapse to nothing so the closed state
+/* Fade rather than fly, but still collapse to nothing so the closed state
      stays non-interactive. */
-  .gnav:not(.is-open) .gnav-item {
-    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
-  }
 
-  .gnav.is-open .gnav-item.is-hovered {
-    transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav:not(.is-open) .gnav-item {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+}
 
-  .gnav-trigger.is-open .gnav-trigger-icon,
-  .gnav-trigger.is-open,
-  .gnav-trigger.is-pressing {
-    transform: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav.is-open .gnav-item.is-hovered {
+  transform: translate3d(var(--gnav-x), var(--gnav-y), 0) scale(1);
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-trigger.is-open .gnav-trigger-icon,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-trigger.is-open,
+:root:is([data-motion="reduced"], [data-motion="off"]) .gnav-trigger.is-pressing {
+  transform: none;
 }
 
 /* ---- Language switcher ----
@@ -11050,7 +11000,6 @@ line.arate-zero {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   box-shadow: var(--shadow-sm);
-  animation: reveal var(--dur-slow) var(--ease-out) both;
 }
 
 /* Settled bills are history. Present, findable, and visibly finished. */
@@ -11236,15 +11185,13 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .split-row,
-  .split-card {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-row,
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-card {
+  animation: none;
+}
 
-  .toggle-knob {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .toggle-knob {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -11646,16 +11593,14 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .split-chip,
-  .split-tally-row,
-  .split-details {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-chip,
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-tally-row,
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-details {
+  animation: none;
+}
 
-  .split-details-toggle svg {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .split-details-toggle svg {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -11920,10 +11865,8 @@ line.arate-zero {
   font-variant-numeric: tabular-nums;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .inbox-check {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .inbox-check {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -12116,12 +12059,10 @@ line.arate-zero {
   font-weight: var(--weight-medium);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cat-chip,
-  .cat-chip-action,
-  .cat-add {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .cat-chip,
+:root:is([data-motion="reduced"], [data-motion="off"]) .cat-chip-action,
+:root:is([data-motion="reduced"], [data-motion="off"]) .cat-add {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -12182,7 +12123,7 @@ line.arate-zero {
   border-radius: 50%;
   background: var(--surface);
   box-shadow: var(--shadow-xs);
-  transition: transform var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .sub-share-toggle input:checked + .sub-share-track {
@@ -12305,11 +12246,9 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sub-share-track,
-  .sub-share-track::after {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .sub-share-track,
+:root:is([data-motion="reduced"], [data-motion="off"]) .sub-share-track::after {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -12457,10 +12396,8 @@ line.arate-zero {
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bank-swatch {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .bank-swatch {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -12658,10 +12595,8 @@ line.arate-zero {
   outline-offset: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ta-chip {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .ta-chip {
+  transition: none;
 }
 
 /* ==========================================================================
@@ -13198,7 +13133,7 @@ line.arate-zero {
   color: #ffd700;
   text-shadow: 0 0 8px color-mix(in srgb, #ffd700 60%, transparent);
   box-shadow: 0 0 14px color-mix(in srgb, #ffd700 30%, transparent);
-  animation: tier-sheen 3s linear infinite;
+  animation: tier-sheen var(--loop-sheen) linear infinite;
 }
 
 @keyframes tier-sheen {
@@ -13209,11 +13144,9 @@ line.arate-zero {
 
 /* A sweeping gold border is decoration. Anyone who has asked for less motion
    keeps the gold and loses the sweep. */
-@media (prefers-reduced-motion: reduce) {
-  .tier-badge.is-sss,
-  .tier-chip.is-sss.is-picked {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .tier-badge.is-sss,
+:root:is([data-motion="reduced"], [data-motion="off"]) .tier-chip.is-sss.is-picked {
+  animation: none;
 }
 
 /* ---- The review strip on the card ---- */
@@ -14389,7 +14322,7 @@ line.arate-zero {
   line-height: 1.6;
   text-align: start;
   overflow-wrap: anywhere;
-  animation: info-tip-in 160ms var(--ease-sheet) both;
+  animation: info-tip-in var(--dur-swap) var(--ease-sheet) both;
 }
 
 .info-tip-pop::after {
@@ -14423,15 +14356,13 @@ line.arate-zero {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .modal,
-  .info-tip-pop {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .modal,
+:root:is([data-motion="reduced"], [data-motion="off"]) .info-tip-pop {
+  animation: none;
+}
 
-  .modal-backdrop {
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .modal-backdrop {
+  transition: none;
 }
 
 
@@ -15375,12 +15306,12 @@ line.arate-zero {
   }
 }
 
-@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
-  :root.ui-mobile-v2 .home-action {
+@media (max-width: 767px) {
+  :root:is([data-motion="reduced"], [data-motion="off"]).ui-mobile-v2 .home-action {
     transition: none;
   }
 
-  :root.ui-mobile-v2 .home-action:active {
+  :root:is([data-motion="reduced"], [data-motion="off"]).ui-mobile-v2 .home-action:active {
     transform: none;
   }
 }
@@ -17275,7 +17206,7 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     border-radius: var(--radius-pill);
     background: var(--accent-ring);
     transform: translate(-50%, -50%);
-    transition: background-color 120ms ease;
+    transition: background-color var(--dur-fade) ease;
   }
   .lcard-resize--s::after {
     width: 28px;
@@ -17348,11 +17279,9 @@ table.data.tx-table tbody tr.tx-day-row:hover {
     font-weight: var(--weight-semi);
     font-variant-numeric: tabular-nums;
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .bento.is-drag-active > .lcard:not(.is-dragging):not(.is-resizing) {
-      transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    :root[data-motion="full"] .bento.is-drag-active > .lcard:not(.is-dragging):not(.is-resizing) {
+      transition: transform var(--dur-swap) var(--ease-glide);
     }
-  }
 
   /* A card's ⋯ menu: its exact width and height. */
   .lcard-menu {
@@ -17617,4 +17546,143 @@ table.data.tx-table tbody tr.tx-day-row:hover {
   .bento > .bento-item--half.mspan-full {
     grid-column: 1 / -1;
   }
+}
+
+/* ==========================================================================
+   Motion: the page entry, micro-interactions, and what each mode keeps.
+   Tokens and the Off / Reduced base rules are in theme.css; JS animations
+   read the same mode through lib/motion.ts. Only transform and opacity move.
+   ========================================================================== */
+
+@keyframes qw-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes qw-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-rise), 0);
+  }
+}
+
+@keyframes qw-label-next {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--motion-slide), 0, 0);
+  }
+}
+
+@keyframes qw-label-prev {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(var(--motion-slide) * -1), 0, 0);
+  }
+}
+
+/* ---- The page entry (lib/pageEntry.ts) ----
+   The page fades in and rises 8px; its first six cards fade in 30ms apart.
+   Fill "backwards" only, so nothing — no transform — stays on the page once
+   it ends and sticky headers inside it stick as before. */
+:root[data-motion='full'] [data-enter='rise'] {
+  animation: qw-rise var(--dur-page) var(--ease-out) backwards;
+}
+:root[data-motion='full'] [data-enter-i] {
+  animation: qw-fade var(--dur-page) var(--ease-out) backwards;
+}
+:root[data-motion='full'] [data-enter-i='1'] { animation-delay: var(--dur-stagger); }
+:root[data-motion='full'] [data-enter-i='2'] { animation-delay: calc(var(--dur-stagger) * 2); }
+:root[data-motion='full'] [data-enter-i='3'] { animation-delay: calc(var(--dur-stagger) * 3); }
+:root[data-motion='full'] [data-enter-i='4'] { animation-delay: calc(var(--dur-stagger) * 4); }
+:root[data-motion='full'] [data-enter-i='5'] { animation-delay: calc(var(--dur-stagger) * 5); }
+:root[data-motion='reduced'] [data-enter='fade'] {
+  animation: qw-fade var(--dur-fade) linear backwards !important;
+}
+/* Customize open: nothing makes an entrance. */
+:root[data-customizing] [data-enter],
+:root[data-customizing] [data-enter-i] {
+  animation: none !important;
+}
+
+/* ---- Reduced: surfaces that enter fade for 120ms instead of sliding ---- */
+:root[data-motion='reduced']
+  :is(.modal, .numpad-sheet, .toast, .qa-backdrop, .qa-menu, .qa-column, .qa-pad, .info-tip-pop, .auth-card,
+    .card--fullscreen, .goals-panel--docked, .goals-panel--drawer, .candle-overlay, .alert, .field-error,
+    .liab-detail, .split-details, .month-swap[data-dir]),
+:root[data-motion='reduced'] .modal-backdrop::before {
+  animation-name: qw-fade !important;
+  animation-duration: var(--dur-fade) !important;
+  animation-timing-function: linear !important;
+  animation-delay: 0s !important;
+}
+
+/* Reduced and Off: no scale on press, no glide, no slide. */
+:root:not([data-motion='full']) .btn:active:not(:disabled),
+:root:not([data-motion='full']) .tabbar-item:active {
+  transform: none;
+}
+:root:not([data-motion='full']) .tabbar::before,
+:root:not([data-motion='full']) .sub-share-track::after {
+  transition-property: opacity !important;
+}
+
+/* Skeletons in Reduced and Off: still (the sweep is hidden with .sk-band),
+   but they keep their 150ms no-flash delay, so a fast load shows no flash. */
+:root:is([data-motion='reduced'], [data-motion='off']) .page > .sk-card {
+  animation: sk-appear 1ms linear 150ms backwards !important;
+}
+
+/* ---- Month label: slides 6px in from the side the month comes from ---- */
+.month-swap {
+  display: inline-block;
+}
+:root[data-motion='full'] .month-swap[data-dir='next'] {
+  animation: qw-label-next var(--dur-swap) var(--ease-out) backwards;
+}
+:root[data-motion='full'] .month-swap[data-dir='prev'] {
+  animation: qw-label-prev var(--dur-swap) var(--ease-out) backwards;
+}
+
+/* ---- Tab bar: one active pill that glides between tabs ----
+   Placed by AppShell (useTabbarPill) exactly over the active tab, where that
+   tab's own background was; the tab's background is cleared only while the
+   pill is placed, so with no pill the bar is as before. */
+.tabbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pill-w, 0);
+  height: var(--pill-h, 0);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  transform: translate3d(var(--pill-x, 0), var(--pill-y, 0), 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.tabbar[data-pill]::before {
+  opacity: 1;
+}
+.tabbar[data-pill='on']::before {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.tabbar[data-pill] .tabbar-item.is-active {
+  background: transparent;
+}
+@media (max-width: 767px) {
+  :root.ui-mobile-v2 .tabbar::before {
+    border-radius: var(--radius-pill);
+  }
+}
+
+/* ---- Hover lifts that were never seen ----
+   The old entrance's "both" fill held these cards at transform: none for
+   good, so their hover lift never showed. With that entrance gone they are
+   held at rest here, so they look and behave exactly as before. */
+.wallet-card:hover,
+.vcard--interactive:hover,
+.page > .card--interactive:hover,
+.bento > .card--interactive:hover {
+  transform: none;
 }

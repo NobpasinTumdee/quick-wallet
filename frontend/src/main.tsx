@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { markStaleBuild, reloadForNewBuild } from './lib/lazyWithRetry';
+import { initMotion } from './lib/motion';
 /* Side-effect import, and it has to be above App: `useTranslation` throws if no
    i18next instance is initialised, so the instance must exist before the first
    render rather than being created inside a component. */
@@ -35,6 +36,9 @@ window.addEventListener('vite:preloadError', (event) => {
   markStaleBuild();
   reloadForNewBuild();
 });
+
+/* The boot script set data-motion before paint; this keeps it following the OS. */
+initMotion();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('#root element is missing from index.html');

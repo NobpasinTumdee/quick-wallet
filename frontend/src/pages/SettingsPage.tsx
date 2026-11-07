@@ -1,5 +1,5 @@
 import { ListOrdered, LogOut, Smartphone } from 'lucide-react';
-import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
@@ -30,6 +30,7 @@ import { COMMON_CURRENCIES, fetchRate } from '../services/fxApi';
 import { hasLiveQuotes, providerName } from '../services/stockApi';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { MobileLayout, useMobileLayout, useMobileV2 } from '../lib/mobileLayout';
+import { MotionMode, deviceMotion, useMotionPreference } from '../lib/motion';
 import { useNumberPadSetting } from '../lib/numberPad';
 import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
@@ -193,6 +194,9 @@ export function SettingsPage() {
 
           {/* The same kind of setting: immediate, per device, phone only. */}
           <MobileLayoutSetting />
+
+          {/* Also per device and immediate; nothing saved follows the OS. */}
+          <MotionSetting />
 
           {/* Phones and tablets only: at 1000px and up Home and Analytics
               have Customize. */}
@@ -577,6 +581,49 @@ function ArrangeSetting<Id extends CatalogCardId>({
         </Suspense>
       )}
     </div>
+  );
+}
+
+function MotionSetting() {
+  const { t } = useTranslation();
+  const [stored, setStored] = useMotionPreference();
+  const device = deviceMotion();
+  const group = useRef<HTMLDivElement | null>(null);
+  /* "Follow my device" goes away once used: focus moves to the choice now in force. */
+  const refocus = useRef(false);
+  const followDevice = () => {
+    refocus.current = true;
+    setStored(null);
+  };
+  useEffect(() => {
+    if (!refocus.current || stored) return;
+    refocus.current = false;
+    group.current?.querySelector<HTMLButtonElement>('.segmented-item.is-active')?.focus();
+  }, [stored]);
+  const label = (mode: MotionMode) => t(`settings.motion${mode === 'full' ? 'Full' : mode === 'reduced' ? 'Reduced' : 'Off'}`);
+  const hint = stored
+    ? t('settings.motionSavedHint')
+    : t('settings.motionFollowsHint', { mode: label(device) });
+  return (
+    <Field label={t('settings.motion')} hint={hint} className="span-2">
+      <div className="cluster" ref={group}>
+        <Segmented<MotionMode>
+          value={stored ?? device}
+          ariaLabel={t('settings.motion')}
+          onChange={setStored}
+          options={[
+            { value: 'full', label: label('full') },
+            { value: 'reduced', label: label('reduced') },
+            { value: 'off', label: label('off') },
+          ]}
+        />
+        {stored && (
+          <Button size="sm" variant="ghost" onClick={followDevice}>
+            {t('settings.motionUseDevice')}
+          </Button>
+        )}
+      </div>
+    </Field>
   );
 }
 

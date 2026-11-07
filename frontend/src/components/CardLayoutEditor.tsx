@@ -36,6 +36,7 @@ import type { TranslationKey } from '../locales/en';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from './Icon';
 import { Button, Portal, Select, useOverlay } from './ui';
+import { motionDuration, motionEasing, motionMode } from '../lib/motion';
 
 /**
  * Edit mode for a card layout on a grid of cells (desktop Home today).
@@ -158,8 +159,9 @@ interface Box {
   height: number;
 }
 
-function reducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** The glide is a slide: Full motion only (Reduced and Off place cards at once). */
+function glides(): boolean {
+  return motionMode() === 'full';
 }
 
 /** Overlap of column ranges. */
@@ -409,7 +411,11 @@ export default function CardLayoutEditor({
   useLayoutEffect(() => {
     const element = grid.current;
     if (!element) return;
-    const animate = !reducedMotion();
+    const animate = glides();
+    /* Read once per pass, not per card: the same tokens as the CSS glide. */
+    const timing = animate
+      ? { duration: motionDuration('--dur-base', 200), easing: motionEasing('--ease-glide', 'cubic-bezier(0.2, 0.8, 0.2, 1)') }
+      : null;
     const next = new Map<string, { x: number; y: number }>();
     element.querySelectorAll<HTMLElement>('[data-card-id]').forEach((card) => {
       const id = card.dataset.cardId ?? '';
@@ -419,7 +425,7 @@ export default function CardLayoutEditor({
       if (animate && before && (Math.abs(before.x - now.x) > 0.5 || Math.abs(before.y - now.y) > 0.5) && typeof card.animate === 'function') {
         card.animate(
           [{ transform: `translate(${before.x - now.x}px, ${before.y - now.y}px)` }, { transform: 'none' }],
-          { duration: 200, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+          timing ?? undefined,
         );
       }
     });

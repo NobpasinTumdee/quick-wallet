@@ -129,16 +129,35 @@
 
   /* ---------- motion ----------
      One expressive curve (decelerate hard, settle soft) used everywhere, so
-     every surface in the app feels like it obeys the same physics. */
+     every surface in the app feels like it obeys the same physics. How much
+     of it plays is <html data-motion="full|reduced|off"> (lib/motion.ts and
+     the rules at the end of this file); these are the Full values. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --dur-fast: 140ms;
-  --dur-base: 240ms;
-  --dur-slow: 420ms;
-  /* Sheets and popovers: a fast, iOS-like settle, kept inside 150–260ms. */
+  /* Sheets and popovers: a fast, iOS-like settle. */
   --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
-  --dur-sheet: 260ms;
+  /* Cards making room while Customize drags (CardLayoutEditor's glide too). */
+  --ease-glide: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-press: 90ms; /* a button going down */
+  --dur-fade: 120ms; /* the longest anything lasts in Reduced */
+  --dur-fast: 140ms; /* hovers, switch knobs */
+  --dur-swap: 160ms; /* a label replaced in place: the month, a tooltip */
+  --dur-page: 180ms; /* the page entry */
+  --dur-stagger: 30ms; /* between the entering cards */
+  --dur-base: 200ms; /* most state changes, the tab bar's pill */
+  --dur-sheet: 240ms; /* sheets, dialogs, toasts */
+  --dur-slow: 280ms; /* larger surfaces settling */
+  --motion-rise: 8px; /* how far an entering page or toast rises */
+  --motion-slide: 6px; /* how far a replaced label slides */
+  --motion-press: 0.97; /* a pressed button's scale */
+  /* Ambient and busy loops: periods, not entrances. Reduced and Off stop them. */
+  --loop-spin: 800ms;
+  --loop-pulse: 1.6s;
+  --loop-beacon: 2.4s;
+  --loop-sheen: 3s;
+  --loop-float: 5s;
+  --loop-ambient: 40s;
 
   /* Skeletons: a block, a stronger block (headline figures), the sweep's
      sheen (towards the surface, so it reads in light, dark and pastel) and
@@ -961,14 +980,51 @@
   color-scheme: dark;
 }
 
-/* Honour the OS accessibility setting — every transition below collapses. */
+/* ---------- motion modes ----------
+   <html data-motion> is set before first paint by the boot script in
+   index.html: the choice saved in Settings › Preferences › Motion, else the
+   OS setting (Reduced when it asks for less motion). Component rules that
+   differ by mode are written as :root[data-motion=…] next to the component.
+
+   Off: nothing moves. Every animation jumps to its end and every transition
+   is instant; a spinner rests as a still ring. Zero-length animations still
+   fire animationend, so nothing waiting on one is stranded. */
+:root[data-motion='off'] *,
+:root[data-motion='off'] *::before,
+:root[data-motion='off'] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* Reduced: no slides, no stagger, no scale, no loops — only short fades. The
+   keyframe animations end at once (the surfaces that enter — dialogs, sheets,
+   menus, toasts, the page — get a 120ms fade instead, in app.css), and
+   transitions are cut to 120ms with no delay. Transforms that a transition
+   would slide are held at rest by the component rules. */
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: var(--dur-fade) !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* Before the boot script runs (it is inline and first, so only if scripts are
+   off): the OS setting alone. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
+  :root:not([data-motion]) *,
+  :root:not([data-motion]) *::before,
+  :root:not([data-motion]) *::after {
+    animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0s !important;
     scroll-behavior: auto !important;
   }
 }

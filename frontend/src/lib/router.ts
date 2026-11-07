@@ -80,8 +80,18 @@ export function currentHashPath(): string {
   return raw ? `#/${raw}` : '#/';
 }
 
+/* When the app itself last asked for a page (a tap on the nav, a link in a
+   card). Back, forward, the Android back button and the iOS swipe never come
+   through here, which is how the page entry tells them apart and stays still. */
+let lastNavigateAt = -Infinity;
+
+export function lastNavigationAt(): number {
+  return lastNavigateAt;
+}
+
 export function navigate(route: Route): void {
   if (parseHash() === route) return;
+  lastNavigateAt = performance.now();
   /* Leaving a page while its selection holds the current history step:
      replace that step rather than stack the new page on top of it, or Back
      would land on the old page's leftover step first. */

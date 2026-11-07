@@ -23,6 +23,7 @@ import { useNumberPadMode } from '../lib/numberPad';
 import { OverlayHandle, OverlayOptions, pushOverlay, updateOverlayClose } from '../lib/overlayStack';
 import { Icon } from './Icon';
 import { AmountPadField, PadKind, padOptions } from './NumberPad';
+import { scrollIntoViewMotion } from '../lib/motion';
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -556,7 +557,7 @@ function revealFocusedField(event: FocusEvent): void {
   if (!window.matchMedia?.('(max-width: 767px)').matches) return;
   /* After the keyboard has finished opening, which is when the visual
      viewport has its final size. */
-  window.setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 320);
+  window.setTimeout(() => scrollIntoViewMotion(target, { block: 'center' }), 320);
 }
 
 export function Modal({

@@ -299,7 +299,7 @@
 }
 
 .note-status.is-saving .note-status-dot {
-  animation: note-pulse 900ms var(--ease-in-out) infinite alternate;
+  animation: note-pulse calc(var(--loop-pulse) / 2) var(--ease-in-out) infinite alternate;
 }
 
 .note-status.is-error,
@@ -1355,10 +1355,8 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .note-status.is-saving .note-status-dot {
-    animation: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .note-status.is-saving .note-status-dot {
+  animation: none;
 }
 
 /* =====================================================================

@@ -26,6 +26,7 @@ import { remarkHeadingsToc, remarkNoteExtras, remarkNoteTokens, TocEntry } from 
 import { TranslationKey } from '../../locales';
 import { Icon } from '../Icon';
 import { NoteEmbed, Picture } from './NoteEmbeds';
+import { scrollIntoViewMotion } from '../../lib/motion';
 
 const CALLOUT_ICON: Record<CalloutType, LucideIcon> = {
   note: Info,
@@ -256,7 +257,7 @@ function NoteToc({ entries, label }: { entries: TocEntry[]; label: string }) {
           <li key={entry.id} style={{ paddingInlineStart: `${(entry.depth - top) * 14}px` }}>
             <button
               type="button"
-              onClick={() => document.getElementById(entry.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              onClick={() => scrollIntoViewMotion(document.getElementById(entry.id), { block: 'start' })}
             >
               {entry.text}
             </button>

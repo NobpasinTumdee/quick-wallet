@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from './Icon';
+import { MonthLabel } from './PeriodPill';
 import { Button } from './ui';
 import { categoryComposition } from '../lib/analyticsMath';
 import { cx, formatPeriod, shiftPeriod } from '../lib/format';
@@ -36,7 +37,9 @@ export function RangePicker({ state }: { state: DistributionRangeState }) {
           >
             <Icon icon={ChevronLeft} size="sm" />
           </Button>
-          <span className="range-picker-month">{formatPeriod(state.period, settings.locale)}</span>
+          <MonthLabel period={state.period} className="range-picker-month">
+            {formatPeriod(state.period, settings.locale)}
+          </MonthLabel>
           <Button
             size="sm"
             variant="ghost"

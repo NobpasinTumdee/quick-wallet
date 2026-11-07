@@ -29,6 +29,7 @@ import { toast } from '../lib/toast';
 import { useSettings } from '../state/SettingsContext';
 import { Icon } from './Icon';
 import { Portal, useOverlay } from './ui';
+import { scrollIntoViewMotion } from '../lib/motion';
 
 /**
  * The in-app number pad: what amount fields open on a phone instead of the
@@ -266,7 +267,7 @@ function goTo(element: HTMLElement): void {
   const target = element.matches('[data-wallet-picker-value]')
     ? element.closest('.wallet-picker')?.querySelector<HTMLElement>('.wallet-picker-btn') ?? element
     : element;
-  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  scrollIntoViewMotion(target, { block: 'center' });
   if (target.matches('[data-amount-display]')) target.click();
   else target.focus();
 }
@@ -352,7 +353,7 @@ export function AmountPadField({
     root.classList.add('has-keypad');
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
     observer?.observe(pad);
-    const reveal = window.setTimeout(() => displayRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+    const reveal = window.setTimeout(() => scrollIntoViewMotion(displayRef.current, { block: 'center' }), 60);
     return () => {
       observer?.disconnect();
       window.clearTimeout(reveal);

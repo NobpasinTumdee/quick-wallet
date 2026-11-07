@@ -430,7 +430,7 @@
   border: 2px solid var(--divider);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: xp-spin 0.8s linear infinite;
+  animation: xp-spin var(--loop-spin) linear infinite;
 }
 
 /* ---- Chart ---- */
@@ -926,15 +926,13 @@
 }
 
 
-@media (prefers-reduced-motion: reduce) {
-  .xp-settings-chevron,
-  .xp-spin,
-  .xp-loader,
-  .xp-stage,
-  .xp-bar {
-    animation: none;
-    transition: none;
-  }
+:root:is([data-motion="reduced"], [data-motion="off"]) .xp-settings-chevron,
+:root:is([data-motion="reduced"], [data-motion="off"]) .xp-spin,
+:root:is([data-motion="reduced"], [data-motion="off"]) .xp-loader,
+:root:is([data-motion="reduced"], [data-motion="off"]) .xp-stage,
+:root:is([data-motion="reduced"], [data-motion="off"]) .xp-bar {
+  animation: none;
+  transition: none;
 }
 
 /* ================================================================== */

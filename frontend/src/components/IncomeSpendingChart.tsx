@@ -58,6 +58,7 @@ import { MoneyFormatter, useMoneyFormatter, useSettings } from '../state/Setting
 import { Transaction } from '../types';
 import { Icon } from './Icon';
 import { Card, EmptyState, Segmented } from './ui';
+import { motionDuration, useEntranceMotion } from '../lib/motion';
 
 /* ------------------------------------------------------------------ */
 /* Geometry                                                            */
@@ -111,22 +112,11 @@ function compactLabel(value: number, locale: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * Recharts animates in JS, so the `prefers-reduced-motion` block in app.css
- * cannot reach it — the preference has to be read and passed as a prop.
+ * Recharts animates in JS, so the motion rules in CSS cannot reach it — the
+ * mode has to be read and passed as a prop. The bars grow in Full only.
  */
 function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return undefined;
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
-
-  return reduced;
+  return !useEntranceMotion();
 }
 
 /* ------------------------------------------------------------------ */
@@ -334,7 +324,7 @@ export function IncomeSpendingChart({
     </>
   );
 
-  const animation = { isAnimationActive: !reducedMotion, animationDuration: 420 };
+  const animation = { isAnimationActive: !reducedMotion, animationDuration: motionDuration('--dur-slow', 280) };
   const plotWidth = Math.max(1, flow.points.length) * MONTH_WIDTH;
 
   const chart = () => {

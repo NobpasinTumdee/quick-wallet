@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { Icon } from './Icon';
 import { cx } from '../lib/format';
+import { scrollBehavior } from '../lib/motion';
 
 /**
  * The balance hero, as a swipeable set of readings.
@@ -104,14 +105,10 @@ export function SwipeableBalanceCard({
   const goTo = useCallback((target: number) => {
     const element = scroller.current;
     if (!element) return;
-    /* Honour the OS setting: "smooth" is the browser's own animation, and
-       somebody who has asked for less motion should get the jump. */
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    /* "smooth" is the browser's own animation: Full motion only. */
     element.scrollTo({
       left: target * element.clientWidth,
-      behavior: reduced ? 'auto' : 'smooth',
+      behavior: scrollBehavior(),
     });
   }, []);
 

@@ -21,7 +21,7 @@ import {
   type LucideIcon,
   Smartphone,
 } from 'lucide-react';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefObject, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { refreshPrefixes } from '../api/cache';
@@ -44,7 +44,9 @@ import {
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
-import { Route, useRoute } from '../lib/router';
+import { Route, lastNavigationAt, useRoute } from '../lib/router';
+import { motionMode, setCustomizing } from '../lib/motion';
+import { cancelPageEntry, playPageEntry } from '../lib/pageEntry';
 import { BudgetsPage } from '../pages/BudgetsPage';
 import { CreditCardsPage } from '../pages/CreditCardsPage';
 import { SharedExpensesPage } from '../pages/SharedExpensesPage';
@@ -367,6 +369,54 @@ function DbStatusBanner() {
   );
 }
 
+/**
+ * The tab bar's active pill, drawn once on the bar (its ::before) at the
+ * active tab's box, so a change of tab glides it across instead of one
+ * background switching off and another on. At rest it is exactly where the
+ * active tab's own background was; the tab's background is cleared only while
+ * the pill is placed (data-pill), and with no active tab — a page that is not
+ * in the bar, or desktop where the bar is hidden — the bar is as before.
+ */
+function useTabbarPill(bar: RefObject<HTMLElement | null>, route: Route): void {
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!element) return undefined;
+    const place = () => {
+      const active = element.querySelector<HTMLElement>('.tabbar-item.is-active');
+      const box = active?.getBoundingClientRect();
+      if (!active || !box || !box.width) {
+        element.removeAttribute('data-pill');
+        return;
+      }
+      /* Layout size (fractional, and not shrunk by the tab's press scale)
+         around the box's centre, which that scale does not move; measured
+         from the bar's padding box, where ::before is placed. */
+      const style = getComputedStyle(active);
+      const width = parseFloat(style.width);
+      const height = parseFloat(style.height);
+      const frame = element.getBoundingClientRect();
+      const x = box.left + box.width / 2 - width / 2 - frame.left - element.clientLeft;
+      const y = box.top + box.height / 2 - height / 2 - frame.top - element.clientTop;
+      element.style.setProperty('--pill-x', `${x}px`);
+      element.style.setProperty('--pill-y', `${y}px`);
+      element.style.setProperty('--pill-w', `${width}px`);
+      element.style.setProperty('--pill-h', `${height}px`);
+      /* Placed without a glide the first time; glides from then on. */
+      if (!element.hasAttribute('data-pill')) {
+        element.setAttribute('data-pill', '');
+        requestAnimationFrame(() => {
+          if (element.hasAttribute('data-pill')) element.setAttribute('data-pill', 'on');
+        });
+      }
+    };
+    place();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+    observer?.observe(element);
+    element.querySelectorAll('.tabbar-item').forEach((item) => observer?.observe(item));
+    return () => observer?.disconnect();
+  }, [bar, route]);
+}
+
 export function AppShell() {
   const { t } = useTranslation();
   const [route, go] = useRoute();
@@ -516,6 +566,40 @@ export function AppShell() {
   const customizeLabel = route === 'analytics' ? t('layout.customizeLabelAnalytics') : t('layout.customizeLabel');
   const customizeButton = useRef<HTMLButtonElement | null>(null);
   const wasEditing = useRef(homeEditing);
+  /* Nothing makes an entrance while Customize is open (see lib/motion). */
+  useEffect(() => {
+    setCustomizing(homeEditing);
+    return () => setCustomizing(false);
+  }, [homeEditing]);
+
+  /* ---- The page entry ----
+     Only for a page the app was asked for a moment ago (lib/router records
+     each navigate()): Back, forward, Android back and the iOS swipe leave the
+     page still, as does the first page of a visit, a second change within
+     400ms and anything while Customize is open. Before paint, so the first
+     frame of the new page is already the entry's first frame. */
+  const mainRef = useRef<HTMLElement | null>(null);
+  const firstRoute = useRef(true);
+  const lastRouteChange = useRef(-Infinity);
+  useLayoutEffect(() => {
+    const now = performance.now();
+    const previous = lastRouteChange.current;
+    lastRouteChange.current = now;
+    cancelPageEntry();
+    if (firstRoute.current) {
+      firstRoute.current = false;
+      return;
+    }
+    const asked = now - lastNavigationAt() < 500;
+    if (!asked || now - previous < 400 || homeEditing) return;
+    playPageEntry(mainRef.current, motionMode());
+    // Once per route change; homeEditing is read, not watched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route]);
+
+  const tabbarRef = useRef<HTMLElement | null>(null);
+  useTabbarPill(tabbarRef, route);
+
   useEffect(() => {
     if (wasEditing.current && !homeEditing) {
       const active = document.activeElement;
@@ -720,7 +804,7 @@ export function AppShell() {
 
         {/* The explorer uses the full width: a chart builder beside a control
             panel is exactly the screen a 1320px cap was not designed for. */}
-        <main className={cx('page', route === 'deep-analytics' && 'page--wide')}>
+        <main ref={mainRef} className={cx('page', route === 'deep-analytics' && 'page--wide')}>
           <DbStatusBanner />
 
           {route === 'dashboard' && (
@@ -789,7 +873,7 @@ export function AppShell() {
         onSubmit={saveQuickTransaction}
       />
 
-      <nav className="tabbar" aria-label={t('nav.mainNavigation')}>
+      <nav ref={tabbarRef} className="tabbar" aria-label={t('nav.mainNavigation')}>
         {tabLeft.map(tab)}
         {/* An empty grid cell, not a wrapper: the centre button is a sibling of
             the bar, so it can sit above the backdrop its own menu raises. A

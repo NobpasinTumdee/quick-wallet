@@ -54,6 +54,26 @@
   />
 
   <!--
+    Motion: Full / Reduced / Off, chosen in Settings and saved per device
+    under qw.motion; nothing saved follows the OS (reduced when it asks for
+    less motion). Set before first paint so the first frame already obeys
+    it. Duplicates apply() in src/lib/motion.ts, which keeps it current.
+  -->
+  <script>
+    (function () {
+      var mode = null;
+      try {
+        mode = localStorage.getItem('qw.motion');
+      } catch (error) {
+        /* Storage blocked: follow the device. */
+      }
+      if (mode !== 'full' && mode !== 'reduced' && mode !== 'off') {
+        mode = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full';
+      }
+      document.documentElement.setAttribute('data-motion', mode);
+    })();
+  </script>
+  <!--
     Anti-FOUC. Blocking, inline, and in <head> on purpose: the palette lives in
     the user's Settings row behind an Apps Script round trip, so without this
     the app paints the hard-coded dark default and repaints one to three
