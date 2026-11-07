@@ -10,7 +10,9 @@ import {
 } from './DistributionControls';
 import { useDistributionRange } from '../hooks/useDistributionRange';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Card, Skeleton } from './ui';
+import { ANALYTICS_SKELETON_BODIES } from './skeleton/cardSkeletons';
+import { SkFrame } from './skeleton/Sk';
+import { Card } from './ui';
 
 /**
  * The distribution chart, plus the two controls that decide what it is of.
@@ -77,7 +79,7 @@ export function CategoryBoxPlotCard({
       }
     >
       {range.rows.initialLoading ? (
-        <Skeleton rows={5} />
+        <SkFrame className="sk-body">{ANALYTICS_SKELETON_BODIES.categoryBoxplot()}</SkFrame>
       ) : (
         <>
           <CategoryBoxPlot

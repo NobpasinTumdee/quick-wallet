@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { DebtForm, DebtPayload } from '../components/DebtForm';
 import { DebtPaymentModal } from '../components/DebtPaymentModal';
 import { Icon } from '../components/Icon';
-import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { useDebtManager } from '../hooks/useDebtManager';
 import { payoffEstimate } from '../lib/debtMath';
@@ -15,6 +14,7 @@ import { useMoneyFormatter } from '../state/SettingsContext';
 import { Debt } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
+import { DebtSkeleton } from '../components/skeleton/pageSkeletons';
 
 /**
  * Debt management.
@@ -152,9 +152,7 @@ export function DebtManagerPage() {
 
       {/* ---- The list ---- */}
       {debts.initialLoading ? (
-        <Card padded>
-          <ListSkeleton rows={3} />
-        </Card>
+        <DebtSkeleton />
       ) : debts.error && !debts.debts.length ? (
         <Card padded>
           <Alert tone="error">{debts.error}</Alert>

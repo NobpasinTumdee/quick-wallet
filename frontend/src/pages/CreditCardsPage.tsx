@@ -23,7 +23,6 @@ import { InstallmentForm, InstallmentPayload } from '../components/InstallmentFo
 import { PayBillForm, PayBillPayload } from '../components/PayBillForm';
 import { VirtualCard } from '../components/VirtualCard';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
-import { WalletGridSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { CardState, utilizationTone } from '../lib/creditMath';
 import { cx, formatDate, formatPercent } from '../lib/format';
@@ -31,6 +30,7 @@ import { useCreditCards } from '../hooks/useCreditCards';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
+import { CardsSkeleton } from '../components/skeleton/pageSkeletons';
 
 export function CreditCardsPage() {
   const { t } = useTranslation();
@@ -289,7 +289,7 @@ export function CreditCardsPage() {
       )}
 
       {credit.initialLoading ? (
-        <WalletGridSkeleton cards={2} />
+        <CardsSkeleton />
       ) : credit.error && !cards.length ? (
         <Card>
           <Alert tone="error">{credit.error}</Alert>

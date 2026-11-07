@@ -11,6 +11,7 @@ import {
   useCardBoard,
 } from '../components/CardBoard';
 import { Icon } from '../components/Icon';
+import { renderCardSkeleton } from '../components/skeleton/cardSkeletons';
 import { Card, EmptyState } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import {
@@ -113,17 +114,26 @@ export function AnalyticsPage({
     </button>
   );
 
-  /* One empty state for the page beats six cards each drawing their own
-     skeleton — this screen is read as a whole, not card by card. */
+  /* Each card's skeleton in its saved place and size, the Deep Analytics
+     link real (it needs no data), and one "Loading…" for the page. */
   if (initialLoading || monthTransactions.initialLoading) {
     return (
-      <Card title={t('analytics.title')} subtitle={t('analytics.subtitle')}>
-        <EmptyState
-          icon={<Icon icon={ChartNoAxesCombined} size="xl" />}
-          title={t('common.loading')}
-          description=""
+      <>
+        <CardBoardGrid
+          board={board}
+          lead={deep}
+          loading
+          renderCard={() => null}
+          skeleton={(id, sizeClass, minHeight) => renderCardSkeleton(id, { sizeClass, minHeight })}
+          empty={<CardBoardArrangeEmpty board={board} />}
         />
-      </Card>
+        {!board.layoutActive && board.placed.length > 0 && (
+          <div className="page-arrange">
+            <CardBoardArrangeLink board={board} />
+          </div>
+        )}
+        <CardBoardArrange board={board} />
+      </>
     );
   }
 

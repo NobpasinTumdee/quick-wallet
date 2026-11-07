@@ -42,6 +42,7 @@ import { cx, formatPercent, todayKey } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Goal, WalletBalance } from '../types';
+import { GoalsSkeleton } from '../components/skeleton/pageSkeletons';
 
 /**
  * Sinking funds — virtual envelopes.
@@ -678,36 +679,4 @@ export function GoalsPage() {
       </>
     );
   }
-}
-
-/**
- * The page's own shape, shimmering: the allocation strip and three cards.
- * Sized like the real thing so nothing jumps when the data lands.
- */
-function GoalsSkeleton() {
-  return (
-    <div className="goals-skeleton" aria-busy="true">
-      <div className="alloc sk-card">
-        <div className="alloc-figures">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="alloc-figure">
-              <span className="sk" style={{ width: '45%', height: 10 }} />
-              <span className="sk sk-strong" style={{ width: '70%', height: 26 }} />
-            </div>
-          ))}
-        </div>
-        <span className="sk" style={{ width: '100%', height: 8 }} />
-      </div>
-      <div className="goal-grid goal-grid--skeleton">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="goal-card sk-card">
-            <span className="sk sk-strong" style={{ width: '60%', height: 16 }} />
-            <span className="sk" style={{ width: '100%', height: 8 }} />
-            <span className="sk" style={{ width: '40%', height: 12 }} />
-            <span className="sk" style={{ width: '50%', height: 30, marginTop: 8 }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }

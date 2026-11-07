@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
 import { Icon } from '../components/Icon';
-import { ListSkeleton } from '../components/Skeletons';
 import { SubscriptionHeatmapCard } from '../components/SubscriptionHeatmapCard';
 import { TranslationKey } from '../locales';
 import { SubscriptionForm, SubscriptionPayload } from '../components/SubscriptionForm';
@@ -30,6 +29,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { Subscription, WalletBalance } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
+import { RecurringSkeleton } from '../components/skeleton/pageSkeletons';
 
 type Bucket = 'due' | 'soon' | 'later';
 
@@ -236,9 +236,7 @@ export function SubscriptionsPage({ onNavigate }: { onNavigate?: (route: Route) 
       {subscriptions.items.length > 0 && <SubscriptionHeatmapCard period={currentPeriod()} onNavigate={onNavigate} />}
 
       {subscriptions.initialLoading ? (
-        <Card padded>
-          <ListSkeleton rows={4} />
-        </Card>
+        <RecurringSkeleton />
       ) : subscriptions.error && !subscriptions.items.length ? (
         <Card padded>
           <Alert tone="error">{subscriptions.error}</Alert>

@@ -71,6 +71,7 @@ import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
 import { Alert, Button, RefreshButton } from './ui';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
+import { DeepFrameSkeleton, WidgetsFrameSkeleton } from './skeleton/pageSkeletons';
 
 /**
  * ---------------------------------------------------------------------------
@@ -754,12 +755,12 @@ export function AppShell() {
             />
           )}
           {route === 'deep-analytics' && (
-            <Suspense fallback={<div className="deep-loading-page" role="status" aria-label={t('common.loading')} />}>
+            <Suspense fallback={<DeepFrameSkeleton />}>
               <DeepAnalyticsPage onNavigate={go} />
             </Suspense>
           )}
           {route === 'widgets' && (
-            <Suspense fallback={<div className="deep-loading-page" role="status" aria-label={t('common.loading')} />}>
+            <Suspense fallback={<WidgetsFrameSkeleton />}>
               <WidgetsPage />
             </Suspense>
           )}

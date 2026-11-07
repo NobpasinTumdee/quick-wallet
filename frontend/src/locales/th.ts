@@ -1258,7 +1258,6 @@ export const th: TranslationSchema = {
     projection: 'คาดการณ์มูลค่าสุทธิ',
     openInAnalytics: 'เปิด {{title}} ในหน้าวิเคราะห์',
     openInAnalyticsShort: 'เปิดในหน้าวิเคราะห์',
-    loadingCard: 'กำลังโหลด {{title}}',
   },
 
   analytics: {

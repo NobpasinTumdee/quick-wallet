@@ -51,6 +51,7 @@ import {
   TrendPoint,
   buildMonthlyCashFlow,
 } from '../lib/cashflow';
+import { CHART_HEIGHT, MONTH_WIDTH } from '../lib/incomeChartGeometry';
 import { FILL_THROTTLE_MS, useFillHeight } from '../hooks/useFillHeight';
 import { cx } from '../lib/format';
 import { MoneyFormatter, useMoneyFormatter, useSettings } from '../state/SettingsContext';
@@ -62,11 +63,8 @@ import { Card, EmptyState, Segmented } from './ui';
 /* Geometry                                                            */
 /* ------------------------------------------------------------------ */
 
-const CHART_HEIGHT = 268;
 /** The shortest plot a filling chart is given, however small its card. */
 const MIN_FILL_HEIGHT = 140;
-/** Room for two bars, two compact labels and a month tick without collisions. */
-const MONTH_WIDTH = 92;
 /** Headroom above the tallest mark so its label is not clipped by the frame. */
 const HEADROOM = 1.22;
 /** Scales the shared gradients down where the two area fills overlap. */

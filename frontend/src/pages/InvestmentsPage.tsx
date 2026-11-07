@@ -37,7 +37,6 @@ import {
   RefreshButton,
   Segmented,
   Select,
-  Skeleton,
   StatCard,
   parseDecimal,
 } from '../components/ui';
@@ -62,6 +61,7 @@ import { Investment, WalletBalance, WatchlistItem } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
+import { InvestmentsSkeleton, ListRegionSkeleton } from '../components/skeleton/pageSkeletons';
 
 /* lightweight-charts is ~180kB, and the indicator maths and terminal ride
    along with it — all of it behind one dynamic import, so the main bundle
@@ -482,11 +482,7 @@ export function InvestmentsPage() {
   }
 
   if (investments.initialLoading || wallets.initialLoading) {
-    return (
-      <Card title={t('invest.loadingPositions')}>
-        <Skeleton rows={5} />
-      </Card>
-    );
+    return <InvestmentsSkeleton />;
   }
 
   if (investmentWallets.length === 0) {
@@ -1292,9 +1288,7 @@ export function InvestmentsPage() {
           )}
 
           {watchlist.initialLoading ? (
-            <div className="card-body">
-              <Skeleton rows={4} />
-            </div>
+            <ListRegionSkeleton page="watchlist" className="card-body" />
           ) : watchlist.items.length === 0 ? (
             <EmptyState
               icon={<Icon icon={Eye} size="xl" />}

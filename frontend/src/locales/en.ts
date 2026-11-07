@@ -1296,7 +1296,6 @@ export const en = {
     /* On an Analytics card shown on Home. */
     openInAnalytics: 'Open {{title}} in Analytics',
     openInAnalyticsShort: 'Open in Analytics',
-    loadingCard: 'Loading {{title}}',
   },
 
   analytics: {

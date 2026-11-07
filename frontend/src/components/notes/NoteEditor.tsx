@@ -65,7 +65,7 @@ import { useSettings } from '../../state/SettingsContext';
 import { Note, NoteRef, NoteRefType } from '../../types';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
-import { Button, Portal, Skeleton } from '../ui';
+import { Button, Portal } from '../ui';
 import { EmbedDialog } from './EmbedDialog';
 import { LinkDialog, LinkTab } from './LinkDialog';
 import { FormatCommand, HistoryState, MOD_IS_META, NoteFormatBar } from './NoteFormatBar';
@@ -74,6 +74,7 @@ import { NoteRefChips } from './NoteRefChips';
 import { NoteRefPicker } from './NoteRefPicker';
 import { SlashItem, SlashMenu, filterSlashItems } from './SlashMenu';
 import { RefOption, useRefLists } from './useNoteRefData';
+import { NoteBodySkeleton } from '../skeleton/pageSkeletons';
 
 /* The Markdown parser is the heavy part of a note, so it loads on its own —
    only when a note is opened to read. */
@@ -920,7 +921,7 @@ export function NoteEditor({
         </>
       ) : (
         <div ref={readRef} className="note-read" aria-label={t('notes.bodyLabel')}>
-          <Suspense fallback={<Skeleton rows={4} />}>
+          <Suspense fallback={<NoteBodySkeleton page="note-editor" remember={false} />}>
             <MarkdownView
               source={draft.body}
               noteExists={linkedNoteExists}

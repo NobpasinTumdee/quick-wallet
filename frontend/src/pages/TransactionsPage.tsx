@@ -7,7 +7,6 @@ import { TransactionForm, TransactionPayload } from '../components/TransactionFo
 import { FilterCount, TYPE_LABELS as TYPE_BADGE, TransactionFilters } from '../components/TransactionFilters';
 import { Icon } from '../components/Icon';
 import { ToolPanel } from '../components/notes/ToolPanel';
-import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton, useOverlay } from '../components/ui';
 import { isOptimistic, useExcelDB } from '../hooks/useExcelDB';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -31,6 +30,7 @@ import { Transaction, WalletBalance } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
 import { downloadCsv, toCsv } from '../lib/csv';
+import { ActivitySkeleton } from '../components/skeleton/pageSkeletons';
 
 /**
  * Shown beside the title, so the header describes what is actually on screen.
@@ -399,7 +399,7 @@ export function TransactionsPage({ period }: { period: string }) {
         )}
 
         {transactions.initialLoading ? (
-          <ListSkeleton rows={6} />
+          <ActivitySkeleton desktop={desktop} mobileV2={mobileV2} />
         ) : transactions.error && !transactions.items.length ? (
           <div className="card-body">
             <Alert tone="error">{transactions.error}</Alert>

@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next';
 import { BillSplitterForm } from '../components/BillSplitterForm';
 import { RepaymentModal } from '../components/RepaymentModal';
 import { Icon } from '../components/Icon';
-import { ListSkeleton } from '../components/Skeletons';
 import {
   Alert,
   Badge,
@@ -37,6 +36,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BillSplit } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
+import { SharedSkeleton } from '../components/skeleton/pageSkeletons';
 
 export function SharedExpensesPage() {
   const { t } = useTranslation();
@@ -312,9 +312,7 @@ export function SharedExpensesPage() {
       )}
 
       {splitter.initialLoading ? (
-        <Card padded>
-          <ListSkeleton rows={4} />
-        </Card>
+        <SharedSkeleton />
       ) : splitter.error && !splitter.bills.length ? (
         <Card padded>
           <Alert tone="error">{splitter.error}</Alert>

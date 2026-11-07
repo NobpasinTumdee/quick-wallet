@@ -7,6 +7,8 @@ import { Icon } from './Icon';
 import { Button } from './ui';
 import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { cx } from '../lib/format';
+import { heightScope, rememberHeights, rememberedHeight } from '../lib/skeletonHeights';
+import { useMobileV2 } from '../lib/mobileLayout';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import type { ArrangeEntryTexts, ArrangeTexts } from '../lib/layout/arrangeTexts';
 import type { CatalogCardDef, CatalogCardId } from '../lib/layout/cardCatalog';
@@ -145,7 +147,9 @@ export function useCardBoard<Id extends string>(config: CardBoardConfig<Id>, use
       const children = gridElement ? (Array.from(gridElement.children) as HTMLElement[]).slice(config.leadCount ?? 0) : [];
       const heights: Record<string, number> = {};
       let drawn: DrawnPositions | undefined;
-      if (gridElement && children.length === visible.length) {
+      /* Not from skeletons (Customize pressed while the page loads): order packing, as before. */
+      const drawnReal = gridElement !== null && !gridElement.querySelector('.sk-card');
+      if (gridElement && drawnReal && children.length === visible.length) {
         const frame = gridElement.getBoundingClientRect();
         const style = getComputedStyle(gridElement);
         const left = frame.left + (parseFloat(style.paddingLeft) || 0) + gridElement.clientLeft;
@@ -228,6 +232,8 @@ export function useCardBoard<Id extends string>(config: CardBoardConfig<Id>, use
 
   return {
     config,
+    /** Whose skeleton heights these are (see skeletonHeights.ts). */
+    userId,
     layoutActive,
     isCustom,
     gridMetrics,
@@ -259,20 +265,30 @@ export function CardBoardGrid<Id extends string>({
   renderCard,
   lead,
   empty,
+  loading = false,
+  skeleton,
 }: {
   board: CardBoardState<Id>;
   renderCard: (id: Id, sizeClass: string, tall: boolean, fill: boolean) => ReactNode;
   lead?: ReactNode;
   empty: ReactNode;
+  /** The page's data is not here yet: each card draws `skeleton` in its own place and size. */
+  loading?: boolean;
+  /** A card's skeleton; `minHeight` is its height when it last loaded on this screen (flow layouts). */
+  skeleton?: (id: Id, sizeClass: string, minHeight: number | undefined, tall: boolean) => ReactNode;
 }) {
   const { t } = useTranslation();
   const { config, layoutActive, isCustom, placedLayout, placed, setGridElement } = board;
+  const mobileV2 = useMobileV2();
+  const skeletons = loading && skeleton !== undefined;
 
-  /* The top bar offers Customize while the cards are on screen. */
+  /* The top bar offers Customize while the cards are on screen — once they
+     are real: the editor works on loaded cards. */
   useEffect(() => {
+    if (skeletons) return undefined;
     setLayoutAvailable(config.editPage, true);
     return () => setLayoutAvailable(config.editPage, false);
-  }, [config.editPage]);
+  }, [config.editPage, skeletons]);
 
   /* Open in Analytics: the card asked for, once the grid is drawn. Its
      element is found by position, so the page's markup needs no ids: a
@@ -284,7 +300,7 @@ export function CardBoardGrid<Id extends string>({
   useEffect(() => {
     const want = pendingReveal.get(config.editPage);
     const grid = gridRef.current;
-    if (want === undefined || !grid) return undefined;
+    if (want === undefined || !grid || skeletons) return undefined;
     const index = ids.indexOf(want);
     /* Taken inside the frame, so an effect that is cleaned up before it runs
        (StrictMode, a quick re-render) leaves the request for the next one. */
@@ -304,6 +320,31 @@ export function CardBoardGrid<Id extends string>({
     });
     return () => window.cancelAnimationFrame(frame);
   });
+  /* Skeleton heights: where the layout does not fix a card's height (flow
+     layouts, phones), each card's drawn height once the page has loaded and
+     settled, kept for its skeleton next time (skeletonHeights.ts). */
+  const scope = heightScope(config.editPage, typeof window === 'undefined' ? 0 : window.innerWidth, mobileV2);
+  const idKey = ids.join(',');
+  useEffect(() => {
+    if (skeletons || board.editing || placedLayout || !board.userId) return undefined;
+    const timer = window.setTimeout(() => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const heights: Record<string, number> = {};
+      ids.forEach((id, index) => {
+        const element = grid.children[leadInGrid + index] as HTMLElement | undefined;
+        if (element) heights[id] = element.getBoundingClientRect().height;
+      });
+      rememberHeights(board.userId, scope, heights);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skeletons, board.editing, placedLayout, board.userId, scope, idKey, leadInGrid]);
+
+  /** A card, or its skeleton while the page loads. */
+  const draw = (id: Id, sizeClass: string, tall: boolean, fill: boolean) =>
+    skeletons ? skeleton!(id, sizeClass, fill ? undefined : rememberedHeight(board.userId, scope, id), tall) : renderCard(id, sizeClass, tall, fill);
+
   const attachGrid = (element: HTMLDivElement | null) => {
     gridRef.current = element;
     setGridElement(element);
@@ -339,7 +380,7 @@ export function CardBoardGrid<Id extends string>({
       <div ref={attachGrid} className="bento layout-12 is-custom is-placed">
         {readingOrder(placedLayout.cards).map((card) => (
           <div key={card.id} className="lplace" style={gridArea(card)}>
-            {card.collapsed ? collapsedBar(card.id, '') : renderCard(card.id, '', false, true)}
+            {card.collapsed ? collapsedBar(card.id, '') : draw(card.id, '', false, true)}
           </div>
         ))}
       </div>
@@ -357,12 +398,23 @@ export function CardBoardGrid<Id extends string>({
       {lead}
       {placed.map((item) => (
         <Fragment key={item.id}>
-          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : renderCard(item.id, item.sizeClass, item.tall, false)}
+          {item.collapsed ? collapsedBar(item.id, item.sizeClass) : draw(item.id, item.sizeClass, item.tall, false)}
         </Fragment>
       ))}
     </div>
   );
 
+  /* One polite "Loading…" for the page; the skeletons are hidden from screen readers. */
+  if (skeletons) {
+    return (
+      <>
+        {plainBento}
+        <span className="sr-only" role="status">
+          {t('common.loading')}
+        </span>
+      </>
+    );
+  }
   if (!(board.editing && board.draft)) return plainBento;
   const draft = board.draft;
   return (

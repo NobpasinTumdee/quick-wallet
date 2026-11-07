@@ -7,7 +7,6 @@ import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { WalletForm, WalletPayload } from '../components/WalletForm';
 import { Icon } from '../components/Icon';
 import { TileAmount } from '../components/TileAmount';
-import { WalletGridSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, RefreshButton } from '../components/ui';
 import { ApiError } from '../api/client';
 import { isOptimistic } from '../hooks/useExcelDB';
@@ -16,6 +15,7 @@ import { cx } from '../lib/format';
 import { useMobileV2 } from '../lib/mobileLayout';
 import { useMoneyFormatter } from '../state/SettingsContext';
 import { WalletBalance } from '../types';
+import { WalletsSkeleton } from '../components/skeleton/pageSkeletons';
 
 export function WalletsPage() {
   const { t } = useTranslation();
@@ -379,7 +379,7 @@ export function WalletsPage() {
       )}
 
       {wallets.initialLoading ? (
-        <WalletGridSkeleton cards={3} />
+        <WalletsSkeleton />
       ) : wallets.error && !wallets.items.length ? (
         <Card>
           <Alert tone="error">{wallets.error}</Alert>

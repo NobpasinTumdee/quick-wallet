@@ -140,6 +140,14 @@
   --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
   --dur-sheet: 260ms;
 
+  /* Skeletons: a block, a stronger block (headline figures), the sweep's
+     sheen (towards the surface, so it reads in light, dark and pastel) and
+     its period. */
+  --sk-base: color-mix(in srgb, var(--text) 7%, transparent);
+  --sk-strong: color-mix(in srgb, var(--text) 11%, transparent);
+  --sk-sheen: color-mix(in srgb, var(--surface) 72%, transparent);
+  --sk-sweep-dur: 1.4s;
+
   /* ---------- layers ----------
      One scale for everything that floats. A new fixed element picks a step
      here instead of a number, so nothing can quietly land behind the tab bar

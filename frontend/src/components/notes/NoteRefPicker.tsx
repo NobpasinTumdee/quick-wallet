@@ -7,9 +7,10 @@ import { NAV_LABEL_KEYS } from '../../lib/navLabels';
 import { NOTE_REF_ROUTE, NOTE_REF_TYPES, NOTE_REFS_MAX, sameRef } from '../../lib/notes';
 import { NoteRef, NoteRefType } from '../../types';
 import { Icon } from '../Icon';
-import { Button, Modal, Segmented, Skeleton } from '../ui';
+import { Button, Modal, Segmented } from '../ui';
 import { NOTE_REF_ICON } from './noteRefIcons';
 import { ACTIVITY_LIMIT, useRefLists } from './useNoteRefData';
+import { ListRegionSkeleton } from '../skeleton/pageSkeletons';
 
 /** Rows drawn per tab. A search narrows the rest in; nobody scrolls 2,000. */
 const VISIBLE_ROWS = 150;
@@ -131,7 +132,7 @@ export function NoteRefPicker({
         )}
 
         {list.loading ? (
-          <Skeleton rows={4} />
+          <ListRegionSkeleton page="note-ref" remember={false} />
         ) : list.error ? (
           <p className="note-picker-empty">{t('notes.pickerLoadError')}</p>
         ) : list.options.length === 0 ? (

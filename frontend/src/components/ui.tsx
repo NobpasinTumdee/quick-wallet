@@ -497,16 +497,6 @@ export function EmptyState({
   );
 }
 
-export function Skeleton({ rows = 3 }: { rows?: number }) {
-  return (
-    <div className="skeleton" aria-hidden="true">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="skeleton-row" />
-      ))}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Overlays                                                            */
 /* ------------------------------------------------------------------ */

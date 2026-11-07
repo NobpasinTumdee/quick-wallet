@@ -4,9 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { renderAnalyticsCard } from './AnalyticsCards';
 import { revealCardOn } from './CardBoard';
 import { Icon } from './Icon';
-import { Button, Card, Skeleton } from './ui';
+import { renderCardSkeleton } from './skeleton/cardSkeletons';
+import { Button } from './ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
-import { cx } from '../lib/format';
 import type { AnalyticsCardId } from '../lib/layout/analyticsCards';
 import { ANALYTICS_EDIT_PAGE } from '../lib/layout/homeEditStore';
 import type { TranslationKey } from '../locales/en';
@@ -18,18 +18,6 @@ import type { DashboardSummary, Transaction, WalletBalance } from '../types';
 const NEEDS_MONTH = new Set<AnalyticsCardId>(['categoryTree', 'spendHeatmap', 'payees', 'sankey']);
 /** The cards drawn from the dashboard payload (Home loads it already, same request). */
 const NEEDS_DASHBOARD = new Set<AnalyticsCardId>(['savingsRate', 'projection']);
-/** The width class each card has on Analytics, for its skeleton. */
-const BASE_CLASS: Record<AnalyticsCardId, string> = {
-  bills: 'bento-item--full',
-  savingsRate: 'bento-item',
-  categoryPie: 'bento-item--half',
-  categoryTree: 'bento-item--half',
-  spendHeatmap: 'bento-item--half',
-  categoryBoxplot: 'bento-item--full',
-  payees: 'bento-item--half',
-  sankey: 'bento-item--full',
-  projection: 'bento-item--full',
-};
 
 /**
  * A copy of an Analytics card on Home. Mounted only for a card that has been
@@ -78,20 +66,11 @@ export function HomeAnalyticsCard({
     </Button>
   );
 
-  /* Nothing cached yet: the card's frame at its own size, not a page-wide
-     spinner (Home's other cards are already up). The Sankey draws its own frame. */
+  /* Nothing cached yet: the card's own skeleton at its size (Home's other
+     cards are already up). The Sankey draws its own frame. */
   const loading =
     (needsMonth && id !== 'sankey' && monthTransactions.initialLoading) || (needsDashboard && dashboard.initialLoading);
-  if (loading) {
-    return (
-      <Card className={cx(BASE_CLASS[id], sizeClass, 'acard-skeleton')} title={title} actions={open}>
-        <span className="sr-only" role="status">
-          {t('catalog.loadingCard', { title })}
-        </span>
-        <Skeleton rows={4} />
-      </Card>
-    );
-  }
+  if (loading) return <>{renderCardSkeleton(id, { sizeClass })}</>;
 
   return (
     <>

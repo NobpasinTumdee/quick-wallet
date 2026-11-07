@@ -10,7 +10,9 @@ import {
 } from './DistributionControls';
 import { useDistributionRange } from '../hooks/useDistributionRange';
 import { useMoneyFormatter } from '../state/SettingsContext';
-import { Card, Skeleton } from './ui';
+import { ANALYTICS_SKELETON_BODIES } from './skeleton/cardSkeletons';
+import { SkFrame } from './skeleton/Sk';
+import { Card } from './ui';
 
 /**
  * The donut, the range it is drawn over, and which categories count.
@@ -68,7 +70,7 @@ export function CategoryPieChartCard({
       }
     >
       {range.rows.initialLoading ? (
-        <Skeleton rows={4} />
+        <SkFrame className="sk-body">{ANALYTICS_SKELETON_BODIES.categoryPie()}</SkFrame>
       ) : (
         <>
           <CategoryPieChart

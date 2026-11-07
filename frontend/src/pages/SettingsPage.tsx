@@ -45,6 +45,7 @@ import { toast } from '../lib/toast';
 import { useAuth } from '../state/AuthContext';
 import { useSettings } from '../state/SettingsContext';
 import { DbHealth } from '../types';
+import { SettingsHealthSkeleton } from '../components/skeleton/pageSkeletons';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -389,7 +390,11 @@ export function SettingsPage() {
             </div>
           </div>
         ) : (
-          <p className="text-muted">{t('settings.checkingBackend')}</p>
+          health.initialLoading ? (
+            <SettingsHealthSkeleton />
+          ) : (
+            <p className="text-muted">{t('settings.checkingBackend')}</p>
+          )
         )}
       </Card>
 

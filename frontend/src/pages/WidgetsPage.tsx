@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
-import { Alert, Badge, Button, Card, EmptyState, Modal, RefreshButton, Skeleton } from '../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, Modal, RefreshButton } from '../components/ui';
 import { CopyField } from '../components/widgets/CopyField';
 import { WidgetSetupGuide } from '../components/widgets/WidgetSetupGuide';
 import { WidgetTokenForm } from '../components/widgets/WidgetTokenForm';
@@ -16,6 +16,7 @@ import { cx } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useSettings } from '../state/SettingsContext';
 import { WidgetToken, WidgetTokenPayload, WidgetTokenSecret } from '../types';
+import { ListRegionSkeleton } from '../components/skeleton/pageSkeletons';
 
 const MAX_ACTIVE = 10;
 
@@ -130,7 +131,7 @@ export default function WidgetsPage() {
         subtitle={t('widgets.tokensCount', { count: active.length, max: MAX_ACTIVE })}
       >
         {tokens.initialLoading ? (
-          <Skeleton rows={2} />
+          <ListRegionSkeleton page="widgets" rows={2} />
         ) : !tokens.items.length ? (
           <EmptyState
             icon={<Icon icon={Smartphone} size="xl" />}

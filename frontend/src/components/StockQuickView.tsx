@@ -2,13 +2,13 @@ import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Alert, Button, Modal } from './ui';
-import { ListSkeleton } from './Skeletons';
 import { cx, formatPercent } from '../lib/format';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { useCandles } from '../hooks/useCandles';
 import { useSettings } from '../state/SettingsContext';
 import { formatMoney } from '../lib/format';
 import { Quote } from '../types';
+import { ListRegionSkeleton } from './skeleton/pageSkeletons';
 
 /* The chart is the heaviest thing on this screen and most quick looks never
    scroll to it, so it stays behind its own dynamic import — the same one the
@@ -85,7 +85,7 @@ export function StockQuickView({
         </>
       }
     >
-      {loading && <ListSkeleton rows={3} />}
+      {loading && <ListRegionSkeleton page="stock-quick" rows={3} remember={false} />}
 
       {!loading && error && <Alert tone="error">{error}</Alert>}
 

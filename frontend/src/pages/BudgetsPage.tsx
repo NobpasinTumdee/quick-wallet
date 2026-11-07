@@ -6,7 +6,6 @@ import { invalidate, mutateMatching } from '../api/cache';
 import { Icon } from '../components/Icon';
 import { api } from '../api/client';
 import { BudgetForm, BudgetPayload } from '../components/BudgetForm';
-import { ListSkeleton } from '../components/Skeletons';
 import { Alert, Badge, Button, Card, EmptyState, ProgressBar, RefreshButton } from '../components/ui';
 import { isOptimistic, useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { formatPercent, formatPeriod, shiftPeriod } from '../lib/format';
@@ -15,6 +14,7 @@ import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { BudgetProgress, BudgetResponse, WalletBalance } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
+import { BudgetsSkeleton } from '../components/skeleton/pageSkeletons';
 
 export function BudgetsPage({ period }: { period: string }) {
   const { t } = useTranslation();
@@ -279,7 +279,7 @@ export function BudgetsPage({ period }: { period: string }) {
 
       <Card padded={initialLoading || Boolean(error) || budgets.length === 0}>
         {initialLoading ? (
-          <ListSkeleton rows={4} />
+          <BudgetsSkeleton />
         ) : error && !budgets.length ? (
           <Alert tone="error">{error}</Alert>
         ) : budgets.length === 0 ? (

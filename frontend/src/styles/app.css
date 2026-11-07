@@ -1528,94 +1528,273 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
   line-height: 1.6;
 }
 
-/* ---- Skeletons ----
-   A single shimmering surface reused at every size. Blocks are sized to match
-   the real component so nothing shifts when the data arrives. */
+/* ---- Skeletons (components/skeleton) ----
+   Blocks drawn inside the real elements, so a loading card takes the loaded
+   card's room. Still blocks; the movement is one sweep layer per skeleton
+   card (.sk-sweep), a band moved with transform and masked to that card's
+   blocks, so no block repaints while it waits. Colours and the period are
+   theme tokens (--sk-*). */
 .sk {
   display: block;
   flex: none;
   border-radius: var(--radius-xs);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--text) 6%, transparent) 0%,
-    color-mix(in srgb, var(--text) 11%, transparent) 40%,
-    color-mix(in srgb, var(--text) 6%, transparent) 80%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s var(--ease-in-out) infinite;
+  background: var(--sk-base);
+}
+
+/* A block that borrows a real class for its size (an avatar, a button, the
+   tax link) keeps that size but not its colour or frame. */
+:root .sk.avatar,
+:root .sk.tax-cta,
+:root .sk.home-action,
+:root .sk.analytics-cta-mark,
+:root .sk.range-tab,
+:root .sk.xp-mark,
+/* The new phone layout styles these with :root.ui-mobile-v2; still a block. */
+:root.ui-mobile-v2 .sk.home-action,
+:root.ui-mobile-v2 .sk.tax-cta {
+  border-color: transparent;
+  background: var(--sk-base);
+  box-shadow: none;
+  color: transparent;
+}
+
+/* An input's frame drawn on a span (Settings): an input is a block of its
+   own line height, so the span is too. */
+.sk-card span.control {
+  display: block;
+  line-height: normal;
 }
 
 /* Headline figures read as more solid than their supporting text. */
 .sk-strong {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--text) 10%, transparent) 0%,
-    color-mix(in srgb, var(--text) 17%, transparent) 40%,
-    color-mix(in srgb, var(--text) 10%, transparent) 80%
-  );
-  background-size: 200% 100%;
+  background: var(--sk-strong);
 }
 
 .sk-avatar {
   border-radius: var(--radius-md);
 }
 
-/* Cards keep their frame while loading so the grid never reflows. */
-.sk-card {
-  pointer-events: none;
+/* A line of text: the element keeps its class (and line height); the block
+   stands where the words will be. */
+.sk-t .sk-ink {
+  display: inline-block;
+  max-width: 100%;
+  height: 0.72em;
+  vertical-align: middle;
 }
 
-.sk-hero {
+/* A skeleton region: the real frame, inert, and only after 150ms — a load
+   that finishes sooner never shows it, while its room is held from the first
+   frame. Opacity only, nothing left behind once it ends. */
+.sk-card,
+.card.sk-card,
+.bento > .sk-card,
+.page > .sk-card {
+  position: relative;
   pointer-events: none;
+  user-select: none;
+  animation: sk-appear var(--dur-fast) var(--ease-out) 150ms backwards;
+}
+
+@keyframes sk-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+.sk-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.sk-band {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  background: linear-gradient(90deg, transparent, var(--sk-sheen), transparent);
+  transform: translateX(-100%);
+  animation: sk-sweep var(--sk-sweep-dur) linear infinite;
+  will-change: transform;
+}
+
+@keyframes sk-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(200%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-band {
+    display: none;
+  }
+}
+
+/* ---- Shapes ---- */
+.sk-btn {
+  height: 29px;
+}
+
+/* A segmented control (Segmented): its 44px touch height. */
+.sk-seg {
+  height: 44px;
+  border-radius: 999px;
+}
+
+/* A category pill under a chart. */
+.sk-chip {
+  height: 29px;
+  border-radius: 999px;
+}
+
+/* A legend row beside the donut (the real rows' height). */
+.sk-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  height: 24px;
+}
+
+.sk-centre {
+  text-align: center;
+}
+
+.sk-btn--icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.sk-pill {
+  height: 22px;
+  border-radius: 999px;
+}
+
+.sk-bar-h {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.share-track.sk-track {
+  background: none;
+}
+
+.sk-track > .sk-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.sk.home-action {
+  min-height: 44px;
+}
+
+.sk.tax-cta {
+  width: min(100%, 15em);
+  height: 38px;
+}
+
+.balance-track.sk-static {
+  overflow: hidden;
 }
 
 .sk-chart {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
-  height: 190px;
+  gap: var(--space-2);
   padding-top: var(--space-3);
+  border-bottom: 1px solid var(--divider);
 }
 
-.sk-bar {
+.sk-chart-col {
+  display: flex;
   flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
   min-width: 0;
-  border-radius: var(--radius-xs) var(--radius-xs) 2px 2px;
+  height: 100%;
 }
 
-/* Stagger the shimmer so the screen breathes instead of pulsing as one block. */
-.sk-card:nth-child(2) .sk { animation-delay: 120ms; }
-.sk-card:nth-child(3) .sk { animation-delay: 240ms; }
-.sk-card:nth-child(4) .sk { animation-delay: 360ms; }
+.sk-chart-bar {
+  flex: 1;
+  max-width: 18px;
+  border-radius: 3px 3px 1px 1px;
+}
+
+.sk-boxplot .sk-box {
+  width: 40%;
+  max-width: 36px;
+}
+
+.sk-donut {
+  width: min(168px, 42%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.sk-cell {
+  aspect-ratio: 1;
+  border-radius: 4px;
+}
+
+.sk-tree {
+  display: grid;
+  grid-template-areas: 'a a b' 'a a c' 'd e c';
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 4px;
+  height: 240px;
+}
+
+.sk-tile {
+  border-radius: var(--radius-sm);
+}
+
+.sk-sankey {
+  display: flex;
+  justify-content: space-between;
+  height: 300px;
+}
+
+.sk-sankey-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+}
+
+.sk-node {
+  width: 14px;
+  border-radius: 3px;
+}
+
+.sk-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.sk-table-row:last-child {
+  border-bottom: 0;
+}
 
 /* A row that exists locally but hasn't been confirmed by the server yet. */
 .is-pending {
   opacity: 0.62;
   animation: pending-pulse 1.6s var(--ease-in-out) infinite;
-}
-
-/* Quiet marker that cached data is being refreshed behind the scenes. */
-.skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.skeleton-row {
-  height: 14px;
-  border-radius: var(--radius-xs);
-  background: linear-gradient(
-    90deg,
-    var(--surface-2) 0%,
-    var(--surface-3) 40%,
-    var(--surface-2) 80%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s var(--ease-in-out) infinite;
-}
-
-.skeleton-row:nth-child(even) {
-  width: 82%;
 }
 
 /* ==========================================================================
@@ -6445,15 +6624,6 @@ line.arate-zero {
 
 .deep-entry-arrow {
   color: var(--text-faint);
-}
-
-/* Held in place while the explorer page downloads. Sized like the page will
-   be, so the layout does not jump when it arrives. */
-.deep-loading-page {
-  min-height: min(70vh, 640px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
 }
 
 /* The explorer takes the full width: a control panel beside a chart builder is
@@ -17342,15 +17512,6 @@ table.data.tx-table tbody tr.tx-day-row:hover {
 
 .arrange-addable .arrange-actions .btn {
   min-height: 44px;
-}
-
-/* An Analytics card on Home while its month loads: its own size. */
-.acard-skeleton {
-  min-height: var(--acard-min-h, auto);
-}
-
-.lplace > .acard-skeleton {
-  height: 100%;
 }
 
 .arrange-foot {

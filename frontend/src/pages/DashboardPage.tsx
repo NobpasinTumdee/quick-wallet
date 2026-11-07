@@ -12,13 +12,15 @@ import {
   Unlock,
   Wallet,
 } from 'lucide-react';
-import { ReactNode, Suspense, useMemo, useState } from 'react';
+import { ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
 import { TileAmount } from '../components/TileAmount';
 import { RecordedAt } from '../components/RecordedAt';
-import { DashboardSkeleton } from '../components/Skeletons';
+import { HomeHeroSkeleton, HomeMetricsSkeleton, renderCardSkeleton } from '../components/skeleton/cardSkeletons';
+import { heightScope, rememberHeights, rememberedHeight } from '../lib/skeletonHeights';
+import { HISTORY_MONTHS, TALL_CHART_HEIGHT } from '../lib/incomeChartGeometry';
 import { FinancialInboxWidget } from '../components/FinancialInboxWidget';
 import { WalletIconRenderer } from '../components/WalletIconRenderer';
 import { FitList } from '../components/FitList';
@@ -65,7 +67,6 @@ const IncomeSpendingChart = lazyWithRetry(() =>
 /* Edit mode for the desktop layout: its own chunk, loaded when Customize is
    pressed — almost no visit to Home ever needs it. */
 /** The cash-flow chart's plot height when its card is set to Tall. */
-const TALL_CHART_HEIGHT = 400;
 
 
 /* An Analytics card added to Home: its own chunk (the Analytics cards and
@@ -92,7 +93,6 @@ const HOME_BOARD: CardBoardConfig<CatalogCardId> = {
 };
 
 /** How far back the cash-flow chart looks. One year of scrollable history. */
-const HISTORY_MONTHS = 12;
 
 /** The new phone layout's quick-add buttons, in the form's own order. */
 const QUICK_TYPES: { type: TransactionType; label: TranslationKey; icon: typeof ArrowDown }[] = [
@@ -192,9 +192,54 @@ export function DashboardPage({
   const money = (value: number, compact = false) => format(value, { compact });
   const { t } = useTranslation();
 
+  /* The hero's (and, in the new phone layout, the metrics') height once
+     loaded, for their skeletons next time — the cards keep their own (see
+     CardBoardGrid). */
+  const heroScope = heightScope('home-hero', typeof window === 'undefined' ? 0 : window.innerWidth, mobileV2);
+  const userId = user?.id;
+  useEffect(() => {
+    if (initialLoading || !userId) return undefined;
+    const timer = window.setTimeout(() => {
+      const heights: Record<string, number> = {};
+      const hero = document.querySelector<HTMLElement>('main > .hero');
+      const metrics = mobileV2 ? document.querySelector<HTMLElement>('main .home-sheet > .hero-metrics') : null;
+      if (hero) heights.hero = hero.getBoundingClientRect().height;
+      if (metrics) heights.metrics = metrics.getBoundingClientRect().height;
+      rememberHeights(userId, heroScope, heights);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [initialLoading, userId, heroScope, mobileV2]);
+
   // Only shown when there is genuinely nothing cached. Revisiting this page
   // paints the previous data immediately and refreshes behind the scenes.
-  if (initialLoading) return <DashboardSkeleton />;
+  // Every card's skeleton stands in its saved place and size (CardBoardGrid),
+  // with the hero and metrics in the page's own structure.
+  if (initialLoading) {
+    const skeletonBento = (
+      <CardBoardGrid
+        board={board}
+        loading
+        renderCard={() => null}
+        skeleton={(id, sizeClass, minHeight, tall) => renderCardSkeleton(id, { sizeClass, minHeight, mobileV2, tall })}
+        empty={<CardBoardArrangeEmpty board={board} />}
+      />
+    );
+    return (
+      <>
+        <HomeHeroSkeleton mobileV2={mobileV2} quickAdd={Boolean(onQuickAdd)} minHeight={rememberedHeight(userId, heroScope, 'hero')} />
+        {mobileV2 ? (
+          <div className="home-sheet">
+            <HomeMetricsSkeleton minHeight={rememberedHeight(userId, heroScope, 'metrics')} />
+            {skeletonBento}
+            {placed.length > 0 && <CardBoardArrangeLink board={board} />}
+          </div>
+        ) : (
+          skeletonBento
+        )}
+        <CardBoardArrange board={board} />
+      </>
+    );
+  }
 
   // Only a hard failure with nothing cached blocks the page. A failed refresh
   // over good data leaves the data on screen.
@@ -664,7 +709,7 @@ export function DashboardPage({
       board={board}
       renderCard={(id, sizeClass, tall, fill) =>
         isAnalyticsCardId(id) ? (
-          <Suspense fallback={<div className={cx('card bento-item acard-skeleton', sizeClass)} aria-hidden="true" />}>
+          <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>
             <HomeAnalyticsCard id={id} sizeClass={sizeClass} fill={fill} period={period} onNavigate={onNavigate} />
           </Suspense>
         ) : (

@@ -32,6 +32,7 @@ import { cx } from '../lib/format';
 import { Route } from '../lib/router';
 import { TranslationKey } from '../locales';
 import { useSettings } from '../state/SettingsContext';
+import { DeepStageSkeleton } from '../components/skeleton/pageSkeletons';
 
 /**
  * Deep Analytics — the raw-data explorer, as a page of its own.
@@ -313,10 +314,7 @@ export default function DeepAnalyticsPage({ onNavigate }: { onNavigate: (route: 
                 <p>{query.error}</p>
               </div>
             ) : !dataset || !filtered ? (
-              <div className="xp-message">
-                <span className="xp-loader" aria-hidden="true" />
-                <p>{t('explorer.loading', { source: t(SOURCE_LABEL[source]) })}</p>
-              </div>
+              <DeepStageSkeleton />
             ) : rowCount === 0 ? (
               <div className="xp-message">
                 <p>{t('explorer.emptySource')}</p>

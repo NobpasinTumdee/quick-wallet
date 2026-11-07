@@ -6,7 +6,9 @@ import { formatPeriod } from '../lib/format';
 import { resolvePaydays } from '../lib/mobileNav';
 import { Route } from '../lib/router';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { Button, Card, Segmented, Skeleton } from './ui';
+import { ANALYTICS_SKELETON_BODIES } from './skeleton/cardSkeletons';
+import { SkFrame } from './skeleton/Sk';
+import { Button, Card, Segmented } from './ui';
 import { SubscriptionHeatmap } from './SubscriptionHeatmap';
 
 /**
@@ -130,7 +132,7 @@ export function SubscriptionHeatmapCard({
       }
     >
       {data.initialLoading ? (
-        <Skeleton rows={4} />
+        <SkFrame className="sk-body">{ANALYTICS_SKELETON_BODIES.bills()}</SkFrame>
       ) : (
         <SubscriptionHeatmap data={data} money={money} locale={locale} />
       )}

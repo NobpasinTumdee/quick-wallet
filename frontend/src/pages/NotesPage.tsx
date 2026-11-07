@@ -7,7 +7,7 @@ import { NoteEditor } from '../components/notes/NoteEditor';
 import { NoteList } from '../components/notes/NoteList';
 import { ToolPanel } from '../components/notes/ToolPanel';
 import '../components/notes/notes.css';
-import { Alert, Button, EmptyState, RefreshButton, Skeleton } from '../components/ui';
+import { Alert, Button, EmptyState, RefreshButton } from '../components/ui';
 import { api } from '../api/client';
 import { patchCachedNote, useNotes } from '../hooks/useNotes';
 import { NEW_NOTE_ID, compareNotes, matchesNoteSearch, noteHash, noteIdFromHash } from '../lib/notes';
@@ -15,6 +15,7 @@ import { NOTE_TEMPLATES, NoteTemplate, fillTemplate, templateName } from '../lib
 import { useSettings } from '../state/SettingsContext';
 import { toast } from '../lib/toast';
 import { Note, NoteRef } from '../types';
+import { NoteBodySkeleton, NotesListSkeleton } from '../components/skeleton/pageSkeletons';
 
 /** What a new note starts with, when it is not blank. */
 type NoteSeed = { title: string; body: string; refs: NoteRef[]; saveNow?: boolean };
@@ -145,7 +146,7 @@ export function NotesPage() {
     const pinned = note?.pinned ?? Boolean(createdRef.current && notes.items.find((n) => n.id === createdRef.current)?.pinned);
 
     if (!isNew && !note) {
-      if (notes.initialLoading || deletingId === openId) return <Skeleton rows={6} />;
+      if (notes.initialLoading || deletingId === openId) return <NoteBodySkeleton />;
       return (
         <EmptyState
           icon={<Icon icon={SearchX} size="xl" />}
@@ -195,7 +196,7 @@ export function NotesPage() {
       </div>
 
       {notes.initialLoading ? (
-        <Skeleton rows={5} />
+        <NotesListSkeleton />
       ) : notes.error && notes.items.length === 0 ? (
         /* Not the empty state: "no notes yet" would be a lie when the list
            simply did not load — an old deployment without notes.* answers
