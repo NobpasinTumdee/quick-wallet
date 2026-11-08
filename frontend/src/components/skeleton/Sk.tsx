@@ -332,3 +332,17 @@ export function SkRegion({
     </>
   );
 }
+
+/** The small header over one wallet kind (WalletKindHeader): icon, name, count pill, subtotal. */
+export function SkWalletKindHead({ name = '5em' }: { name?: string }) {
+  return (
+    <div className="wallet-kind-head">
+      <span className="wallet-kind-icon">
+        <Sk w={16} h={16} r={4} />
+      </span>
+      <SkT className="wallet-kind-name" w={name} />
+      <Sk w={22} h={14} r={999} />
+      <SkT className="wallet-kind-total" w="4em" />
+    </div>
+  );
+}

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { cx } from '../../lib/format';
 import { CHART_HEIGHT, HISTORY_MONTHS, MONTH_WIDTH, TALL_CHART_HEIGHT } from '../../lib/incomeChartGeometry';
 import type { AnalyticsCardId, CatalogCardId, HomeCardId } from '../../lib/layout/cardCatalog';
-import { Sk, SkCard, SkFrame, SkHead, SkListRows, SkT } from './Sk';
+import { Sk, SkCard, SkFrame, SkHead, SkListRows, SkT, SkWalletKindHead } from './Sk';
 
 /**
  * One skeleton per catalog card, in the same frame, width class and header
@@ -212,7 +212,9 @@ const HOME_SKELETONS: Record<HomeCardId, Skeleton> = {
       <BudgetRows rows={4} />
     </SkCard>
   ),
-  wallets: ({ sizeClass, minHeight }) => (
+  /* The mode label, then one kind's header over its rows — tiles, two to a
+     row under a full-width header, in the new phone layout. */
+  wallets: ({ sizeClass, minHeight, mobileV2 }) => (
     <SkCard
       className={cx('bento-item--narrow', sizeClass)}
       minHeight={minHeight}
@@ -223,7 +225,25 @@ const HOME_SKELETONS: Record<HomeCardId, Skeleton> = {
         <SkT className="section-label" w="5em" />
         <SkT className="section-label" w="4em" />
       </div>
-      <SkListRows rows={3} />
+      <div className="wallet-kind">
+        <SkWalletKindHead />
+        {mobileV2 ? (
+          <div className="list home-wallet-grid">
+            {[0, 1].map((i) => (
+              <div key={i} className="list-item">
+                <Sk className="avatar sk-avatar" />
+                <div className="list-item-main">
+                  <SkT className="list-item-title" w={`${6 + i * 1.5}em`} />
+                  <SkT className="list-item-sub" w="70%" />
+                </div>
+                <SkT className="list-item-amount" w="5em" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <SkListRows rows={3} />
+        )}
+      </div>
     </SkCard>
   ),
   cashflow: ({ sizeClass, minHeight, tall }) => (

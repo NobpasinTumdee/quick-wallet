@@ -37,7 +37,7 @@ import { Route } from '../lib/router';
 import type { TranslationKey } from '../locales/en';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
-import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance } from '../types';
+import { DashboardSummary, Goal, Investment, Transaction, TransactionType, WalletBalance, WalletMode } from '../types';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import {
   CardBoardArrange,
@@ -54,6 +54,8 @@ import { HOME_BOARD_CARDS, HOME_BOARD_HALVES, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYO
 import { HOME_EDIT_PAGE } from '../lib/layout/homeEditStore';
 import { HOME_ORDER_FORMAT } from '../lib/layout/layoutFormats';
 import { continueRecent } from '../lib/layout/recentRows';
+import { groupWalletsByKind } from '../lib/walletKinds';
+import { WalletKindHeader } from '../components/WalletKindHeader';
 
 
 const IncomeSpendingChart = lazyWithRetry(() =>
@@ -379,6 +381,25 @@ export function DashboardPage({
     </div>
   );
 
+  /* Inside each mode, one small header per wallet kind over that kind's rows
+     (tiles in the new phone layout, under a header that spans both columns).
+     The subtotal adds up what each row shows — the balance, plus what is
+     invested for an investing wallet — so the groups sum to the mode total
+     above them, credit cards negative as there. */
+  const walletValue = (wallet: WalletBalance) =>
+    wallet.mode === 'investment' ? wallet.balance + wallet.investedCost : wallet.balance;
+  const walletKindGroups = (wallets: WalletBalance[], mode: WalletMode) =>
+    groupWalletsByKind(wallets, mode).map((group) => (
+      <section key={group.kind} className="wallet-kind">
+        <WalletKindHeader
+          kind={group.kind}
+          count={group.items.length}
+          total={money(group.items.reduce((sum, wallet) => sum + walletValue(wallet), 0), true)}
+        />
+        <div className={cx('list', mobileV2 && 'home-wallet-grid')}>{group.items.map(walletRow)}</div>
+      </section>
+    ));
+
   /* Built once and placed by layout: inside the hero in Classic and on
      desktop, at the top of the content sheet in the new phone layout. */
   const metrics = (
@@ -532,7 +553,7 @@ export function DashboardPage({
               <span className="section-label">{t('dashboard.spending')}</span>
               <span className="section-label">{money(data.liquidBalance, true)}</span>
             </div>
-            <div className={cx('list', mobileV2 && 'home-wallet-grid')}>{spendWallets.map(walletRow)}</div>
+            {walletKindGroups(spendWallets, 'expense')}
           </>
         )}
 
@@ -544,7 +565,7 @@ export function DashboardPage({
                 {money(data.investmentCash + data.investedCost, true)}
               </span>
             </div>
-            <div className={cx('list', mobileV2 && 'home-wallet-grid')}>{investWallets.map(walletRow)}</div>
+            {walletKindGroups(investWallets, 'investment')}
           </>
         )}
       </Card>

@@ -14,8 +14,10 @@ import { useWallets } from '../hooks/useWallets';
 import { cx } from '../lib/format';
 import { useMobileV2 } from '../lib/mobileLayout';
 import { useMoneyFormatter } from '../state/SettingsContext';
-import { WalletBalance } from '../types';
+import { WalletBalance, WalletMode } from '../types';
 import { WalletsSkeleton } from '../components/skeleton/pageSkeletons';
+import { WalletKindHeader } from '../components/WalletKindHeader';
+import { groupWalletsByKind } from '../lib/walletKinds';
 
 export function WalletsPage() {
   const { t } = useTranslation();
@@ -115,8 +117,12 @@ export function WalletsPage() {
   const spending = visible.filter((w) => w.mode === 'expense');
   const investing = visible.filter((w) => w.mode === 'investment');
 
-  const spendingTotal = spending.reduce((sum, w) => sum + w.balance, 0);
-  const investingTotal = investing.reduce((sum, w) => sum + w.balance + w.investedCost, 0);
+  /* What each wallet adds to its mode's total; a kind's subtotal adds the
+     same, so the kinds sum to the mode total (credit cards negative). */
+  const totalOf = (items: WalletBalance[]) =>
+    items.reduce((sum, w) => sum + w.balance + (w.mode === 'investment' ? w.investedCost : 0), 0);
+  const spendingTotal = totalOf(spending);
+  const investingTotal = totalOf(investing);
 
   function openNew() {
     setEditing(undefined);
@@ -310,7 +316,7 @@ export function WalletsPage() {
   );
 
   const group = (
-    key: string,
+    key: WalletMode,
     label: string,
     caption: string,
     total: number,
@@ -337,7 +343,17 @@ export function WalletsPage() {
           </Button>
         </div>
       ) : (
-        <div className="wallet-grid">{items.map(mobileV2 ? walletCardV2 : walletCard)}</div>
+        /* One small header per wallet kind, between the cards. */
+        groupWalletsByKind(items, key).map((kindGroup) => (
+          <section key={kindGroup.kind} className="wallet-kind">
+            <WalletKindHeader
+              kind={kindGroup.kind}
+              count={kindGroup.items.length}
+              total={money(totalOf(kindGroup.items), { compact: true })}
+            />
+            <div className="wallet-grid">{kindGroup.items.map(mobileV2 ? walletCardV2 : walletCard)}</div>
+          </section>
+        ))
       )}
     </section>
   );

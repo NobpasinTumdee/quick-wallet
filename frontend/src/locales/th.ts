@@ -382,6 +382,8 @@ export const th: TranslationSchema = {
       'สร้างกระเป๋าเงินสดหรือบัญชีธนาคารเพื่อบันทึกรายจ่าย หรือกระเป๋าเงินแบบลงทุนเพื่อติดตามหุ้น',
     createWallet: 'สร้างกระเป๋าเงิน',
     spendingGroup: 'ใช้จ่าย',
+    kindCount_one: '{{count}} กระเป๋าเงิน',
+    kindCount_other: '{{count}} กระเป๋าเงิน',
     spendingCaption: 'รายรับ รายจ่าย และการโอน',
     spendingEmpty: 'ยังไม่มีกระเป๋าเงินแบบใช้จ่าย',
     investingGroup: 'ลงทุน',

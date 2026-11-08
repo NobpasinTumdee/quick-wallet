@@ -388,6 +388,8 @@ export const en = {
       'Create a cash or bank wallet to record spending, or an investment wallet to track stocks.',
     createWallet: 'Create a wallet',
     spendingGroup: 'Spending',
+    kindCount_one: '{{count}} wallet',
+    kindCount_other: '{{count}} wallets',
     spendingCaption: 'Income, expenses and transfers',
     spendingEmpty: 'No spending wallets yet.',
     investingGroup: 'Investing',

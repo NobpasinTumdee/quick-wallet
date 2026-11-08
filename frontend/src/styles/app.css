@@ -835,6 +835,85 @@ body::after {
   gap: var(--space-4);
 }
 
+/* ---- Wallet kinds: a small header over each kind's wallets ----
+   Inside each mode (Spending / Investing), on Home's Wallets card and on the
+   Wallets page. Icon, name, count, and the kind's subtotal on the right; the
+   name truncates first, so the count and the figure always stay whole and
+   nothing pushes the card wider at 320px. */
+.wallet-kind {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wallet-kind-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  letter-spacing: normal;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.wallet-kind-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.wallet-kind-count {
+  flex: none;
+  min-width: 1.6em;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.wallet-kind-total {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--space-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Home's Wallets card: rows run edge to edge, so the header takes their
+   inset; the space a mode's list had below it now follows its last kind. */
+.card-body--flush .wallet-kind-head {
+  padding: var(--space-2) var(--space-5) 0;
+}
+.card-body--flush .list-group-label + .wallet-kind > .wallet-kind-head {
+  padding-top: 0;
+}
+.card-body--flush .wallet-kind:has(+ .list-group-label) > .list,
+.card-body--flush .wallet-kind:last-child > .list {
+  padding-bottom: var(--space-2);
+}
+
+/* The Wallets page: kinds sit between the cards of their mode. */
+.wallet-group > .wallet-kind {
+  gap: var(--space-3);
+}
+.wallet-group > .wallet-kind > .wallet-kind-head {
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+}
+
+/* The new phone layout: the header spans both tile columns, in their inset. */
+@media (max-width: 767px) {
+  :root.ui-mobile-v2 .card-body--flush .wallet-kind-head {
+    padding: var(--space-2) var(--space-4) var(--space-1);
+  }
+}
+
 .wallet-card {
   position: relative;
   display: flex;

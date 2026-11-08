@@ -1,5 +1,5 @@
 import { useMobileV2 } from '../../lib/mobileLayout';
-import { Sk, SkListRows, SkRegion, SkT } from './Sk';
+import { Sk, SkListRows, SkRegion, SkT, SkWalletKindHead } from './Sk';
 
 /**
  * The loading regions of every other data page, each in that page's own
@@ -178,11 +178,15 @@ export function WalletsSkeleton({ groups = [2, 1] }: { groups?: number[] }) {
               <SkT className="metric-value" w="5em" />
             </div>
           </header>
-          <div className="wallet-grid">
-            {Array.from({ length: cards }, (_, i) => (
-              <WalletCardSk key={i} v2={mobileV2} />
-            ))}
-          </div>
+          {/* One kind's header between the mode's head and its cards. */}
+          <section className="wallet-kind">
+            <SkWalletKindHead />
+            <div className="wallet-grid">
+              {Array.from({ length: cards }, (_, i) => (
+                <WalletCardSk key={i} v2={mobileV2} />
+              ))}
+            </div>
+          </section>
         </section>
       ))}
     </SkRegion>
