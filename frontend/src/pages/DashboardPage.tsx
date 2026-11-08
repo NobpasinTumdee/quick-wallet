@@ -56,6 +56,7 @@ import { HOME_ORDER_FORMAT } from '../lib/layout/layoutFormats';
 import { continueRecent } from '../lib/layout/recentRows';
 import { groupWalletsByKind } from '../lib/walletKinds';
 import { WalletKindHeader } from '../components/WalletKindHeader';
+import { MonthReviewBanner } from '../components/MonthReviewBanner';
 
 
 const IncomeSpendingChart = lazyWithRetry(() =>
@@ -237,6 +238,7 @@ export function DashboardPage({
     );
     return (
       <>
+        <MonthReviewBanner userId={userId} period={period} locale={locale} />
         <HomeHeroSkeleton mobileV2={mobileV2} quickAdd={Boolean(onQuickAdd)} minHeight={rememberedHeight(userId, heroScope, 'hero')} />
         {mobileV2 ? (
           <div className="home-sheet">
@@ -774,6 +776,8 @@ export function DashboardPage({
 
   return (
     <>
+      {/* Days 1–5 of a month only: last month's review. Nothing otherwise. */}
+      <MonthReviewBanner userId={userId} period={period} locale={locale} />
       {/* ---- Hero: one headline figure, everything else deliberately quieter ---- */}
       <section className={cx('hero', mobileV2 && 'home-hero')}>
         {mobileV2 && (

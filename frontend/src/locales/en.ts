@@ -1333,6 +1333,18 @@ export const en = {
     /* The card's other strings load with it: locales/safeSpend.ts. */
     title: 'Safe to spend',
   },
+  review: {
+    /* The page's own strings load with it: locales/review.ts. */
+    title: 'Month review',
+    pillLink: 'Review',
+    pillLinkMonth: '{{month}} review',
+    bannerTitle: '{{month}} review is ready',
+    bannerHint: 'Income, spending, budgets and goals for the month, in one place.',
+    bannerOpen: 'Open review',
+    bannerDismiss: 'Dismiss',
+    analyticsTitle: 'Month review',
+    analyticsHint: 'A summary of {{month}} you can save as a note',
+  },
   arrange: {
     title: 'Arrange Home',
     subtitle: 'Choose the order of the cards under your balance, and which ones show. This is for phones and tablets; the desktop layout is separate.',

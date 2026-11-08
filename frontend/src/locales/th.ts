@@ -1297,6 +1297,18 @@ export const th: TranslationSchema = {
     /* The card's other strings load with it: locales/safeSpend.ts. */
     title: 'ใช้ได้อีก',
   },
+  review: {
+    /* The page's own strings load with it: locales/review.ts. */
+    title: 'สรุปประจำเดือน',
+    pillLink: 'สรุป',
+    pillLinkMonth: 'สรุป{{month}}',
+    bannerTitle: 'สรุป{{month}}พร้อมแล้ว',
+    bannerHint: 'รายรับ รายจ่าย งบ และเป้าหมายของเดือน ในที่เดียว',
+    bannerOpen: 'เปิดสรุป',
+    bannerDismiss: 'ปิด',
+    analyticsTitle: 'สรุปประจำเดือน',
+    analyticsHint: 'สรุป{{month}} บันทึกเป็นโน้ตได้',
+  },
   arrange: {
     title: 'จัดหน้าภาพรวม',
     subtitle: 'เลือกลำดับของการ์ดใต้ยอดเงิน และเลือกว่าจะแสดงการ์ดใดบ้าง ใช้กับโทรศัพท์และแท็บเล็ต แยกจากเลย์เอาต์บนเดสก์ท็อป',

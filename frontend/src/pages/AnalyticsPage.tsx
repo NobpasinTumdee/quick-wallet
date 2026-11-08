@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChartNoAxesCombined, Database } from 'lucide-react';
+import { ArrowUpRight, CalendarCheck, ChartNoAxesCombined, Database } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { renderAnalyticsCard } from '../components/AnalyticsCards';
@@ -22,9 +22,9 @@ import {
 } from '../lib/layout/analyticsCards';
 import { ANALYTICS_ARRANGE_ENTRY, ANALYTICS_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
 import { ANALYTICS_EDIT_PAGE } from '../lib/layout/homeEditStore';
-import { cx } from '../lib/format';
+import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
 import { ANALYTICS_ORDER_FORMAT } from '../lib/layout/layoutFormats';
-import { Route, navigate } from '../lib/router';
+import { Route, navigate, openReview } from '../lib/router';
 import { useAuth } from '../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../state/SettingsContext';
 import { DashboardSummary, Transaction, WalletBalance } from '../types';
@@ -95,11 +95,17 @@ export function AnalyticsPage({
      Rendered in both the full page and the empty state — a user with no
      spending yet may still have debts, goals or investments worth exploring,
      and the empty state must not wall them off. */
+  /* The month review beside it: this month's when a past month is shown,
+     otherwise last month's (the latest finished one). */
+  const reviewMonth = period < currentPeriod() ? period : shiftPeriod(currentPeriod(), -1);
   const deep = (
+    /* One lead for the grid (leadCount 1): full width on the 12-column grid
+       too (lspan-12; nothing below 1000px), the two links side by side from
+       640px, so the cards below stay where they were on a wider screen. */
+    <div className={cx('analytics-leads bento-item--full', board.layoutActive && 'lspan-12')}>
     <button
       type="button"
-      /* Full width on the 12-column grid too (lspan-12; nothing below 1000px). */
-      className={cx('deep-entry bento-item--full', board.layoutActive && 'lspan-12')}
+      className="deep-entry"
       onClick={() => (onNavigate ?? navigate)('deep-analytics')}
       aria-label={t('explorer.entryAria')}
     >
@@ -112,6 +118,17 @@ export function AnalyticsPage({
       </span>
       <Icon icon={ArrowUpRight} size="sm" className="deep-entry-arrow" />
     </button>
+    <button type="button" className="deep-entry" onClick={() => openReview(reviewMonth)}>
+      <span className="deep-entry-mark" aria-hidden="true">
+        <Icon icon={CalendarCheck} />
+      </span>
+      <span className="deep-entry-text">
+        <strong>{t('review.analyticsTitle')}</strong>
+        <span>{t('review.analyticsHint', { month: formatPeriod(reviewMonth, locale) })}</span>
+      </span>
+      <Icon icon={ArrowUpRight} size="sm" className="deep-entry-arrow" />
+    </button>
+    </div>
   );
 
   /* Each card's skeleton in its saved place and size, the Deep Analytics

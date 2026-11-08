@@ -1,4 +1,5 @@
 import {
+  CalendarCheck,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -31,7 +32,7 @@ import { SIDEBAR_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCreditCardDueAlert, useOverdueSubscriptionAlert } from '../hooks/useOverdueAlert';
 import { useScrollToTop } from '../hooks/useScrollToTop';
 import { useStoredBoolean } from '../hooks/useStoredBoolean';
-import { currentPeriod, cx, formatPeriod, shiftPeriod } from '../lib/format';
+import { currentPeriod, cx, formatPeriod, parsePeriod, shiftPeriod } from '../lib/format';
 import { QuickLink, hasQuickLinkParams, parseQuickLink, resolveQuickLink, stripQuickLink } from '../lib/quickLink';
 import { useMobileV2, useTopbarHeightVar } from '../lib/mobileLayout';
 import {
@@ -44,7 +45,8 @@ import {
 import { resolveMobileNav } from '../lib/mobileNav';
 import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
-import { Route, lastNavigationAt, useRoute } from '../lib/router';
+import { Route, lastNavigationAt, openReview, useHashParam, useRoute } from '../lib/router';
+import { ReviewSkeleton } from './skeleton/ReviewSkeleton';
 import { motionMode, setCustomizing } from '../lib/motion';
 import { cancelPageEntry, playPageEntry } from '../lib/pageEntry';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -195,6 +197,15 @@ const WIDGETS_ITEM: NavItem = {
 const DeepAnalyticsPage = lazyWithRetry(() => import('../pages/DeepAnalyticsPage'));
 /* Rarely opened and self-contained, so it is its own chunk too. */
 const WidgetsPage = lazyWithRetry(() => import('../pages/WidgetsPage'));
+/* A finished month's review: opened from its banner, the month pill or Analytics. */
+const MonthReviewPage = lazyWithRetry(() => import('../pages/MonthReviewPage'));
+
+/* Lights Analytics in the sidebar, like Deep Analytics; never listed itself. */
+const REVIEW_ITEM: NavItem = {
+  route: 'review',
+  labelKey: NAV_LABEL_KEYS.review,
+  icon: CalendarCheck,
+};
 
 /**
  * How the routes split on a phone.
@@ -249,7 +260,7 @@ function initialsOf(name: string | undefined): string {
 
 /** Resolves a route id to its NAV row. Settings and More live outside NAV. */
 function navItemFor(route: Route): NavItem {
-  return [...NAV, SETTINGS_ITEM, MORE_ITEM, DEEP_ITEM, WIDGETS_ITEM].find((item) => item.route === route) ?? NAV[0];
+  return [...NAV, SETTINGS_ITEM, MORE_ITEM, DEEP_ITEM, WIDGETS_ITEM, REVIEW_ITEM].find((item) => item.route === route) ?? NAV[0];
 }
 
 /**
@@ -347,6 +358,7 @@ const ROUTE_DATA: Record<Route, string[]> = {
   'deep-analytics': ['/api/analytics/raw-data'],
   notes: ['/api/notes'],
   widgets: ['/api/widgetTokens', '/api/wallets'],
+  review: ['/api/dashboard', '/api/transactions', '/api/subscriptions', '/api/goals'],
   notFound: [],
 };
 
@@ -421,6 +433,9 @@ function useTabbarPill(bar: RefObject<HTMLElement | null>, route: Route): void {
 export function AppShell() {
   const { t } = useTranslation();
   const [route, go] = useRoute();
+  /* The review's month rides in its hash; anything else falls back to last month. */
+  const reviewParam = useHashParam('period');
+  const reviewPeriod = parsePeriod(reviewParam) ?? shiftPeriod(currentPeriod(), -1);
   const { user, logout } = useAuth();
   const { settings, reload: reloadSettings } = useSettings();
   const money = useMoneyFormatter();
@@ -540,7 +555,7 @@ export function AppShell() {
      sidebar — otherwise the one screen reached *from* there would show no
      active item anywhere. */
   const sidebarActive = (item: Route) =>
-    route === item || (item === 'analytics' && route === 'deep-analytics');
+    route === item || (item === 'analytics' && (route === 'deep-analytics' || route === 'review'));
 
   /** One tab-bar link. Shared by both sides of the centre button. */
   const tab = (item: NavItem) => (
@@ -720,7 +735,7 @@ export function AppShell() {
                     </span>
                   </div>
                   <div className="topbar-sub">
-                    <PeriodPill period={period} locale={settings.locale} onChange={setPeriod} />
+                    <PeriodPill period={period} locale={settings.locale} onChange={setPeriod} onReview={openReview} />
                   </div>
                 </>
               ) : (
@@ -729,7 +744,7 @@ export function AppShell() {
               {mobileV2 && showPeriodPicker ? null : (
                 <span>
                   {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
-                  {formatPeriod(period, settings.locale)}
+                  {formatPeriod(route === 'review' ? reviewPeriod : period, settings.locale)}
                 </span>
               )}
             </div>
@@ -778,6 +793,13 @@ export function AppShell() {
                     <Icon icon={ChevronRight} size="sm" />
                   </Button>
                 </div>
+              )}
+              {showPeriodPicker && !mobileV2 && period < currentPeriod() && (
+                /* Only on a past month, so the current month's bar is unchanged. */
+                <Button size="sm" variant="ghost" className="topbar-review" onClick={() => openReview(period)}>
+                  <Icon icon={CalendarCheck} size="sm" />
+                  <span>{t('review.pillLink')}</span>
+                </Button>
               )}
               <RefreshButton onRefresh={refreshCurrentRoute} label={t('common.refreshPage')} />
 
@@ -860,6 +882,11 @@ export function AppShell() {
             {route === 'widgets' && (
               <Suspense fallback={<WidgetsFrameSkeleton />}>
                 <WidgetsPage />
+              </Suspense>
+            )}
+            {route === 'review' && (
+              <Suspense fallback={<ReviewSkeleton />}>
+                <MonthReviewPage period={reviewPeriod} onNavigate={go} />
               </Suspense>
             )}
             {route === 'notFound' && <NotFoundPage onNavigate={go} />}

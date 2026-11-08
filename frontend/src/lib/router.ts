@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { takeSoftHistoryEntry } from './overlayStack';
 
 /**
@@ -48,12 +48,20 @@ export const ROUTES = [
  * every `Record<Route, …>` — the prefetch and refresh maps in AppShell — to say
  * what it does on that screen.
  */
-export type Route = (typeof ROUTES)[number] | 'notFound';
+/**
+ * Pages that can be linked to but are never listed: not in the sidebar, the
+ * More menu, the tab-bar choices or its backfill (all built from ROUTES).
+ * The month review is reached from its banner, the month pill and Analytics,
+ * and carries its month in the hash: #/review?period=YYYY-MM.
+ */
+export const HIDDEN_ROUTES = ['review'] as const;
+
+export type Route = (typeof ROUTES)[number] | (typeof HIDDEN_ROUTES)[number] | 'notFound';
 
 const DEFAULT_ROUTE: Route = 'dashboard';
 
 function isRoute(value: string): value is Route {
-  return (ROUTES as readonly string[]).includes(value);
+  return (ROUTES as readonly string[]).includes(value) || (HIDDEN_ROUTES as readonly string[]).includes(value);
 }
 
 /**
@@ -100,6 +108,34 @@ export function navigate(route: Route): void {
     return;
   }
   window.location.hash = `#/${route}`;
+}
+
+/** One value from the hash's query (`#/review?period=2026-10` → `period`). */
+export function hashParam(name: string, hash: string = window.location.hash): string | null {
+  const query = hash.split('?')[1] ?? '';
+  return new URLSearchParams(query).get(name);
+}
+
+function subscribeHash(onChange: () => void): () => void {
+  window.addEventListener('hashchange', onChange);
+  return () => window.removeEventListener('hashchange', onChange);
+}
+
+/** `hashParam`, kept current as the hash changes (the route alone does not re-render on a new query). */
+export function useHashParam(name: string): string | null {
+  return useSyncExternalStore(subscribeHash, () => hashParam(name), () => null);
+}
+
+/** Opens the review of `period` (YYYY-MM). */
+export function openReview(period: string): void {
+  const target = `#/review?period=${encodeURIComponent(period)}`;
+  if (window.location.hash === target) return;
+  lastNavigateAt = performance.now();
+  if (takeSoftHistoryEntry()) {
+    window.location.replace(target);
+    return;
+  }
+  window.location.hash = target;
 }
 
 export function useRoute(): [Route, (route: Route) => void] {

@@ -16,7 +16,11 @@ declare module 'i18next' {
     defaultNS: 'translation';
     resources: {
       /* Safe to spend's strings load with its card (locales/safeSpend.ts). */
-      translation: typeof import('../locales/en').en & { safeSpend: typeof import('../locales/safeSpend').safeSpendEn };
+      /* The month review's page strings load with the page (locales/review.ts). */
+      translation: typeof import('../locales/en').en & {
+        safeSpend: typeof import('../locales/safeSpend').safeSpendEn;
+        review: typeof import('../locales/review').reviewEn;
+      };
     };
     /** Values are read as plain strings, never as `null`. */
     returnNull: false;

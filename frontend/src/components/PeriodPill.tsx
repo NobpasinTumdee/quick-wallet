@@ -3,6 +3,7 @@ import { ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { currentPeriod, cx, shiftPeriod } from '../lib/format';
+import { whenHistorySettled } from '../lib/overlayStack';
 import { Icon } from './Icon';
 import { Button, Modal } from './ui';
 
@@ -40,11 +41,14 @@ export function PeriodPill({
   period,
   locale,
   onChange,
+  onReview,
 }: {
   /** "YYYY-MM". */
   period: string;
   locale: string;
   onChange: (period: string) => void;
+  /** Opens a past month's review; offered in the month sheet. */
+  onReview?: (period: string) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -98,6 +102,14 @@ export function PeriodPill({
         period={period}
         locale={locale}
         onClose={() => setOpen(false)}
+        onReview={
+          onReview
+            ? (month) => {
+                setOpen(false);
+                window.setTimeout(() => whenHistorySettled(() => onReview(month)), 0);
+              }
+            : undefined
+        }
         onPick={(next) => {
           onChange(next);
           setOpen(false);
@@ -120,12 +132,14 @@ function MonthSheet({
   locale,
   onClose,
   onPick,
+  onReview,
 }: {
   open: boolean;
   period: string;
   locale: string;
   onClose: () => void;
   onPick: (period: string) => void;
+  onReview?: (period: string) => void;
 }) {
   const { t } = useTranslation();
   const selectedYear = Number(period.slice(0, 4));
@@ -146,9 +160,17 @@ function MonthSheet({
       onClose={onClose}
       width={400}
       footer={
-        <Button variant="primary" onClick={() => onPick(today)} disabled={period === today}>
-          {t('period.thisMonth')}
-        </Button>
+        <>
+          {onReview && period < today && (
+            /* A past month: its review, one tap from where the month is chosen. */
+            <Button variant="ghost" onClick={() => onReview(period)}>
+              {t('review.pillLinkMonth', { month: monthLabel(period, locale, 'long') })}
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => onPick(today)} disabled={period === today}>
+            {t('period.thisMonth')}
+          </Button>
+        </>
       }
     >
       <div className="month-sheet">

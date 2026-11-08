@@ -41,6 +41,8 @@ export const NAV_LABEL_KEYS: Record<Route, TranslationKey> = {
   'deep-analytics': 'nav.deepAnalytics',
   notes: 'nav.notes',
   widgets: 'nav.widgets',
+  /* Linked to, never listed (HIDDEN_ROUTES). */
+  review: 'review.title',
   /* Reachable but never navigable — it has no nav entry anywhere. Named so the
      Record stays exhaustive rather than needing an exception. */
   notFound: 'notFound.title',

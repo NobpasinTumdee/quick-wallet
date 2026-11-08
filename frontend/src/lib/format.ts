@@ -143,6 +143,14 @@ export function shiftPeriod(period: string, delta: number): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** `YYYY-MM` from a link or the hash, or null for anything else. */
+export function parsePeriod(value: string | null | undefined): string | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(value ?? '').trim());
+  if (!match) return null;
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12 ? `${match[1]}-${match[2]}` : null;
+}
+
 /** Merges class names, dropping falsy entries. */
 export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');

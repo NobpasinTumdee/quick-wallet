@@ -260,6 +260,30 @@ export function takeSoftHistoryEntry(): boolean {
   return true;
 }
 
+/**
+ * Runs `run` once a just-closed overlay's history step has been popped, so a
+ * link inside a sheet can change the page without the deferred pop undoing
+ * it (phones only; on desktop nothing is pending and it runs at once). Call
+ * it a tick after closing, once the overlay has been released.
+ */
+export function whenHistorySettled(run: () => void): void {
+  if (pendingPops === 0 && flushTimer === undefined && selfPops === 0) {
+    run();
+    return;
+  }
+  let finished = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    window.removeEventListener('popstate', onPop);
+    window.clearTimeout(timer);
+    run();
+  };
+  const onPop = () => window.setTimeout(done, 0);
+  window.addEventListener('popstate', onPop);
+  const timer = window.setTimeout(done, 500);
+}
+
 /** Lets the current close handler be swapped without re-registering. */
 export function updateOverlayClose(id: number, close: () => void): void {
   const entry = stack.find((item) => item.id === id);
