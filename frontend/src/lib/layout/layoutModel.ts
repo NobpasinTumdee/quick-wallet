@@ -50,6 +50,12 @@ export interface CardDef<Id extends string = string> {
    * lacks it, and kept only where a saved layout already has it.
    */
   addable?: true;
+  /**
+   * An addable card that is one of the page's own optional cards (Home's
+   * Favourites) rather than another page's: the editors list it under
+   * "More cards", not "From Analytics". Behaves exactly like `addable`.
+   */
+  extra?: true;
 }
 
 export interface CardState<Id extends string = string> {

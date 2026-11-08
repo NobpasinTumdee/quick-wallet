@@ -34,11 +34,13 @@ const ORDER_CORPUS = [
   JSON.stringify({ v: 1, format: 'order', updatedAt: 4, reset: true, cards: [] }),
 ];
 
-test('board registry: Home\'s own cards first, unchanged, then every Analytics card as addable', () => {
+test('board registry: Home\'s own cards first, unchanged, then Favourites, Safe to spend and every Analytics card as addable', () => {
   assert.deepEqual(HOME_BOARD_CARDS.slice(0, HOME_CARDS.length), [...HOME_CARDS]);
   assert.deepEqual(ownCards(HOME_BOARD_CARDS), [...HOME_CARDS]);
   const added = HOME_BOARD_CARDS.slice(HOME_CARDS.length);
-  assert.deepEqual(added.map((def) => def.id), ANALYTICS_IDS);
+  /* Home's own optional cards (More cards) come first, then every Analytics card. */
+  assert.deepEqual(added.map((def) => def.id), ['favourites', 'safeSpend', ...ANALYTICS_IDS]);
+  assert.ok(added.filter((def) => def.extra).every((def) => def.id === 'favourites' || def.id === 'safeSpend'));
   assert.ok(added.every((def) => def.addable === true));
   assert.ok(HOME_CARDS.every((def) => !def.addable) && ANALYTICS_CARDS.every((def) => !def.addable));
   for (const id of ['breakdown', 'recent', 'categoryPie', 'payees']) assert.ok(HOME_BOARD_HALVES.has(id), id);

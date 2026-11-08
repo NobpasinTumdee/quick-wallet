@@ -34,7 +34,14 @@ export type AnalyticsCardId =
   | 'sankey'
   | 'projection';
 
-export type CatalogCardId = HomeCardId | AnalyticsCardId;
+/**
+ * Home's optional cards: never on Home by default, never inserted into a
+ * saved layout, there only once added (like an Analytics card on Home), and
+ * listed in the editors under "More cards".
+ */
+export type HomeExtraCardId = 'favourites' | 'safeSpend';
+
+export type CatalogCardId = HomeCardId | HomeExtraCardId | AnalyticsCardId;
 
 export interface CatalogCardDef<Id extends string = CatalogCardId> extends GridCardDef<Id> {
   /** The card's name wherever it is listed rather than shown. */
@@ -97,6 +104,21 @@ export const ANALYTICS_CATALOG: readonly CatalogCardDef<AnalyticsCardId>[] = [
   { id: 'projection', titleKey: 'catalog.projection', widths: [6, 8, 12], minPx: 420, defaultW: 12, minW: 6, minH: 6, maxH: 12, defaultH: 7 },
 ];
 
+/**
+ * Home's optional cards (see HomeExtraCardId). Favourites: as narrow as the
+ * Wallets card (a chips row still fits), 3 rows at the least (header and one
+ * row of chips), 5 by default (two rows of tiles at 1280px).
+ */
+export const HOME_EXTRA_CATALOG: readonly CatalogCardDef<HomeExtraCardId>[] = [
+  { id: 'favourites', titleKey: 'favourites.title', widths: [3, 4, 6, 8, 12], minPx: 200, defaultW: 4, minW: 3, minH: 3, maxH: 14, defaultH: 5, addable: true, extra: true },
+  /* Safe to spend: the number and a per-day figure fit 3 columns and 3 rows; 6+ rows add the bar and the next bills. */
+  { id: 'safeSpend', titleKey: 'safeSpend.title', widths: [3, 4, 6, 8, 12], minPx: 200, defaultW: 4, minW: 3, minH: 3, maxH: 10, defaultH: 5, addable: true, extra: true },
+];
+
+export function isHomeExtraCardId(id: string): id is HomeExtraCardId {
+  return HOME_EXTRA_CATALOG.some((def) => def.id === id);
+}
+
 /** The cards drawn a half each, side by side, on a tablet (768–999px). */
 export const HOME_TABLET_HALVES: ReadonlySet<HomeCardId> = new Set<HomeCardId>(['breakdown', 'recent']);
 export const ANALYTICS_TABLET_HALVES: ReadonlySet<AnalyticsCardId> = new Set<AnalyticsCardId>([
@@ -116,6 +138,7 @@ export const ANALYTICS_TABLET_HALVES: ReadonlySet<AnalyticsCardId> = new Set<Ana
  */
 export const HOME_BOARD_CATALOG: readonly CatalogCardDef<CatalogCardId>[] = [
   ...HOME_CATALOG,
+  ...HOME_EXTRA_CATALOG,
   ...ANALYTICS_CATALOG.map((def): CatalogCardDef<CatalogCardId> => ({ ...def, addable: true })),
 ];
 

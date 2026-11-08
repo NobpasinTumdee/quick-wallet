@@ -29,6 +29,8 @@ export interface OrderCardDef<Id extends string = string> {
   id: Id;
   /** Another page's card, there only once added (see the addable flag in layoutModel.ts). */
   addable?: true;
+  /** One of the page's own optional cards (see `extra` in layoutModel.ts). */
+  extra?: true;
 }
 
 /** The page's own cards, in order: the registry without the addable ones. */

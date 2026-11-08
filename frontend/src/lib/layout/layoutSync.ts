@@ -15,6 +15,15 @@ import { ApiError, api } from '../../api/client';
  *    comes back online, or when the tab is shown again) uploads it.
  */
 
+/*
+ * Not only layouts: the server accepts `layout.<name>` keys holding
+ * `{ v: 1, cards: [...] }` and nothing else, so other synced preferences
+ * ride in that envelope without a Code.gs change — `layout.favourites`
+ * (lib/favourites.ts) and `layout.safe-spend` — each with `cards: []` and
+ * a `kind` saying what it really is. Layout readers ignore any value with
+ * a `kind` (layoutFormats.ts `isForeignPref`).
+ */
+
 /** Server values are capped at 20,000 characters (Code.gs UI_PREFS_VALUE_MAX_). */
 export const MAX_LAYOUT_CHARS = 20000;
 /** How often a load or a return to the tab may ask the server. */
@@ -58,7 +67,16 @@ function noteFailure(error: unknown): void {
  * the current layout and the first version's (which is migrated when it is
  * the newer). `undefined` when the server could not be asked.
  */
-export async function fetchRemotePrefs(): Promise<Record<string, RemotePref> | undefined> {
+let inFlight: Promise<Record<string, RemotePref> | undefined> | null = null;
+
+export function fetchRemotePrefs(): Promise<Record<string, RemotePref> | undefined> {
+  /* Two synced preferences checking at the same moment (Home's layout and
+     the favourites) share one request. */
+  if (!inFlight) inFlight = fetchOnce().finally(() => (inFlight = null));
+  return inFlight;
+}
+
+async function fetchOnce(): Promise<Record<string, RemotePref> | undefined> {
   if (unavailable) return undefined;
   try {
     const result = await api.get<{ prefs?: RemotePref[] }>('/uiPrefs');

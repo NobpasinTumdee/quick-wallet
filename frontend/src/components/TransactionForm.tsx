@@ -11,6 +11,7 @@ import { OverdraftWarningModal } from './OverdraftWarningModal';
 import { ReceiptScanner } from './ReceiptScanner';
 import { ReceiptScan } from '../hooks/useReceiptScanner';
 import { WalletPicker } from './WalletPicker';
+import { useOptionalFavourites } from '../state/FavouritesContext';
 import {
   Alert,
   Button,
@@ -117,6 +118,9 @@ export function TransactionForm({
    * were shown — not about whatever the form says a second later.
    */
   const [pending, setPending] = useState<TransactionPayload | null>(null);
+  /* "Save as favourite" (a new entry) / "Make favourite" (an existing one):
+     opens the favourite editor, filled in from what is in the form now. */
+  const favourites = useOptionalFavourites();
 
   /* Only on open / a different record — see the note in InvestmentForm. */
   const walletsRef = useRef(wallets);
@@ -326,6 +330,20 @@ export function TransactionForm({
             placeholder={t('common.optional')}
           />
         </Field>
+
+        {favourites && (
+          <div className="span-2 tx-form-fav">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                favourites.makeFromTransaction({ ...form, amount: amount > 0 ? amount : null })
+              }
+            >
+              ☆ {transaction ? t('favourites.makeFavourite') : t('favourites.saveAsFavourite')}
+            </Button>
+          </div>
+        )}
 
         {(localError || error) && (
           <div className="span-2">

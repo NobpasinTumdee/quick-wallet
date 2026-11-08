@@ -71,6 +71,7 @@ import { GestureNavWidget, Shortcut } from './GestureNavWidget';
 import { PeriodPill } from './PeriodPill';
 import { QuickTransactionWidget } from './QuickTransactionWidget';
 import { TransactionForm, TransactionPayload } from './TransactionForm';
+import { FavouritesProvider } from '../state/FavouritesContext';
 import { Alert, Button, RefreshButton } from './ui';
 import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { DeepFrameSkeleton, WidgetsFrameSkeleton } from './skeleton/pageSkeletons';
@@ -508,6 +509,12 @@ export function AppShell() {
   }, [pendingLink, quickWallets.initialLoading, quickWallets.items]);
   const quickTransactions = useExcelDB<Transaction>('transactions', undefined, { enabled: false });
 
+  /** The New transaction form, filled in (a favourite's "Save with changes" or "More"). */
+  const openFormWith = useCallback((prefill: Partial<TransactionPayload>) => {
+    setQuickPrefill(prefill);
+    setQuickFormOpen(true);
+  }, []);
+
   function saveQuickTransaction(payload: TransactionPayload) {
     // Optimistic, like every other write: the row is cached before this
     // resolves, so the sheet closes now and a failure toasts and rolls back.
@@ -609,282 +616,290 @@ export function AppShell() {
   }, [homeEditing]);
 
   return (
-    <div className={cx('shell', railed && 'is-railed')}>
-      <aside className="sidebar">
-        {/* ---- Profile ----
-            Identity first, because the question a sidebar should answer before
-            any navigation is "whose money am I looking at". */}
-        <div className="sidebar-profile">
-          <span className="sidebar-avatar" aria-hidden="true">{initialsOf(user?.displayName)}</span>
-          <span className="sidebar-identity sidebar-label">
-            <strong>{user?.displayName || t('nav.unknownUser')}</strong>
-            {user?.username && <span>@{user.username}</span>}
-          </span>
+    /* Favourites: one store for the Home card, the forms and ?fav= links.
+       It talks to the server only once something shows or edits them. */
+    <FavouritesProvider
+      wallets={quickWallets.items}
+      walletsLoading={quickWallets.initialLoading}
+      onOpenForm={openFormWith}
+    >
+      <div className={cx('shell', railed && 'is-railed')}>
+        <aside className="sidebar">
+          {/* ---- Profile ----
+              Identity first, because the question a sidebar should answer before
+              any navigation is "whose money am I looking at". */}
+          <div className="sidebar-profile">
+            <span className="sidebar-avatar" aria-hidden="true">{initialsOf(user?.displayName)}</span>
+            <span className="sidebar-identity sidebar-label">
+              <strong>{user?.displayName || t('nav.unknownUser')}</strong>
+              {user?.username && <span>@{user.username}</span>}
+            </span>
 
-          {/* The collapse control lives in the panel's header rather than above
-              the nav: it acts on the panel, and that is where a control which
-              resizes it is looked for. */}
-          <button
-            type="button"
-            className="sidebar-rail-toggle"
-            onClick={toggleRail}
-            aria-expanded={!railed}
-            aria-label={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-            title={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-          >
-            <Icon icon={railed ? ChevronRight : ChevronLeft} size="sm" />
-          </button>
-        </div>
-
-        <nav className="sidebar-nav" aria-label={t('nav.mainNavigation')}>
-          {SECTIONS.map((section) => (
-            <div className="sidebar-section" key={section.titleKey}>
-              {/* Hidden in rail mode by the stylesheet rather than removed: a
-                  group label with no visible group is noise, but a screen
-                  reader still wants the heading. */}
-              <h2 className="sidebar-section-title sidebar-label">{t(section.titleKey)}</h2>
-              {section.items.map((item) => (
-                <button
-                  key={item.route}
-                  type="button"
-                  className={cx('sidebar-item', sidebarActive(item.route) && 'is-active')}
-                  aria-current={sidebarActive(item.route) ? 'page' : undefined}
-                  onMouseEnter={() => warmRoute(item.route, period)}
-                  onFocus={() => warmRoute(item.route, period)}
-                  onClick={() => go(item.route)}
-                >
-                  <Icon icon={item.icon} />
-                  <span className="sidebar-label">{t(item.labelKey)}</span>
-                  {/* The rail's tooltip: shown only while collapsed, and hidden
-                      from assistive tech because the label beside it already
-                      says exactly this. */}
-                  <span className="sidebar-tip" aria-hidden="true">{t(item.labelKey)}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-
-        {/* ---- Pinned to the bottom ----
-            Settings and Sign out are not destinations in the sense the screens
-            above are: one configures the app, the other leaves it. The space
-            `margin-top: auto` puts between them and the nav is the whole
-            distinction. */}
-        <div className="sidebar-foot">
-          <button
-            type="button"
-            className={cx('sidebar-item', route === 'settings' && 'is-active')}
-            aria-current={route === 'settings' ? 'page' : undefined}
-            onClick={() => go('settings')}
-          >
-            <Icon icon={SETTINGS_ITEM.icon} />
-            <span className="sidebar-label">{t('nav.settings')}</span>
-            <span className="sidebar-tip" aria-hidden="true">{t('nav.settings')}</span>
-          </button>
-
-          <button type="button" className="sidebar-item is-signout" onClick={logout}>
-            <Icon icon={LogOut} />
-            <span className="sidebar-label">{t('nav.signOut')}</span>
-            <span className="sidebar-tip" aria-hidden="true">{t('nav.signOut')}</span>
-          </button>
-        </div>
-      </aside>
-
-      <div className="main">
-        <header className="topbar" ref={topbarRef}>
-          {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
-          <Logo size={30} className="topbar-logo" label={t('auth.appName')} />
-          <div className="topbar-title">
-            {mobileV2 && showPeriodPicker ? (
-              /* Title and currency share the first line, so the month pill
-                 and its way back to this month have the second to themselves. */
-              <>
-                <div className="topbar-headline">
-                  <h1>{t(active.labelKey)}</h1>
-                  <span className="topbar-currency">
-                    {money.converting ? `${money.base} → ${money.display}` : money.base}
-                  </span>
-                </div>
-                <div className="topbar-sub">
-                  <PeriodPill period={period} locale={settings.locale} onChange={setPeriod} />
-                </div>
-              </>
-            ) : (
-              <h1>{t(active.labelKey)}</h1>
-            )}
-            {mobileV2 && showPeriodPicker ? null : (
-              <span>
-                {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
-                {formatPeriod(period, settings.locale)}
-              </span>
-            )}
+            {/* The collapse control lives in the panel's header rather than above
+                the nav: it acts on the panel, and that is where a control which
+                resizes it is looked for. */}
+            <button
+              type="button"
+              className="sidebar-rail-toggle"
+              onClick={toggleRail}
+              aria-expanded={!railed}
+              aria-label={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+              title={railed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            >
+              <Icon icon={railed ? ChevronRight : ChevronLeft} size="sm" />
+            </button>
           </div>
-          <div className="topbar-tools">
-            {showCustomize && (
-              /* The same markup <Button> renders; a plain element so it can hold a ref. */
-              <button
-                ref={customizeButton}
-                type="button"
-                className="btn btn--ghost btn--sm topbar-customize"
-                aria-pressed={homeEditing}
-                disabled={homeEditing}
-                aria-label={customizeLabel}
-                title={customizeLabel}
-                onClick={() => setLayoutEditing(editPage, true)}
-              >
-                <Icon icon={LayoutPanelTop} size="sm" />
-                <span>{t('layout.customize')}</span>
-              </button>
-            )}
-            {showPeriodPicker && !mobileV2 && (
-              /* Three controls grouped so they read as a single month stepper. */
-              <div className="period-nav">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setPeriod((p) => shiftPeriod(p, -1))}
-                  aria-label={t('common.previousMonth')}
-                >
-                  <Icon icon={ChevronLeft} size="sm" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setPeriod(currentPeriod())}
-                  disabled={period === currentPeriod()}
-                >
-                  {t('common.today')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setPeriod((p) => shiftPeriod(p, 1))}
-                  aria-label={t('common.nextMonth')}
-                >
-                  <Icon icon={ChevronRight} size="sm" />
-                </Button>
-              </div>
-            )}
-            <RefreshButton onRefresh={refreshCurrentRoute} label={t('common.refreshPage')} />
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cx('topbar-settings', route === 'settings' && 'is-active')}
-              aria-label={t('nav.settings')}
+          <nav className="sidebar-nav" aria-label={t('nav.mainNavigation')}>
+            {SECTIONS.map((section) => (
+              <div className="sidebar-section" key={section.titleKey}>
+                {/* Hidden in rail mode by the stylesheet rather than removed: a
+                    group label with no visible group is noise, but a screen
+                    reader still wants the heading. */}
+                <h2 className="sidebar-section-title sidebar-label">{t(section.titleKey)}</h2>
+                {section.items.map((item) => (
+                  <button
+                    key={item.route}
+                    type="button"
+                    className={cx('sidebar-item', sidebarActive(item.route) && 'is-active')}
+                    aria-current={sidebarActive(item.route) ? 'page' : undefined}
+                    onMouseEnter={() => warmRoute(item.route, period)}
+                    onFocus={() => warmRoute(item.route, period)}
+                    onClick={() => go(item.route)}
+                  >
+                    <Icon icon={item.icon} />
+                    <span className="sidebar-label">{t(item.labelKey)}</span>
+                    {/* The rail's tooltip: shown only while collapsed, and hidden
+                        from assistive tech because the label beside it already
+                        says exactly this. */}
+                    <span className="sidebar-tip" aria-hidden="true">{t(item.labelKey)}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
+
+          {/* ---- Pinned to the bottom ----
+              Settings and Sign out are not destinations in the sense the screens
+              above are: one configures the app, the other leaves it. The space
+              `margin-top: auto` puts between them and the nav is the whole
+              distinction. */}
+          <div className="sidebar-foot">
+            <button
+              type="button"
+              className={cx('sidebar-item', route === 'settings' && 'is-active')}
               aria-current={route === 'settings' ? 'page' : undefined}
-              title={t('nav.settings')}
               onClick={() => go('settings')}
             >
-              <Icon icon={SETTINGS_ITEM.icon} size="sm" />
-            </Button>
+              <Icon icon={SETTINGS_ITEM.icon} />
+              <span className="sidebar-label">{t('nav.settings')}</span>
+              <span className="sidebar-tip" aria-hidden="true">{t('nav.settings')}</span>
+            </button>
 
-            {/* Mobile only — see .topbar-signout.
+            <button type="button" className="sidebar-item is-signout" onClick={logout}>
+              <Icon icon={LogOut} />
+              <span className="sidebar-label">{t('nav.signOut')}</span>
+              <span className="sidebar-tip" aria-hidden="true">{t('nav.signOut')}</span>
+            </button>
+          </div>
+        </aside>
 
-                The sidebar carries this on desktop, and the sidebar is
-                display:none below 1000px, which left signing out genuinely
-                unreachable on a phone: not buried, absent. Rendered here rather
-                than added to the gesture arc because that menu commits on
-                release, and an action you cannot undo in one tap has no place
-                somewhere a slip of the thumb confirms it. */}
-            {!mobileV2 && (
+        <div className="main">
+          <header className="topbar" ref={topbarRef}>
+            {/* Only visible on phones, where the sidebar (and its brand) is hidden. */}
+            <Logo size={30} className="topbar-logo" label={t('auth.appName')} />
+            <div className="topbar-title">
+              {mobileV2 && showPeriodPicker ? (
+                /* Title and currency share the first line, so the month pill
+                   and its way back to this month have the second to themselves. */
+                <>
+                  <div className="topbar-headline">
+                    <h1>{t(active.labelKey)}</h1>
+                    <span className="topbar-currency">
+                      {money.converting ? `${money.base} → ${money.display}` : money.base}
+                    </span>
+                  </div>
+                  <div className="topbar-sub">
+                    <PeriodPill period={period} locale={settings.locale} onChange={setPeriod} />
+                  </div>
+                </>
+              ) : (
+                <h1>{t(active.labelKey)}</h1>
+              )}
+              {mobileV2 && showPeriodPicker ? null : (
+                <span>
+                  {money.converting ? `${money.base} → ${money.display}` : money.base} ·{' '}
+                  {formatPeriod(period, settings.locale)}
+                </span>
+              )}
+            </div>
+            <div className="topbar-tools">
+              {showCustomize && (
+                /* The same markup <Button> renders; a plain element so it can hold a ref. */
+                <button
+                  ref={customizeButton}
+                  type="button"
+                  className="btn btn--ghost btn--sm topbar-customize"
+                  aria-pressed={homeEditing}
+                  disabled={homeEditing}
+                  aria-label={customizeLabel}
+                  title={customizeLabel}
+                  onClick={() => setLayoutEditing(editPage, true)}
+                >
+                  <Icon icon={LayoutPanelTop} size="sm" />
+                  <span>{t('layout.customize')}</span>
+                </button>
+              )}
+              {showPeriodPicker && !mobileV2 && (
+                /* Three controls grouped so they read as a single month stepper. */
+                <div className="period-nav">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPeriod((p) => shiftPeriod(p, -1))}
+                    aria-label={t('common.previousMonth')}
+                  >
+                    <Icon icon={ChevronLeft} size="sm" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPeriod(currentPeriod())}
+                    disabled={period === currentPeriod()}
+                  >
+                    {t('common.today')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPeriod((p) => shiftPeriod(p, 1))}
+                    aria-label={t('common.nextMonth')}
+                  >
+                    <Icon icon={ChevronRight} size="sm" />
+                  </Button>
+                </div>
+              )}
+              <RefreshButton onRefresh={refreshCurrentRoute} label={t('common.refreshPage')} />
+
               <Button
                 size="sm"
                 variant="ghost"
-                className="topbar-signout"
-                aria-label={t('nav.signOut')}
-                title={t('nav.signOut')}
-                onClick={logout}
+                className={cx('topbar-settings', route === 'settings' && 'is-active')}
+                aria-label={t('nav.settings')}
+                aria-current={route === 'settings' ? 'page' : undefined}
+                title={t('nav.settings')}
+                onClick={() => go('settings')}
               >
-                <Icon icon={LogOut} size="sm" />
+                <Icon icon={SETTINGS_ITEM.icon} size="sm" />
               </Button>
+
+              {/* Mobile only — see .topbar-signout.
+
+                  The sidebar carries this on desktop, and the sidebar is
+                  display:none below 1000px, which left signing out genuinely
+                  unreachable on a phone: not buried, absent. Rendered here rather
+                  than added to the gesture arc because that menu commits on
+                  release, and an action you cannot undo in one tap has no place
+                  somewhere a slip of the thumb confirms it. */}
+              {!mobileV2 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="topbar-signout"
+                  aria-label={t('nav.signOut')}
+                  title={t('nav.signOut')}
+                  onClick={logout}
+                >
+                  <Icon icon={LogOut} size="sm" />
+                </Button>
+              )}
+            </div>
+          </header>
+
+          {/* The explorer uses the full width: a chart builder beside a control
+              panel is exactly the screen a 1320px cap was not designed for. */}
+          <main ref={mainRef} className={cx('page', route === 'deep-analytics' && 'page--wide')}>
+            <DbStatusBanner />
+
+            {route === 'dashboard' && (
+              <DashboardPage
+                period={period}
+                onNavigate={go}
+                onQuickAdd={(type) => {
+                  setQuickPrefill({ type });
+                  setQuickFormOpen(true);
+                }}
+              />
             )}
-          </div>
-        </header>
+            {route === 'wallets' && <WalletsPage />}
+            {route === 'cards' && <CreditCardsPage />}
+            {route === 'transactions' && <TransactionsPage period={period} />}
+            {route === 'investments' && <InvestmentsPage />}
+            {route === 'budgets' && <BudgetsPage period={period} />}
+            {route === 'splits' && <SharedExpensesPage />}
+            {route === 'subscriptions' && <SubscriptionsPage onNavigate={go} />}
+            {route === 'analytics' && <AnalyticsPage period={period} onNavigate={go} />}
+            {route === 'goals' && <GoalsPage />}
+            {route === 'notes' && <NotesPage />}
+            {route === 'debt' && <DebtManagerPage />}
+            {route === 'settings' && <SettingsPage />}
+            {route === 'more' && (
+              <MoreMenuPage
+                onNavigate={go}
+                /* The shell owns `period`, so warming is passed down rather than
+                   the page reaching for it. A directory is the one screen where
+                   prefetch reliably pays: you are one tap from somewhere. */
+                onPrefetch={(next) => warmRoute(next, period)}
+              />
+            )}
+            {route === 'deep-analytics' && (
+              <Suspense fallback={<DeepFrameSkeleton />}>
+                <DeepAnalyticsPage onNavigate={go} />
+              </Suspense>
+            )}
+            {route === 'widgets' && (
+              <Suspense fallback={<WidgetsFrameSkeleton />}>
+                <WidgetsPage />
+              </Suspense>
+            )}
+            {route === 'notFound' && <NotFoundPage onNavigate={go} />}
+          </main>
+        </div>
 
-        {/* The explorer uses the full width: a chart builder beside a control
-            panel is exactly the screen a 1320px cap was not designed for. */}
-        <main ref={mainRef} className={cx('page', route === 'deep-analytics' && 'page--wide')}>
-          <DbStatusBanner />
+        <QuickTransactionWidget
+          wallets={quickWallets.items}
+          onOpenFullForm={() => {
+            setQuickPrefill(undefined);
+            setQuickFormOpen(true);
+          }}
+        />
 
-          {route === 'dashboard' && (
-            <DashboardPage
-              period={period}
-              onNavigate={go}
-              onQuickAdd={(type) => {
-                setQuickPrefill({ type });
-                setQuickFormOpen(true);
-              }}
-            />
-          )}
-          {route === 'wallets' && <WalletsPage />}
-          {route === 'cards' && <CreditCardsPage />}
-          {route === 'transactions' && <TransactionsPage period={period} />}
-          {route === 'investments' && <InvestmentsPage />}
-          {route === 'budgets' && <BudgetsPage period={period} />}
-          {route === 'splits' && <SharedExpensesPage />}
-          {route === 'subscriptions' && <SubscriptionsPage onNavigate={go} />}
-          {route === 'analytics' && <AnalyticsPage period={period} onNavigate={go} />}
-          {route === 'goals' && <GoalsPage />}
-          {route === 'notes' && <NotesPage />}
-          {route === 'debt' && <DebtManagerPage />}
-          {route === 'settings' && <SettingsPage />}
-          {route === 'more' && (
-            <MoreMenuPage
-              onNavigate={go}
-              /* The shell owns `period`, so warming is passed down rather than
-                 the page reaching for it. A directory is the one screen where
-                 prefetch reliably pays: you are one tap from somewhere. */
-              onPrefetch={(next) => warmRoute(next, period)}
-            />
-          )}
-          {route === 'deep-analytics' && (
-            <Suspense fallback={<DeepFrameSkeleton />}>
-              <DeepAnalyticsPage onNavigate={go} />
-            </Suspense>
-          )}
-          {route === 'widgets' && (
-            <Suspense fallback={<WidgetsFrameSkeleton />}>
-              <WidgetsPage />
-            </Suspense>
-          )}
-          {route === 'notFound' && <NotFoundPage onNavigate={go} />}
-        </main>
+        <TransactionForm
+          open={quickFormOpen}
+          wallets={quickWallets.items.filter((w) => !w.archived)}
+          prefill={quickPrefill}
+          busy={quickTransactions.mutating}
+          error={quickTransactions.mutationError}
+          onClose={() => {
+            setQuickFormOpen(false);
+            quickTransactions.clearMutationError();
+          }}
+          onSubmit={saveQuickTransaction}
+        />
+
+        <nav ref={tabbarRef} className="tabbar" aria-label={t('nav.mainNavigation')}>
+          {tabLeft.map(tab)}
+          {/* An empty grid cell, not a wrapper: the centre button is a sibling of
+              the bar, so it can sit above the backdrop its own menu raises. A
+              child could not — .tabbar creates a stacking context. */}
+          <span className="tabbar-slot" aria-hidden="true" />
+          {tabRight.map(tab)}
+        </nav>
+
+        {/* Rendered beside the bar rather than inside it, and hidden with it on
+            desktop. See the stacking note above. */}
+        <GestureNavWidget shortcuts={navShortcuts} activeRoute={route} onNavigate={go} />
       </div>
-
-      <QuickTransactionWidget
-        wallets={quickWallets.items}
-        onOpenFullForm={() => {
-          setQuickPrefill(undefined);
-          setQuickFormOpen(true);
-        }}
-      />
-
-      <TransactionForm
-        open={quickFormOpen}
-        wallets={quickWallets.items.filter((w) => !w.archived)}
-        prefill={quickPrefill}
-        busy={quickTransactions.mutating}
-        error={quickTransactions.mutationError}
-        onClose={() => {
-          setQuickFormOpen(false);
-          quickTransactions.clearMutationError();
-        }}
-        onSubmit={saveQuickTransaction}
-      />
-
-      <nav ref={tabbarRef} className="tabbar" aria-label={t('nav.mainNavigation')}>
-        {tabLeft.map(tab)}
-        {/* An empty grid cell, not a wrapper: the centre button is a sibling of
-            the bar, so it can sit above the backdrop its own menu raises. A
-            child could not — .tabbar creates a stacking context. */}
-        <span className="tabbar-slot" aria-hidden="true" />
-        {tabRight.map(tab)}
-      </nav>
-
-      {/* Rendered beside the bar rather than inside it, and hidden with it on
-          desktop. See the stacking note above. */}
-      <GestureNavWidget shortcuts={navShortcuts} activeRoute={route} onNavigate={go} />
-    </div>
+    </FavouritesProvider>
   );
 }

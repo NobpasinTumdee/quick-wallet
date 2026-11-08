@@ -438,8 +438,48 @@ function analyticsSkeleton(id: AnalyticsCardId): Skeleton {
   );
 }
 
+/* Favourites: the header with its two buttons, then tiles as the card draws them. */
+function favouritesSkeleton({ sizeClass, minHeight }: CardSkeletonProps): ReactNode {
+  return (
+    <SkCard className={cx('fav-card fav-card--tiles', sizeClass)} minHeight={minHeight} head={<SkHead title="6em" subtitle={false} action={96} />}>
+      <div className="fav-body">
+        <ul className="fav-list fav-list--tiles">
+          {[0, 1, 2, 3].map((i) => (
+            <li key={i} className="fav-item fav-item--tiles">
+              <span className="fav-tile">
+                <Sk className="fav-badge" />
+                <span className="fav-tile-text">
+                  <SkT className="fav-tile-name" w={`${4 + (i % 3)}em`} />
+                </span>
+                <SkT className="fav-tile-amount" w="3.5em" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </SkCard>
+  );
+}
+
+/* Safe to spend: the title and state badge, then the amount, its line and the per-day figure. */
+function safeSpendSkeleton({ sizeClass, minHeight }: CardSkeletonProps): ReactNode {
+  return (
+    <SkCard className={cx('ss-card', sizeClass)} minHeight={minHeight} head={<SkHead title="7em" subtitle={false} action={64} />}>
+      <div className="ss-body">
+        <span className="ss-main">
+          <SkT className="ss-amount" w="6em" />
+          <SkT className="ss-sub" w="9em" />
+          <SkT className="ss-perday" w="6em" />
+        </span>
+      </div>
+    </SkCard>
+  );
+}
+
 export const CARD_SKELETONS: Record<CatalogCardId, Skeleton> = {
   ...HOME_SKELETONS,
+  favourites: favouritesSkeleton,
+  safeSpend: safeSpendSkeleton,
   bills: analyticsSkeleton('bills'),
   savingsRate: analyticsSkeleton('savingsRate'),
   categoryPie: analyticsSkeleton('categoryPie'),

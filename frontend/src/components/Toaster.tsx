@@ -34,6 +34,21 @@ export function Toaster() {
             {item.title && <strong>{item.title}</strong>}
             <span>{item.message}</span>
           </div>
+          {/* Part of the announced text (role=status reads the whole toast),
+              and an ordinary button for the keyboard. */}
+          {item.action && (
+            <button
+              type="button"
+              className="toast-action"
+              onClick={() => {
+                const { onClick } = item.action!;
+                dismissToast(item.id);
+                onClick();
+              }}
+            >
+              {item.action.label}
+            </button>
+          )}
           <button
             type="button"
             className="toast-close"

@@ -1,4 +1,4 @@
-import { Subscription } from '../types';
+import type { Subscription } from '../types';
 
 /**
  * Where a recurring bill lands next.

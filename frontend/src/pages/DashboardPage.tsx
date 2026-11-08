@@ -48,7 +48,7 @@ import {
   useCardBoard,
 } from '../components/CardBoard';
 import { HOME_ARRANGE_ENTRY, HOME_ARRANGE_TEXTS } from '../lib/layout/arrangeTexts';
-import { type CatalogCardId, isAnalyticsCardId } from '../lib/layout/cardCatalog';
+import { type CatalogCardId, isAnalyticsCardId, isHomeExtraCardId } from '../lib/layout/cardCatalog';
 import type { HomeCardId } from '../lib/layout/homeCards';
 import { HOME_BOARD_CARDS, HOME_BOARD_HALVES, HOME_LAYOUT_PAGE, HOME_LEGACY_LAYOUT_PAGE } from '../lib/layout/homeCards';
 import { HOME_EDIT_PAGE } from '../lib/layout/homeEditStore';
@@ -75,6 +75,15 @@ const IncomeSpendingChart = lazyWithRetry(() =>
    their charts), loaded only when a layout has one. */
 const HomeAnalyticsCard = lazyWithRetry(() =>
   import('../components/HomeAnalyticsCard').then((m) => ({ default: m.HomeAnalyticsCard })),
+);
+
+/* Favourites: its own chunk, loaded only when a layout has the card. */
+const FavouritesCard = lazyWithRetry(() =>
+  import('../components/favourites/FavouritesCard').then((m) => ({ default: m.FavouritesCard })),
+);
+/* Safe to spend: the same; it reads the recurring and debt lists only once mounted. */
+const SafeSpendCard = lazyWithRetry(() =>
+  import('../components/safeSpend/SafeSpendCard').then((m) => ({ default: m.SafeSpendCard })),
 );
 
 const TaxCalculatorModal = lazyWithRetry(() =>
@@ -729,7 +738,23 @@ export function DashboardPage({
     <CardBoardGrid
       board={board}
       renderCard={(id, sizeClass, tall, fill) =>
-        isAnalyticsCardId(id) ? (
+        id === 'safeSpend' ? (
+          <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>
+            <SafeSpendCard
+              sizeClass={sizeClass}
+              period={period}
+              summary={data}
+              transactions={history.items}
+              listsLoading={history.initialLoading || goals.initialLoading}
+              goals={goals.items}
+              fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}
+            />
+          </Suspense>
+        ) : isHomeExtraCardId(id) ? (
+          <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>
+            <FavouritesCard sizeClass={sizeClass} fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })} />
+          </Suspense>
+        ) : isAnalyticsCardId(id) ? (
           <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>
             <HomeAnalyticsCard id={id} sizeClass={sizeClass} fill={fill} period={period} onNavigate={onNavigate} />
           </Suspense>

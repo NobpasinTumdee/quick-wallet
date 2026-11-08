@@ -17765,3 +17765,678 @@ table.data.tx-table tbody tr.tx-day-row:hover {
 .bento > .card--interactive:hover {
   transform: none;
 }
+
+/* ==========================================================================
+   Toast action (Undo) and Favourites
+   ========================================================================== */
+
+/* One button in a toast: a full-height target, the accent colour that every
+   theme keeps readable on its surfaces. */
+.toast-action {
+  flex: none;
+  align-self: center;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-semi);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.toast-action:hover {
+  background: var(--surface-hover);
+}
+.toast-action:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+@media (pointer: coarse) {
+  .toast-action {
+    min-height: 44px;
+  }
+}
+
+.tool-row.tool-row--danger,
+.tool-row.tool-row--danger > svg {
+  color: var(--negative);
+}
+
+/* ---- Colours: theme tokens only ---- */
+.fav-c-accent { --fav-c: var(--accent); }
+.fav-c-positive { --fav-c: var(--positive); }
+.fav-c-negative { --fav-c: var(--negative); }
+.fav-c-warning { --fav-c: var(--warning); }
+.fav-c-neutral { --fav-c: var(--text-secondary); }
+
+.fav-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fav-c, var(--accent)) 16%, transparent);
+  color: var(--fav-c, var(--accent));
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.fav-badge.sk {
+  background: var(--surface-3);
+}
+.fav-badge-emoji {
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+/* ---- The card ---- */
+.fav-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fav-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.fav-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.fav-list--chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.fav-list--tiles {
+  display: grid;
+  /* Two side by side even on a 320px phone. */
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--space-2);
+}
+.fav-list--list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fav-item {
+  position: relative;
+  min-width: 0;
+}
+
+.fav-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--fav-c, var(--accent));
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  /* A held finger must not select text or open the browser's own menu. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.fav-tile:hover {
+  background: var(--surface-hover);
+}
+.fav-tile:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.fav-tile.is-busy {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.fav-tile-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.fav-tile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-semi);
+  font-size: var(--text-sm);
+}
+.fav-tile-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.fav-tile-amount {
+  flex: none;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fav-tile-amount.is-ask {
+  color: var(--text-secondary);
+}
+
+/* Chips: one line, only as wide as their text. */
+.fav-item--chips .fav-tile {
+  width: auto;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border-radius: var(--radius-pill);
+}
+.fav-item--chips .fav-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+}
+
+/* Tiles: the name over the amount, so two fit side by side on a phone. */
+.fav-item--tiles .fav-tile {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  min-height: 84px;
+  height: 100%;
+  padding-right: var(--space-5);
+}
+.fav-item--tiles .fav-tile-text {
+  flex-basis: 100%;
+  order: 1;
+}
+.fav-item--tiles .fav-tile-amount {
+  order: 2;
+}
+
+/* ⋯: always there in the list; on a mouse, on hover or focus elsewhere; on
+   touch (where a long-press opens the same menu) only once focused. */
+.fav-more {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+}
+.fav-item:hover .fav-more,
+.fav-more:focus-visible,
+.fav-item--list .fav-more {
+  opacity: 1;
+}
+.fav-more:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.fav-more:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.fav-item--list .fav-more {
+  top: 50%;
+  transform: translateY(-50%);
+}
+.fav-item--list .fav-tile {
+  padding-right: 40px;
+}
+.fav-item--chips .fav-more {
+  display: none;
+}
+@media (pointer: coarse) {
+  .fav-item:not(.fav-item--list) .fav-more:not(:focus-visible) {
+    clip-path: inset(50%);
+  }
+  .fav-item--list .fav-more {
+    width: 40px;
+    height: 40px;
+  }
+  .fav-item--chips .fav-tile {
+    min-height: 44px;
+  }
+}
+.fav-item--chips:focus-within .fav-more:focus-visible {
+  display: grid;
+}
+
+/* ---- The amount sheet ---- */
+.fav-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  outline: none;
+}
+.fav-pad-panel {
+  width: 100%;
+}
+.fav-pad-more {
+  display: flex;
+  justify-content: center;
+}
+
+/* ---- Editor ---- */
+.fav-emoji-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.fav-emoji-idea {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+.fav-emoji-idea.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.fav-emoji-idea:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.fav-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.fav-colors > legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+}
+.fav-color {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.fav-color input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.fav-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--fav-c);
+}
+.fav-color.is-active {
+  border-color: var(--fav-c);
+  background: color-mix(in srgb, var(--fav-c) 12%, var(--surface-2));
+}
+.fav-color:has(input:focus-visible) {
+  box-shadow: var(--ring);
+}
+
+.fav-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  cursor: pointer;
+}
+.fav-check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.fav-check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+.fav-check small {
+  color: var(--text-secondary);
+}
+
+.modal-foot .fav-editor-delete {
+  margin-right: auto;
+  color: var(--negative);
+}
+
+.tx-form-fav {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ---- Manage ---- */
+.fav-manage-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.fav-manage-row {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+.fav-manage-row .arrange-name small {
+  display: block;
+  color: var(--text-secondary);
+}
+.fav-manage-row .arrange-name {
+  min-width: 0;
+}
+.fav-manage-handle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+.fav-manage-handle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.fav-manage-row.is-dragging {
+  opacity: 0.6;
+}
+.fav-manage-row.is-drop-target {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+@media (max-width: 380px) {
+  .fav-manage-row .arrange-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Safe to spend (Home card + breakdown sheet). Theme tokens only.
+ * ------------------------------------------------------------------------- */
+.ss-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  height: 100%;
+  /* The amount scales with the card (cqi) rather than breaking inside the number. */
+  container-type: inline-size;
+}
+.ss-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.ss-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.ss-amount {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+  font-size: clamp(var(--text-lg), 10.5cqi, var(--text-2xl));
+}
+.ss-card--small .ss-amount {
+  font-size: clamp(var(--text-lg), 10.5cqi, var(--text-xl));
+}
+.ss-sub {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.ss-perday {
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ss-today {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.ss-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.ss-bar {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--positive) 28%, var(--surface-2));
+  overflow: hidden;
+}
+.ss-card--tight .ss-bar {
+  background: color-mix(in srgb, var(--warning) 30%, var(--surface-2));
+}
+.ss-card--over .ss-bar {
+  background: color-mix(in srgb, var(--negative) 30%, var(--surface-2));
+}
+.ss-bar-spent {
+  display: block;
+  height: 100%;
+  background: var(--text-secondary);
+  border-radius: inherit;
+}
+.ss-bar-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.ss-next {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: 0;
+}
+.ss-bills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ss-bills li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 4px 0;
+  font-size: var(--text-sm);
+}
+.ss-bill-date {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  min-width: 3.5em;
+}
+.ss-bill-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ss-bill-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ss-none {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Breakdown sheet */
+.ss-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.ss-sheet section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ss-sheet .section-label {
+  margin: 0;
+}
+.ss-lines {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ss-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.ss-line dt {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+}
+.ss-line dd {
+  margin: 0;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ss-line--total {
+  border-bottom: 0;
+  border-top: 2px solid var(--border-strong);
+  font-size: var(--text-md);
+}
+.ss-line--total dd {
+  font-weight: 700;
+}
+.ss-line--sub {
+  border-bottom: 0;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+.ss-line--sub dd {
+  color: var(--text);
+}
+.ss-line-hint {
+  flex-basis: 100%;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.ss-tag {
+  font-size: var(--text-2xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+.ss-meta {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.ss-bills--full li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ss-bills--full .ss-bill-name {
+  white-space: normal;
+  display: flex;
+  flex-direction: column;
+}
+.ss-bills--full .ss-bill-name small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.ss-bills--full .ss-bill-date {
+  min-width: 5.5em;
+}
+.ss-notes {
+  margin: 0;
+  padding-inline-start: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.ss-fieldset {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ss-fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.fav-check.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

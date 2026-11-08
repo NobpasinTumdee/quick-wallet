@@ -15,7 +15,8 @@ declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'translation';
     resources: {
-      translation: typeof import('../locales/en').en;
+      /* Safe to spend's strings load with its card (locales/safeSpend.ts). */
+      translation: typeof import('../locales/en').en & { safeSpend: typeof import('../locales/safeSpend').safeSpendEn };
     };
     /** Values are read as plain strings, never as `null`. */
     returnNull: false;

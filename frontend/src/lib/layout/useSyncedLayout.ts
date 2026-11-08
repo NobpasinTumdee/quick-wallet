@@ -183,5 +183,8 @@ export function useSyncedLayout<L extends Stamped>(
     return () => window.removeEventListener('storage', onStorage);
   }, [format, userId]);
 
-  return { layout, save };
+  /** Asks the server now (not rate-limited), e.g. before an edit made from a stale copy. */
+  const pull = useCallback(() => check(true), [check]);
+
+  return { layout, save, pull };
 }

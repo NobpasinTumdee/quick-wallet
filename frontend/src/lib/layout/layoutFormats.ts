@@ -18,6 +18,28 @@ export function layoutStorageKey(page: string, userId: string): string {
   return `qw.layout.${page}.${userId}`;
 }
 
+/**
+ * A stored value that is not a layout at all: UiPrefs only takes `layout.*`
+ * keys holding `{ v: 1, cards: [...] }`, so other synced preferences
+ * (favourites, the Safe-to-spend settings) are kept under such a key in that
+ * envelope, and mark themselves with a `kind`. A layout reader that ever
+ * met one treats it as nothing stored, never as a layout.
+ */
+export function isForeignPref(value: string | null): boolean {
+  if (value === null || !value.includes('"kind"')) return false;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return !!parsed && typeof parsed === 'object' && 'kind' in parsed;
+  } catch {
+    return false;
+  }
+}
+
+/** A stored value, or nothing when it is not a layout (see isForeignPref). */
+function layoutOnly(value: string | null): string | null {
+  return isForeignPref(value) ? null : value;
+}
+
 /** Anything with the time it was saved. */
 export interface Stamped {
   updatedAt: number;
@@ -66,14 +88,15 @@ export function gridLayoutFormat<Id extends string>(
     page,
     legacyPages: legacyPage === undefined ? undefined : [legacyPage],
     readLocal(stored) {
-      const own = stored[page] ?? null;
-      const legacy = legacyPage === undefined ? null : (stored[legacyPage] ?? null);
+      const own = layoutOnly(stored[page] ?? null);
+      const legacy = legacyPage === undefined ? null : layoutOnly(stored[legacyPage] ?? null);
       const current = own !== null ? sanitizeGridLayout(own, registry) : null;
       const migrated = legacy !== null ? fromLegacy(legacy, registry) : null;
       return newer(current, migrated) ?? defaultGridLayout(registry);
     },
     fromRemote(pref, from) {
-      const layout = from === page ? sanitizeGridLayout(pref.value, registry) : fromLegacy(pref.value, registry);
+      const value = layoutOnly(pref.value) ?? '';
+      const layout = from === page ? sanitizeGridLayout(value, registry) : fromLegacy(value, registry);
       return { ...layout, updatedAt: pref.updatedAt };
     },
     serialize: serializeGridLayout,
@@ -89,8 +112,8 @@ export function orderFormat<Id extends string>(
 ): SyncedLayoutFormat<CardOrder<Id>> {
   return {
     page,
-    readLocal: (stored) => sanitizeOrder(stored[page] ?? null, registry),
-    fromRemote: (pref) => ({ ...sanitizeOrder(pref.value, registry), updatedAt: pref.updatedAt }),
+    readLocal: (stored) => sanitizeOrder(layoutOnly(stored[page] ?? null), registry),
+    fromRemote: (pref) => ({ ...sanitizeOrder(layoutOnly(pref.value), registry), updatedAt: pref.updatedAt }),
     serialize: serializeOrder,
   };
 }

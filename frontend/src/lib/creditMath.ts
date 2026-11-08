@@ -48,7 +48,7 @@
  * expense, so paying a card off never double-counts as spending.
  */
 
-import { Transaction, WalletBalance } from '../types';
+import type { Transaction, WalletBalance } from '../types';
 import { todayKey } from './format';
 
 /* ------------------------------------------------------------------ */

@@ -1,4 +1,4 @@
-import { Goal, WalletBalance } from '../types';
+import type { Goal, WalletBalance } from '../types';
 
 /**
  * The arithmetic behind sinking funds.

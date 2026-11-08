@@ -81,8 +81,11 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
 
   const defOf = (id: Id) => registry.find((def) => def.id === id);
   const title = (id: Id): string => t(defOf(id)!.titleKey);
-  const addable = registry.filter((def) => def.addable);
+  /* Another page's cards (From Analytics), and the page's own optional ones (More cards). */
+  const addable = registry.filter((def) => def.addable && !def.extra);
   const notAdded = addable.filter((def) => !draft.cards.some((card) => card.id === def.id));
+  const extras = registry.filter((def) => def.extra);
+  const extrasNotAdded = extras.filter((def) => !draft.cards.some((card) => card.id === def.id));
   const total = draft.cards.length;
 
   const move = (id: Id, dir: 'up' | 'down') => {
@@ -148,7 +151,8 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
           {draft.cards.map((card, index) => {
             const name = title(card.id);
             const shown = !card.hidden;
-            const added = !!defOf(card.id)?.addable;
+            const added = !!defOf(card.id)?.addable && !defOf(card.id)?.extra;
+            const extra = !!defOf(card.id)?.extra;
             return (
               <li key={card.id} className={cx('arrange-row', !shown && 'is-hidden')}>
                 <span className="arrange-icon" aria-hidden="true">
@@ -158,6 +162,7 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
                   <span>{name}</span>
                   {!shown && <small>{t('arrange.hiddenTag')}</small>}
                   {added && <small>{t('arrange.fromAnalyticsTag')}</small>}
+                  {extra && <small>{t('arrange.addedTag')}</small>}
                 </span>
                 <span className="arrange-actions">
                   <button
@@ -209,6 +214,39 @@ export default function ArrangeSheet<Id extends CatalogCardId>({
             );
           })}
         </ol>
+        {extras.length > 0 && (
+          <section className="arrange-addable" aria-labelledby="arrange-extras-title">
+            <h3 id="arrange-extras-title" className="section-label">
+              {t('arrange.moreCards')}
+            </h3>
+            <p className="arrange-hint">{t('arrange.moreCardsHint')}</p>
+            {extrasNotAdded.length === 0 ? (
+              <p className="arrange-hint">{t('arrange.moreCardsNone')}</p>
+            ) : (
+              <ul className="arrange-list">
+                {extrasNotAdded.map((def) => {
+                  const name = t(def.titleKey);
+                  return (
+                    <li key={def.id} className="arrange-row">
+                      <span className="arrange-icon" aria-hidden="true">
+                        <Icon icon={CARD_ICONS[def.id]} size="sm" />
+                      </span>
+                      <span className="arrange-name">
+                        <span>{name}</span>
+                      </span>
+                      <span className="arrange-actions">
+                        <Button size="sm" data-add={def.id} aria-label={t('arrange.addCard', { title: name })} onClick={() => add(def.id)}>
+                          <Icon icon={Plus} size="sm" />
+                          {t('arrange.add')}
+                        </Button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
         {addable.length > 0 && (
           <section className="arrange-addable" aria-labelledby="arrange-addable-title">
             <h3 id="arrange-addable-title" className="section-label">

@@ -9,11 +9,25 @@ import { useSyncExternalStore } from 'react';
 
 export type ToastTone = 'error' | 'warning' | 'success' | 'info';
 
+export interface ToastAction {
+  label: string;
+  /** Runs once; the toast closes first. */
+  onClick: () => void;
+}
+
 export interface Toast {
   id: number;
   tone: ToastTone;
   title?: string;
   message: string;
+  /** One button (Undo), when given. */
+  action?: ToastAction;
+}
+
+export interface ToastOptions {
+  action?: ToastAction;
+  /** How long it stays, in ms; the tone's default otherwise. */
+  duration?: number;
 }
 
 const DURATIONS: Record<ToastTone, number> = {
@@ -39,20 +53,20 @@ export function dismissToast(id: number): void {
   emit();
 }
 
-function push(tone: ToastTone, message: string, title?: string): number {
+function push(tone: ToastTone, message: string, title?: string, options?: ToastOptions): number {
   const id = nextId++;
   // Cap the stack so a failing loop can't bury the screen.
-  toasts = [...toasts, { id, tone, title, message }].slice(-4);
+  toasts = [...toasts, { id, tone, title, message, action: options?.action }].slice(-4);
   emit();
-  window.setTimeout(() => dismissToast(id), DURATIONS[tone]);
+  window.setTimeout(() => dismissToast(id), options?.duration ?? DURATIONS[tone]);
   return id;
 }
 
 export const toast = {
-  error: (message: string, title?: string) => push('error', message, title),
-  warning: (message: string, title?: string) => push('warning', message, title),
-  success: (message: string, title?: string) => push('success', message, title),
-  info: (message: string, title?: string) => push('info', message, title),
+  error: (message: string, title?: string, options?: ToastOptions) => push('error', message, title, options),
+  warning: (message: string, title?: string, options?: ToastOptions) => push('warning', message, title, options),
+  success: (message: string, title?: string, options?: ToastOptions) => push('success', message, title, options),
+  info: (message: string, title?: string, options?: ToastOptions) => push('info', message, title, options),
 };
 
 export function useToasts(): Toast[] {

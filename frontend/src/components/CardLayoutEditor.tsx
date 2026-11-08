@@ -805,8 +805,11 @@ export default function CardLayoutEditor({
   /* The page's own hidden cards; then, where the page can take another's
      cards (Home), those not on it yet, in their own group. */
   const hidden = hiddenAll.filter((card) => !defOf(card.id)?.addable);
-  const addable = hiddenAll.filter((card) => defOf(card.id)?.addable);
-  const hasAddable = registry.some((def) => def.addable);
+  const addable = hiddenAll.filter((card) => defOf(card.id)?.addable && !defOf(card.id)?.extra);
+  const hasAddable = registry.some((def) => def.addable && !def.extra);
+  /* The page's own optional cards (Home's Favourites), in their own group. */
+  const extras = hiddenAll.filter((card) => defOf(card.id)?.extra);
+  const hasExtras = registry.some((def) => def.extra);
   const menuCard = menuFor ? draft.cards.find((card) => card.id === menuFor && !card.hidden) : undefined;
   const menuAnchor = menuCard ? document.querySelector<HTMLElement>(`[data-menu-for="${menuCard.id}"]`) : null;
 
@@ -1044,6 +1047,16 @@ export default function CardLayoutEditor({
             <span className="layout-editbar-none">{t(texts.hiddenNone)}</span>
           ) : (
             hidden.map((card) => widgetChip(card))
+          )}
+          {hasExtras && (
+            <>
+              <span className="section-label layout-editbar-group">{t('layout.moreCards')}</span>
+              {extras.length === 0 ? (
+                <span className="layout-editbar-none">{t('layout.moreCardsNone')}</span>
+              ) : (
+                extras.map((card) => widgetChip(card))
+              )}
+            </>
           )}
           {hasAddable && (
             <>

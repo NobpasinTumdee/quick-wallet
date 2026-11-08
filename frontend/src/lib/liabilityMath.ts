@@ -1,5 +1,5 @@
 import { advanceDueDate } from './recurrence';
-import { BillSplit, Debt, Subscription, Transaction } from '../types';
+import type { BillSplit, Debt, Subscription, Transaction } from '../types';
 
 /**
  * A month of committed outgoings, laid out day by day.

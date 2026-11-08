@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Check, Download, Ellipsis, Plus, Receipt, RefreshCw, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Check, Download, Ellipsis, Plus, Receipt, RefreshCw, Star, X } from 'lucide-react';
 import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -31,6 +31,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useConfirm } from '../hooks/useConfirm';
 import { downloadCsv, toCsv } from '../lib/csv';
 import { ActivitySkeleton } from '../components/skeleton/pageSkeletons';
+import { useOptionalFavourites } from '../state/FavouritesContext';
 
 /**
  * Shown beside the title, so the header describes what is actually on screen.
@@ -90,6 +91,7 @@ function useGroupByDay(): [boolean, (on: boolean) => void] {
 }
 
 export function TransactionsPage({ period }: { period: string }) {
+  const favourites = useOptionalFavourites();
   const { t } = useTranslation();
   const { settings } = useSettings();
   const [filters, setFilters] = useState<TxFilters>(EMPTY_FILTERS);
@@ -560,6 +562,14 @@ export function TransactionsPage({ period }: { period: string }) {
             anchorRef.current = null;
           }}
           onClear={clearSelection}
+          onMakeFavourite={
+            favourites && selected.size === 1
+              ? () => {
+                  const tx = visible.find((row) => selected.has(row.id));
+                  if (tx) favourites.makeFromTransaction(tx);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -858,12 +868,15 @@ function SelectionBar({
   allSelected,
   onSelectAll,
   onClear,
+  onMakeFavourite,
 }: {
   totals: TxTotals | null;
   money: MoneyFormatter;
   allSelected: boolean;
   onSelectAll: () => void;
   onClear: () => void;
+  /** One row selected: save it as a favourite. */
+  onMakeFavourite?: () => void;
 }) {
   const { t } = useTranslation();
   const announcement = totals
@@ -904,6 +917,12 @@ function SelectionBar({
             </span>
           </span>
           <span className="tx-selbar-actions">
+            {onMakeFavourite && (
+              <Button size="sm" variant="ghost" onClick={onMakeFavourite} aria-label={t('favourites.makeFavourite')}>
+                <Icon icon={Star} size="sm" />
+                <span className="tx-selbar-clear-label">{t('favourites.makeFavourite')}</span>
+              </Button>
+            )}
             {!allSelected && (
               <Button size="sm" variant="ghost" onClick={onSelectAll}>
                 {t('activity.selectAllVisible')}
