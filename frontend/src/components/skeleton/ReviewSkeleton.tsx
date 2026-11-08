@@ -22,9 +22,9 @@ export function ReviewSkeleton({ head = true }: { head?: boolean }) {
       <SkRegion page="mr" className="mr-grid">
         <SkCard className="mr-span mr-callout" head={<SkHead title="6em" subtitle={false} />}>
           <ul className="mr-highlights">
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2, 3, 4].map((i) => (
               <li key={i}>
-                <SkT w={`${18 + i * 4}em`} />
+                <SkT w={`${18 + (i % 3) * 4}em`} />
               </li>
             ))}
           </ul>

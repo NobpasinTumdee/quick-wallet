@@ -51,13 +51,37 @@
   color: var(--text-muted);
 }
 
-/* Spending up is the warning direction; down is the good one. */
+/* Spending up is the warning direction; down is the good one. Mixed toward
+   the text colour so small figures keep 4.5:1 on the card in every theme. */
 .mr-change.is-up {
-  color: var(--negative);
+  color: color-mix(in srgb, var(--negative) 65%, var(--text));
 }
 
 .mr-change.is-down {
-  color: var(--positive);
+  color: color-mix(in srgb, var(--positive) 60%, var(--text));
+}
+
+/* Budget status: a coloured dot, the words in the text colour. */
+.mr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  color: var(--text-secondary);
+}
+
+.mr-status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--positive);
+}
+
+.mr-status.is-over::before {
+  background: var(--negative);
 }
 
 .mr-empty {

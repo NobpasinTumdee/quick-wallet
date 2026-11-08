@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Icon } from '../components/Icon';
 import { ReviewSkeleton } from '../components/skeleton/ReviewSkeleton';
-import { Alert, Badge, Button, Card } from '../components/ui';
+import { Alert, Button, Card } from '../components/ui';
 import { useExcelDB, useExcelQuery } from '../hooks/useExcelDB';
 import { useNotes } from '../hooks/useNotes';
 import { currentPeriod, cx, formatPeriod, shiftPeriod, todayKey } from '../lib/format';
@@ -292,7 +292,7 @@ function ReviewBody({ review, wallets }: { review: MonthReview; wallets: { id: s
                       : t('review.budgetOk', { spent: money(row.spent), limit: money(row.limit) })}
                   </small>
                 </span>
-                <Badge tone={row.over ? 'negative' : 'positive'}>{t(row.over ? 'review.over' : 'review.onTrack')}</Badge>
+                <span className={cx('mr-status', row.over ? 'is-over' : 'is-ok')}>{t(row.over ? 'review.over' : 'review.onTrack')}</span>
               </li>
             ))}
           </ul>

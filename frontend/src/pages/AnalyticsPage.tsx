@@ -118,12 +118,19 @@ export function AnalyticsPage({
       </span>
       <Icon icon={ArrowUpRight} size="sm" className="deep-entry-arrow" />
     </button>
-    <button type="button" className="deep-entry" onClick={() => openReview(reviewMonth)}>
+    <button
+      type="button"
+      className="deep-entry deep-entry--review"
+      onClick={() => openReview(reviewMonth)}
+      aria-label={t('review.pillLinkMonth', { month: formatPeriod(reviewMonth, locale) })}
+    >
       <span className="deep-entry-mark" aria-hidden="true">
         <Icon icon={CalendarCheck} />
       </span>
       <span className="deep-entry-text">
-        <strong>{t('review.analyticsTitle')}</strong>
+        <strong className="deep-entry-long">{t('review.analyticsTitle')}</strong>
+        {/* A phone: just the icon and "Review", beside Deep Analytics (see CSS). */}
+        <strong className="deep-entry-short">{t('review.pillLink')}</strong>
         <span>{t('review.analyticsHint', { month: formatPeriod(reviewMonth, locale) })}</span>
       </span>
       <Icon icon={ArrowUpRight} size="sm" className="deep-entry-arrow" />

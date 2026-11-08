@@ -1,6 +1,6 @@
 import { Suspense, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge, Card } from '../ui';
+import { Card } from '../ui';
 import { useExcelDB } from '../../hooks/useExcelDB';
 import { useAuth } from '../../state/AuthContext';
 import { useMoneyFormatter, useSettings } from '../../state/SettingsContext';
@@ -17,7 +17,6 @@ const SafeSpendSheet = lazyWithRetry(() => import('./SafeSpendSheet').then((m) =
 /* Before anything here renders: the strings travel with this chunk. */
 registerSafeSpendStrings();
 
-const STATE_TONE = { ok: 'positive', tight: 'warning', over: 'negative' } as const;
 const STATE_KEY = { ok: 'safeSpend.stateOk', tight: 'safeSpend.stateTight', over: 'safeSpend.stateOver' } as const;
 
 /**
@@ -173,7 +172,7 @@ function CardBody({
         className={cx('ss-card', `ss-card--${size}`, `ss-card--${state}`, sizeClass)}
         title={t('safeSpend.title')}
         actions={
-          mode !== 'past' && left !== null ? <Badge tone={STATE_TONE[state]}>{t(STATE_KEY[state])}</Badge> : undefined
+          mode !== 'past' && left !== null ? <span className={cx('ss-state', `ss-state--${state}`)}>{t(STATE_KEY[state])}</span> : undefined
         }
       >
         <div ref={bodyRef} className="ss-body">
