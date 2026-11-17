@@ -188,7 +188,7 @@ export function InstallmentForm({
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
 
-        <div className="span-2">
+        <div className="span-2 form-choices">
           <Field label={t('forms.term')}>
             <Segmented<string>
               value={COMMON_TERMS.includes(months) ? String(months) : 'other'}

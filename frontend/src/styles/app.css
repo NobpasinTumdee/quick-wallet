@@ -1270,7 +1270,11 @@ input[type='date'].control:hover::-webkit-calendar-picker-indicator {
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* minmax(0, …), not 1fr (= minmax(auto, 1fr)): the column is the sheet's
+     width, never the widest unshrinkable child's (a segmented control, a
+     two-up summary), which on a phone pushed the form past the sheet's
+     right edge, where the body clipped it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
@@ -10567,6 +10571,21 @@ line.arate-zero {
 }
 
 /* ---- Pay bill / installment sheets ---- */
+
+/* A phone: a form's choice pills (Pay bill's amounts, an installment's term)
+   wrap onto a second row rather than scrolling sideways inside the pill, so
+   no choice is hidden past the edge. */
+@media (max-width: 639px) {
+  .form-choices .segmented {
+    display: flex;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    border-radius: var(--radius-lg);
+  }
+  .form-choices .segmented-item {
+    flex: 1 1 auto;
+  }
+}
 
 .paybill-summary {
   display: grid;

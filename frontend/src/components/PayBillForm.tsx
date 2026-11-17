@@ -185,7 +185,7 @@ export function PayBillForm({
             </div>
           </div>
 
-          <div className="span-2">
+          <div className="span-2 form-choices">
             <Field label={t('forms.howMuch')}>
               <Segmented<Preset>
                 value={preset}
