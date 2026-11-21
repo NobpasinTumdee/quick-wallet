@@ -476,10 +476,34 @@ function safeSpendSkeleton({ sizeClass, minHeight }: CardSkeletonProps): ReactNo
   );
 }
 
+/* Due soon: the title and its Planning link, then rows as the card draws them (title, then project and date). */
+function dueSoonSkeleton({ sizeClass, minHeight }: CardSkeletonProps): ReactNode {
+  return (
+    <SkCard className={cx('due-card', sizeClass)} minHeight={minHeight} head={<SkHead title="6em" subtitle={false} action={72} />} padded={false}>
+      <div className="due-body">
+      <ul className="due-list">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className="due-row">
+            <span className="due-row-btn">
+              <span className="due-row-main">
+                <SkT className="due-row-title" w={`${8 + (i % 2) * 3}em`} />
+                <SkT className="due-row-project" w="6em" />
+              </span>
+              <Sk className="due-row-tag" w="4.5em" />
+            </span>
+          </li>
+        ))}
+      </ul>
+      </div>
+    </SkCard>
+  );
+}
+
 export const CARD_SKELETONS: Record<CatalogCardId, Skeleton> = {
   ...HOME_SKELETONS,
   favourites: favouritesSkeleton,
   safeSpend: safeSpendSkeleton,
+  dueSoon: dueSoonSkeleton,
   bills: analyticsSkeleton('bills'),
   savingsRate: analyticsSkeleton('savingsRate'),
   categoryPie: analyticsSkeleton('categoryPie'),

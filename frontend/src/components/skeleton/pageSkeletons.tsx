@@ -1,5 +1,5 @@
 import { useMobileV2 } from '../../lib/mobileLayout';
-import { Sk, SkListRows, SkRegion, SkT, SkWalletKindHead } from './Sk';
+import { Sk, SkFrame, SkListRows, SkRegion, SkT, SkWalletKindHead } from './Sk';
 
 /**
  * The loading regions of every other data page, each in that page's own
@@ -542,6 +542,66 @@ export function WidgetsFrameSkeleton() {
         </header>
         <SkListRows rows={3} />
       </section>
+    </SkRegion>
+  );
+}
+
+/* ---- Planning ---- */
+
+/**
+ * Planning's list (project tiles) or one board (columns of cards). The
+ * layout classes it shares with the page live in app.css, so the skeleton
+ * matches before the page's own CSS chunk arrives.
+ */
+export function PlanningSkeleton({ board = false, head = true }: { board?: boolean; head?: boolean }) {
+  if (board) {
+    return (
+      <SkRegion page="planning-board" className="plan-board-page">
+        <div className="plan-board-head">
+          <Sk w="5.5em" h={28} r={8} />
+          <SkT className="plan-board-title" w="10em" />
+        </div>
+        <div className="plan-board">
+          {[4, 2, 3, 1].map((cards, c) => (
+            <SkFrame key={c} className="plan-col">
+              <div className="plan-col-head">
+                <SkT className="plan-col-title" w={widths(c, 6)} />
+              </div>
+              <div className="plan-col-body">
+                <div className="plan-cards">
+                  {Array.from({ length: cards }, (_, i) => (
+                    <Sk key={i} className="plan-card-sk" h={i % 2 ? 64 : 48} r={10} />
+                  ))}
+                </div>
+              </div>
+            </SkFrame>
+          ))}
+        </div>
+      </SkRegion>
+    );
+  }
+  return (
+    <SkRegion page="planning" className="plan">
+      {head && (
+        <div className="page-head plan-head">
+          <div>
+            <SkT as="h1" className="page-title" w="7em" />
+            <SkT as="p" className="page-subtitle" w="16em" />
+          </div>
+        </div>
+      )}
+      <div className="plan-toolbar">
+        <Sk w="8em" h={36} r={10} />
+      </div>
+      <div className="plan-grid">
+        {Array.from({ length: 4 }, (_, i) => (
+          <SkFrame key={i} className="plan-tile">
+            <SkT className="plan-tile-name" w={widths(i, 9)} />
+            <SkT w="6em" />
+            <Sk w="100%" h={6} r={3} />
+          </SkFrame>
+        ))}
+      </div>
     </SkRegion>
   );
 }

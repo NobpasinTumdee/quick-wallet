@@ -660,6 +660,10 @@ function handle_(fn) {
       code: err && err.__code ? err.__code : 'INTERNAL_ERROR',
       error: (err && err.message) || 'Unexpected server error'
     };
+    /* Only set by Planning's 409 CONFLICT: the row as stored now, so the app
+       can offer "keep mine" (resend with force: true) or "use latest". Every
+       other error answers exactly as before. */
+    if (err && err.__current !== undefined) payload.current = err.__current;
     console.error(err && err.stack ? err.stack : err);
   }
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
@@ -788,6 +792,22 @@ function dispatch_(action, method, query, body, token) {
        Home layout. See "UI preferences" below. */
     'uiPrefs.list': function () { return uiPrefsList_(requireAuth_(token), query); },
     'uiPrefs.save': function () { return uiPrefsSave_(requireAuth_(token), body); },
+
+    /* Planning boards. One GET loads everything; every write refuses GET so it
+       always runs under the script lock below. See "Planning" further down
+       and docs/planning-api.md. */
+    'planProjects.list': function () { return planProjectsList_(requireAuth_(token), query); },
+    'planProjects.save': function () { planWriteOnly_(method); return planProjectsSave_(requireAuth_(token), query, body); },
+    'planProjects.delete': function () { planWriteOnly_(method); return planProjectsDelete_(requireAuth_(token), query, body); },
+    'planStatuses.save': function () { planWriteOnly_(method); return planStatusesSave_(requireAuth_(token), query, body); },
+    'planStatuses.reorder': function () { planWriteOnly_(method); return planStatusesReorder_(requireAuth_(token), query, body); },
+    'planStatuses.delete': function () { planWriteOnly_(method); return planStatusesDelete_(requireAuth_(token), query, body); },
+    'planItems.save': function () { planWriteOnly_(method); return planItemsSave_(requireAuth_(token), query, body); },
+    'planItems.move': function () { planWriteOnly_(method); return planItemsMove_(requireAuth_(token), query, body); },
+    'planItems.archive': function () { planWriteOnly_(method); return planItemsArchive_(requireAuth_(token), query, body); },
+    'planItems.delete': function () { planWriteOnly_(method); return planItemsDelete_(requireAuth_(token), query, body); },
+    'planMilestones.save': function () { planWriteOnly_(method); return planMilestonesSave_(requireAuth_(token), query, body); },
+    'planMilestones.delete': function () { planWriteOnly_(method); return planMilestonesDelete_(requireAuth_(token), query, body); },
 
     'settings.get': function () { return settingsGet_(requireAuth_(token)); },
     'settings.save': function () { return settingsSave_(requireAuth_(token), body); },
@@ -6749,6 +6769,1638 @@ function testUiLayoutRoundTrip() {
 }
 
 /* =========================================================================
+ * Planning: project boards (projects, statuses, cards, milestones)
+ * =========================================================================
+ * A board per project, like GitHub Projects: the user's own statuses are the
+ * columns, cards are dragged between them, and milestones group cards. Text
+ * only — nothing here moves money. A card can point at transactions, a note
+ * and (through its project) a goal, but it only stores their IDs.
+ *
+ * ---------------------------------------------------------------------------
+ * FOUR SHEETS OF THEIR OWN, NOT IN `SHEETS`
+ * ---------------------------------------------------------------------------
+ * Like UiPrefs, these tables are not in SHEETS, so health_(), setup(), the
+ * Settings row counts and every older app version see exactly what they saw
+ * before. They have their own reader and writer, which place every value by
+ * HEADER NAME on both read and write: a column moved by hand still reads and
+ * writes right, and a column added by hand is never written, so it keeps its
+ * value. The first write creates a missing sheet and appends any missing
+ * header; `createPlanningSheets()` (also run by `createMissingSheets()`) does
+ * the same from the editor.
+ *
+ * Every text column is `text` (serialize_: leading apostrophe), so "=1+1",
+ * "+66…", "007" or "2026-01-01" are stored literally, as in Notes. Dates are
+ * plain YYYY-MM-DD text; timestamps are ISO text, compared for equality by
+ * the stale check.
+ *
+ * ---------------------------------------------------------------------------
+ * STALE SAVES
+ * ---------------------------------------------------------------------------
+ * Every update, move, archive and delete carries `baseUpdatedAt`, the
+ * updatedAt the client last saw. If the row has moved on, it is refused with
+ * 409 CONFLICT and the response carries `current` (the row as stored now), so
+ * the app can offer "keep mine" (resend with `force: true`) or "use latest".
+ *
+ * ---------------------------------------------------------------------------
+ * CARD ORDER
+ * ---------------------------------------------------------------------------
+ * `rank` orders cards in a column. A move takes the neighbours' IDs and lands
+ * the card on their midpoint, so it writes one row. When that gap falls under
+ * PLAN_RANK_MIN_GAP_ the one column is renumbered (1024, 2048, …) and the
+ * new ranks are returned. Renumbering is bookkeeping, not an edit: it does not
+ * change the other cards' updatedAt, so a drag never makes another device's
+ * open card conflict. Everything else that changes a card (its status after a
+ * status delete, its completedAt after a Kind change, its milestone after a
+ * milestone delete) does bump updatedAt and returns the card.
+ * ========================================================================= */
+
+var PLAN_SHEETS_ = {
+  PlanProjects: [
+    ['id', 'ID', 'text'],
+    ['userId', 'User ID', 'text'],
+    ['name', 'Name', 'text'],
+    ['description', 'Description', 'text'],
+    ['color', 'Color', 'text'],
+    ['icon', 'Icon', 'text'],
+    ['state', 'State', 'text'],
+    ['startDate', 'Start Date', 'text'],
+    ['dueDate', 'Due Date', 'text'],
+    ['linkedGoalId', 'Linked Goal ID', 'text'],
+    ['sortOrder', 'Sort Order', 'number'],
+    ['createdAt', 'Created At', 'text'],
+    ['updatedAt', 'Updated At', 'text']
+  ],
+  PlanStatuses: [
+    ['id', 'ID', 'text'],
+    ['userId', 'User ID', 'text'],
+    ['projectId', 'Project ID', 'text'],
+    ['name', 'Name', 'text'],
+    ['color', 'Color', 'text'],
+    ['order', 'Order', 'number'],
+    ['kind', 'Kind', 'text'],
+    ['createdAt', 'Created At', 'text'],
+    ['updatedAt', 'Updated At', 'text']
+  ],
+  PlanItems: [
+    ['id', 'ID', 'text'],
+    ['userId', 'User ID', 'text'],
+    ['projectId', 'Project ID', 'text'],
+    ['statusId', 'Status ID', 'text'],
+    ['milestoneId', 'Milestone ID', 'text'],
+    ['title', 'Title', 'text'],
+    ['description', 'Description', 'text'],
+    ['priority', 'Priority', 'text'],
+    ['labels', 'Labels', 'text'],
+    ['startDate', 'Start Date', 'text'],
+    ['dueDate', 'Due Date', 'text'],
+    ['completedAt', 'Completed At', 'text'],
+    ['rank', 'Rank', 'number'],
+    ['checklist', 'Checklist (JSON)', 'text'],
+    /* Empty means "no budget", which is not the same as a budget of 0. */
+    ['budget', 'Budget', 'optnumber'],
+    ['linkedTxIds', 'Linked Tx IDs', 'text'],
+    ['linkedNoteId', 'Linked Note ID', 'text'],
+    ['archivedAt', 'Archived At', 'text'],
+    ['createdAt', 'Created At', 'text'],
+    ['updatedAt', 'Updated At', 'text']
+  ],
+  PlanMilestones: [
+    ['id', 'ID', 'text'],
+    ['userId', 'User ID', 'text'],
+    ['projectId', 'Project ID', 'text'],
+    ['title', 'Title', 'text'],
+    ['description', 'Description', 'text'],
+    ['dueDate', 'Due Date', 'text'],
+    ['state', 'State', 'text'],
+    ['order', 'Order', 'number'],
+    ['createdAt', 'Created At', 'text'],
+    ['updatedAt', 'Updated At', 'text']
+  ]
+};
+
+var PLAN_NAME_MAX_ = 200;
+var PLAN_STATUS_NAME_MAX_ = 60;
+/* Same as NOTE_BODY_MAX: under a cell's 50,000 with room for the apostrophe. */
+var PLAN_TEXT_MAX_ = 40000;
+var PLAN_ICON_MAX_ = 24;
+var PLAN_REF_MAX_ = 80;
+var PLAN_LABELS_MAX_ = 20;
+var PLAN_LABEL_MAX_ = 30;
+var PLAN_CHECKLIST_MAX_ = 100;
+var PLAN_CHECK_TEXT_MAX_ = 300;
+var PLAN_CHECKLIST_JSON_MAX_ = 20000;
+var PLAN_TX_LINKS_MAX_ = 50;
+var PLAN_BUDGET_MAX_ = 1e12;
+var PLAN_PROJECTS_MAX_ = 200;
+var PLAN_STATUSES_MAX_ = 30;
+var PLAN_MILESTONES_MAX_ = 100;
+/* Per project, archived cards included. */
+var PLAN_ITEMS_MAX_ = 2000;
+var PLAN_RANK_STEP_ = 1024;
+var PLAN_RANK_MIN_GAP_ = 1e-6;
+
+var PLAN_PROJECT_STATES_ = ['active', 'archived'];
+var PLAN_STATUS_KINDS_ = ['todo', 'doing', 'done'];
+var PLAN_PRIORITIES_ = ['none', 'low', 'medium', 'high', 'urgent'];
+var PLAN_MILESTONE_STATES_ = ['open', 'closed'];
+var PLAN_DEFAULT_STATUSES_ = [
+  { name: 'Planning', kind: 'todo' },
+  { name: 'Ready', kind: 'todo' },
+  { name: 'In progress', kind: 'doing' },
+  { name: 'Done', kind: 'done' }
+];
+
+/* ---- Sheet access (by header name) ---- */
+
+/** Test hook only: testPlanningRoundTrip points the tables at scratch sheets. */
+var PLAN_NAME_OVERRIDE_ = {};
+/** Per-execution memo, keyed by the real sheet name. */
+var PLAN_CACHE_ = {};
+
+function planSheetName_(name) {
+  return PLAN_NAME_OVERRIDE_[name] || name;
+}
+
+function planColumns_(name) {
+  var def = PLAN_SHEETS_[name];
+  if (!def) throw apiError_('Unknown planning sheet "' + name + '"', 500, 'UNKNOWN_SHEET');
+  return def.map(function (c) { return { key: c[0], header: c[1], type: c[2] }; });
+}
+
+function planCoerce_(cell, type) {
+  if (type === 'number') return coerce_(cell, 'number');
+  if (type === 'optnumber') {
+    if (cell === '' || cell === null || cell === undefined) return null;
+    var n = Number(cell);
+    return isFinite(n) ? n : null;
+  }
+  return coerce_(cell, 'text');
+}
+
+function planSerialize_(value, type) {
+  if (type === 'number') {
+    var n = Number(value);
+    return isFinite(n) ? n : 0;
+  }
+  if (type === 'optnumber') {
+    if (value === null || value === undefined || value === '') return '';
+    var m = Number(value);
+    return isFinite(m) ? m : '';
+  }
+  return serialize_(value === null || value === undefined ? '' : String(value), 'text');
+}
+
+/**
+ * The whole table as { sheet, at: { key: 0-based column or -1 }, complete,
+ * rows }. Each row carries `_row` (1-based sheet row). A missing sheet reads
+ * as empty, so the app loads before anyone has created it.
+ */
+function planTable_(name) {
+  var actual = planSheetName_(name);
+  if (PLAN_CACHE_[actual]) return PLAN_CACHE_[actual];
+
+  var cols = planColumns_(name);
+  var sheet = spreadsheet_().getSheetByName(actual);
+  var table = { name: name, sheet: sheet, at: {}, complete: false, rows: [] };
+  if (sheet) {
+    var values = sheet.getDataRange().getValues();
+    var headers = (values[0] || []).map(function (h) { return String(h || '').trim().toLowerCase(); });
+    table.complete = true;
+    cols.forEach(function (c) {
+      table.at[c.key] = headers.indexOf(c.header.toLowerCase());
+      if (table.at[c.key] < 0) table.complete = false;
+    });
+    var seen = {};
+    for (var r = 1; r < values.length; r += 1) {
+      var line = values[r];
+      var row = { _row: r + 1 };
+      cols.forEach(function (c) {
+        var i = table.at[c.key];
+        row[c.key] = planCoerce_(i >= 0 ? line[i] : '', c.type);
+      });
+      if (!row.id || seen[row.id]) continue;
+      seen[row.id] = true;
+      table.rows.push(row);
+    }
+  }
+  PLAN_CACHE_[actual] = table;
+  return table;
+}
+
+function planForget_(name) {
+  delete PLAN_CACHE_[planSheetName_(name)];
+}
+
+/**
+ * Creates the sheet with its headers if it is missing, or appends any
+ * missing header after the last one. Never moves, renames or clears a column.
+ * Answers { created, added: [headers] }.
+ */
+function planEnsure_(name) {
+  var ss = spreadsheet_();
+  var actual = planSheetName_(name);
+  var headers = planColumns_(name).map(function (c) { return c.header; });
+  var sheet = ss.getSheetByName(actual);
+  var result = { name: actual, created: false, added: [] };
+  if (!sheet) {
+    sheet = ss.insertSheet(actual);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+    result.created = true;
+  } else {
+    var width = Math.max(1, sheet.getLastColumn());
+    var existing = sheet.getRange(1, 1, 1, width).getValues()[0]
+      .map(function (h) { return String(h || '').trim().toLowerCase(); });
+    var last = 0;
+    existing.forEach(function (h, i) { if (h) last = i + 1; });
+    var missing = headers.filter(function (h) { return existing.indexOf(h.toLowerCase()) === -1; });
+    if (missing.length) {
+      sheet.getRange(1, last + 1, 1, missing.length).setValues([missing]);
+      result.added = missing;
+    }
+  }
+  planForget_(name);
+  return result;
+}
+
+/** The table, with the sheet and every header guaranteed. Writes only. */
+function planWritable_(name) {
+  var table = planTable_(name);
+  if (!table.sheet || !table.complete) {
+    planEnsure_(name);
+    table = planTable_(name);
+  }
+  return table;
+}
+
+/** Our columns grouped into runs of adjacent sheet columns: one range each. */
+function planRuns_(table) {
+  var cols = planColumns_(table.name)
+    .map(function (c) { return { col: c, at: table.at[c.key] }; })
+    .sort(function (a, b) { return a.at - b.at; });
+  var runs = [];
+  cols.forEach(function (entry) {
+    var run = runs[runs.length - 1];
+    if (run && run.start + run.cols.length === entry.at + 1) {
+      run.cols.push(entry.col);
+    } else {
+      runs.push({ start: entry.at + 1, cols: [entry.col] });
+    }
+  });
+  return runs;
+}
+
+function planValues_(run, objects) {
+  return objects.map(function (obj) {
+    return run.cols.map(function (c) { return planSerialize_(obj[c.key], c.type); });
+  });
+}
+
+/** Appends rows, writing only our columns. */
+function planInsert_(name, objects) {
+  if (!objects.length) return;
+  var table = planWritable_(name);
+  var start = table.sheet.getLastRow() + 1;
+  planRuns_(table).forEach(function (run) {
+    table.sheet.getRange(start, run.start, objects.length, run.cols.length)
+      .setValues(planValues_(run, objects));
+  });
+  planForget_(name);
+}
+
+/** Rewrites rows (by `_row`), only our columns; adjacent rows share a range. */
+function planUpdate_(name, rows) {
+  if (!rows.length) return;
+  var table = planWritable_(name);
+  var runs = planRuns_(table);
+  var sorted = rows.slice().sort(function (a, b) { return a._row - b._row; });
+  var groups = [];
+  sorted.forEach(function (row) {
+    var group = groups[groups.length - 1];
+    if (group && group[group.length - 1]._row === row._row - 1) group.push(row);
+    else groups.push([row]);
+  });
+  groups.forEach(function (group) {
+    runs.forEach(function (run) {
+      table.sheet.getRange(group[0]._row, run.start, group.length, run.cols.length)
+        .setValues(planValues_(run, group));
+    });
+  });
+  planForget_(name);
+}
+
+/** Deletes rows bottom-up, one deleteRows() per run of adjacent rows. */
+function planDelete_(name, rows) {
+  if (!rows.length) return 0;
+  var sheet = planTable_(name).sheet;
+  var numbers = rows.map(function (r) { return r._row; }).sort(function (a, b) { return b - a; });
+  var i = 0;
+  while (i < numbers.length) {
+    var bottom = numbers[i];
+    var count = 1;
+    while (i + count < numbers.length && numbers[i + count] === bottom - count) count += 1;
+    sheet.deleteRows(bottom - count + 1, count);
+    i += count;
+  }
+  planForget_(name);
+  return numbers.length;
+}
+
+function planCopy_(row) {
+  var copy = {};
+  for (var k in row) copy[k] = row[k];
+  return copy;
+}
+
+/** Creates any missing Planning sheet / header. Safe to run any time. */
+function createPlanningSheets_() {
+  var created = [];
+  var patched = [];
+  Object.keys(PLAN_SHEETS_).forEach(function (name) {
+    var result = planEnsure_(name);
+    if (result.created) created.push(result.name);
+    else if (result.added.length) patched.push(result.name + ' (+' + result.added.join(', ') + ')');
+  });
+  return { created: created, patched: patched };
+}
+
+/** Editor entry point: creates the four Planning sheets / missing headers. */
+function createPlanningSheets() {
+  var result = createPlanningSheets_();
+  Logger.log(result.created.length ? 'Created: ' + result.created.join(', ') : 'No Planning sheets needed creating.');
+  if (result.patched.length) Logger.log('Added columns to: ' + result.patched.join('; '));
+  return result;
+}
+
+/* ---- Validation ---- */
+
+function planPick_(query, body, key) {
+  if (body && body[key] !== undefined && body[key] !== null) return body[key];
+  return query ? query[key] : undefined;
+}
+
+function planHas_(body, key) {
+  return Object.prototype.hasOwnProperty.call(body, key);
+}
+
+/** One line, trimmed. */
+function planLine_(value, field, max, required) {
+  var s = value === null || value === undefined ? '' : String(value);
+  s = s.replace(/[\r\n]+/g, ' ').trim();
+  if (required && !s) throw bad_('"' + field + '" is required');
+  if (s.length > max) throw bad_('"' + field + '" must be ' + max + ' characters or fewer');
+  return s;
+}
+
+/** Long Markdown text, kept exactly as typed. */
+function planLong_(value, field) {
+  var s = value === null || value === undefined ? '' : String(value);
+  if (s.length > PLAN_TEXT_MAX_) {
+    throw bad_('"' + field + '" must be ' + PLAN_TEXT_MAX_ + ' characters or fewer');
+  }
+  return s;
+}
+
+function planEnum_(value, field, allowed, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  var s = String(value).trim().toLowerCase();
+  if (allowed.indexOf(s) === -1) throw bad_('"' + field + '" must be one of: ' + allowed.join(', '));
+  return s;
+}
+
+/** '' or a real calendar date as YYYY-MM-DD. No timezone, no Buddhist years. */
+function planDate_(value, field) {
+  var s = value === null || value === undefined ? '' : String(value).trim();
+  if (!s) return '';
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  var ok = false;
+  if (m) {
+    var y = Number(m[1]);
+    var mo = Number(m[2]);
+    var d = Number(m[3]);
+    var date = new Date(Date.UTC(y, mo - 1, d));
+    ok = date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
+  }
+  if (!ok) throw bad_('"' + field + '" must be a date like 2026-01-31');
+  return s;
+}
+
+function planDateOrder_(start, due) {
+  if (start && due && due < start) throw bad_('"dueDate" must not be before "startDate"');
+}
+
+function planColor_(value) {
+  var s = value === null || value === undefined ? '' : String(value).trim();
+  if (!s) return '';
+  if (!/^#[0-9a-fA-F]{6}$/.test(s)) throw bad_('"color" must look like #3b6fff');
+  return s.toLowerCase();
+}
+
+function planRef_(value, field) {
+  var s = value === null || value === undefined ? '' : String(value).trim();
+  if (!s) return '';
+  if (s.length > PLAN_REF_MAX_ || !/^[A-Za-z0-9_.:-]+$/.test(s)) {
+    throw bad_('"' + field + '" is not a valid ID');
+  }
+  return s;
+}
+
+function planNumber_(value, field, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return num_(value, field, { min: -1e15, max: 1e15 });
+}
+
+/** An array, or a comma-separated string, as a clean list. */
+function planList_(value) {
+  if (value === undefined || value === null || value === '') return [];
+  if (Object.prototype.toString.call(value) === '[object Array]') return value;
+  return String(value).split(',');
+}
+
+function planLabels_(value) {
+  var seen = {};
+  var out = [];
+  planList_(value).forEach(function (raw) {
+    var label = String(raw === null || raw === undefined ? '' : raw).replace(/[\r\n]+/g, ' ').trim();
+    if (!label) return;
+    if (label.indexOf(',') !== -1) throw bad_('A label cannot contain a comma');
+    if (label.length > PLAN_LABEL_MAX_) {
+      throw bad_('Each label must be ' + PLAN_LABEL_MAX_ + ' characters or fewer');
+    }
+    var key = label.toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push(label);
+  });
+  if (out.length > PLAN_LABELS_MAX_) throw bad_('A card can have at most ' + PLAN_LABELS_MAX_ + ' labels');
+  return out;
+}
+
+function planChecklist_(value) {
+  var list = value;
+  if (list === undefined || list === null || list === '') return [];
+  if (typeof list === 'string') {
+    try {
+      list = JSON.parse(list);
+    } catch (err) {
+      throw bad_('"checklist" must be a JSON array');
+    }
+  }
+  if (Object.prototype.toString.call(list) !== '[object Array]') throw bad_('"checklist" must be an array');
+  if (list.length > PLAN_CHECKLIST_MAX_) {
+    throw bad_('A checklist can have at most ' + PLAN_CHECKLIST_MAX_ + ' entries');
+  }
+  var seen = {};
+  var out = list.map(function (entry) {
+    if (!entry || typeof entry !== 'object') throw bad_('Each checklist entry must be { id, text, done }');
+    var text = String(entry.text === undefined || entry.text === null ? '' : entry.text)
+      .replace(/[\r\n]+/g, ' ');
+    if (text.length > PLAN_CHECK_TEXT_MAX_) {
+      throw bad_('Each checklist entry must be ' + PLAN_CHECK_TEXT_MAX_ + ' characters or fewer');
+    }
+    var id = String(entry.id === undefined || entry.id === null ? '' : entry.id).trim();
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || seen[id]) id = uuid_().replace(/-/g, '').slice(0, 12);
+    seen[id] = true;
+    return { id: id, text: text, done: entry.done === true || entry.done === 'true' };
+  });
+  if (JSON.stringify(out).length > PLAN_CHECKLIST_JSON_MAX_) {
+    throw bad_('The checklist must be ' + PLAN_CHECKLIST_JSON_MAX_ + ' characters or fewer as JSON');
+  }
+  return out;
+}
+
+function planBudget_(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return num_(value, 'budget', { min: 0, max: PLAN_BUDGET_MAX_ });
+}
+
+function planTxIds_(value) {
+  var seen = {};
+  var out = [];
+  planList_(value).forEach(function (raw) {
+    var id = planRef_(raw, 'linkedTxIds');
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    out.push(id);
+  });
+  if (out.length > PLAN_TX_LINKS_MAX_) {
+    throw bad_('A card can link at most ' + PLAN_TX_LINKS_MAX_ + ' transactions');
+  }
+  return out;
+}
+
+function planSplit_(stored) {
+  return String(stored || '').split(',').map(function (s) { return s.trim(); }).filter(String);
+}
+
+function planStoredChecklist_(stored) {
+  if (!stored) return [];
+  try {
+    var list = JSON.parse(stored);
+    return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+/* ---- Rows as the client sees them ---- */
+
+function planProjectPublic_(r) {
+  return {
+    id: r.id, name: r.name, description: r.description, color: r.color, icon: r.icon,
+    state: r.state || 'active', startDate: r.startDate, dueDate: r.dueDate,
+    linkedGoalId: r.linkedGoalId, sortOrder: r.sortOrder,
+    createdAt: r.createdAt, updatedAt: r.updatedAt || r.createdAt
+  };
+}
+
+function planStatusPublic_(r) {
+  return {
+    id: r.id, projectId: r.projectId, name: r.name, color: r.color, order: r.order,
+    kind: r.kind || 'todo', createdAt: r.createdAt, updatedAt: r.updatedAt || r.createdAt
+  };
+}
+
+function planItemPublic_(r) {
+  return {
+    id: r.id, projectId: r.projectId, statusId: r.statusId, milestoneId: r.milestoneId,
+    title: r.title, description: r.description, priority: r.priority || 'none',
+    labels: planSplit_(r.labels), startDate: r.startDate, dueDate: r.dueDate,
+    completedAt: r.completedAt, rank: r.rank, checklist: planStoredChecklist_(r.checklist),
+    budget: r.budget, linkedTxIds: planSplit_(r.linkedTxIds), linkedNoteId: r.linkedNoteId,
+    archivedAt: r.archivedAt, createdAt: r.createdAt, updatedAt: r.updatedAt || r.createdAt
+  };
+}
+
+function planMilestonePublic_(r) {
+  return {
+    id: r.id, projectId: r.projectId, title: r.title, description: r.description,
+    dueDate: r.dueDate, state: r.state || 'open', order: r.order,
+    createdAt: r.createdAt, updatedAt: r.updatedAt || r.createdAt
+  };
+}
+
+/** IDs of one of the user's tables, or null if that sheet is missing. */
+function planForeignRows_(sheetName, userId) {
+  try {
+    return readTable_(sheetName).filter(function (row) { return row.userId === userId; });
+  } catch (err) {
+    if (err && err.__code === 'SHEET_MISSING') return [];
+    throw err;
+  }
+}
+
+function planDecorateProjects_(user, projects) {
+  var goals = null;
+  return projects.map(function (p) {
+    if (p.linkedGoalId && !goals) {
+      goals = {};
+      planForeignRows_('Goals', user.id).forEach(function (g) { goals[g.id] = true; });
+    }
+    p.linkedGoalMissing = Boolean(p.linkedGoalId) && !goals[p.linkedGoalId];
+    return p;
+  });
+}
+
+/**
+ * Adds `spent`, `missingTxIds` and `linkedNoteMissing`. The Transactions and
+ * Notes sheets are each read at most once per call, and only if some card
+ * links to them. Only the user's own expense rows count toward `spent`
+ * (amounts are positive and in the base currency, as everywhere else); a
+ * linked income or transfer is not missing but adds nothing.
+ */
+function planDecorateItems_(user, items) {
+  var txById = null;
+  var noteIds = null;
+  return items.map(function (item) {
+    var spent = 0;
+    var missing = [];
+    if (item.linkedTxIds.length) {
+      if (!txById) {
+        txById = {};
+        planForeignRows_('Transactions', user.id).forEach(function (tx) { txById[tx.id] = tx; });
+      }
+      item.linkedTxIds.forEach(function (id) {
+        var tx = txById[id];
+        if (!tx) missing.push(id);
+        else if (tx.type === 'expense') spent += Number(tx.amount) || 0;
+      });
+    }
+    if (item.linkedNoteId && !noteIds) {
+      noteIds = {};
+      if (notesSheetExists_()) {
+        planForeignRows_('Notes', user.id).forEach(function (n) { noteIds[n.id] = true; });
+      }
+    }
+    item.spent = money_(spent);
+    item.missingTxIds = missing;
+    item.linkedNoteMissing = Boolean(item.linkedNoteId) && !noteIds[item.linkedNoteId];
+    return item;
+  });
+}
+
+function planItemOut_(user, row) {
+  return planDecorateItems_(user, [planItemPublic_(row)])[0];
+}
+
+function planItemsOut_(user, rows) {
+  return planDecorateItems_(user, rows.map(planItemPublic_));
+}
+
+/* ---- Ownership, stale check ---- */
+
+function planOwned_(name, user, id, label) {
+  var key = String(id === undefined || id === null ? '' : id).trim();
+  if (!key) throw bad_('"' + (label === 'Project' ? 'projectId' : 'id') + '" is required');
+  var rows = planTable_(name).rows;
+  for (var i = 0; i < rows.length; i += 1) {
+    if (rows[i].id === key) {
+      if (rows[i].userId !== user.id) break;
+      return rows[i];
+    }
+  }
+  throw apiError_(label + ' not found', 404, 'NOT_FOUND');
+}
+
+/** A status or milestone the card points at must be in the card's project. */
+function planSameProject_(row, projectId, label) {
+  if (row.projectId !== projectId) {
+    throw apiError_(label + ' belongs to a different project', 400, 'WRONG_PROJECT');
+  }
+  return row;
+}
+
+function planConflict_(label, current) {
+  var err = apiError_(label + ' was changed somewhere else since you loaded it', 409, 'CONFLICT');
+  err.__current = current;
+  return err;
+}
+
+function planCheckBase_(row, query, body, label, current) {
+  if (bool_(planPick_(query, body, 'force'), false)) return;
+  var base = planPick_(query, body, 'baseUpdatedAt');
+  base = base === undefined || base === null ? '' : String(base);
+  if (!base) throw bad_('"baseUpdatedAt" is required (the updatedAt you last saw), or send force: true');
+  if (base !== (row.updatedAt || row.createdAt)) throw planConflict_(label, current);
+}
+
+function planMine_(name, user, projectId) {
+  return planTable_(name).rows.filter(function (r) {
+    return r.userId === user.id && (!projectId || r.projectId === projectId);
+  });
+}
+
+function planByRank_(a, b) {
+  return a.rank - b.rank || String(a.createdAt).localeCompare(String(b.createdAt));
+}
+
+function planColumnEnd_(user, statusId) {
+  var max = 0;
+  planMine_('PlanItems', user).forEach(function (r) {
+    if (r.statusId === statusId && r.rank > max) max = r.rank;
+  });
+  return max;
+}
+
+function planCompletedAt_(row, kind, stamp) {
+  return kind === 'done' ? (row.completedAt || stamp) : '';
+}
+
+function planWriteOnly_(method) {
+  if (method === 'GET') throw apiError_('Send this action as a POST', 405, 'METHOD_NOT_ALLOWED');
+}
+
+/* ---- planProjects.list ---- */
+
+/**
+ * GET planProjects.list[?projectId=&includeArchived=true] →
+ *   { projects, statuses, milestones, items }
+ */
+function planProjectsList_(user, query) {
+  query = query || {};
+  var projectId = query.projectId ? String(query.projectId).trim() : '';
+  var includeArchived = bool_(query.includeArchived, false);
+
+  var projects = planMine_('PlanProjects', user).filter(function (p) {
+    return !projectId || p.id === projectId;
+  });
+  if (projectId && !projects.length) throw apiError_('Project not found', 404, 'NOT_FOUND');
+
+  var statuses = planMine_('PlanStatuses', user, projectId).map(planStatusPublic_)
+    .sort(function (a, b) { return a.projectId.localeCompare(b.projectId) || a.order - b.order; });
+  var milestones = planMine_('PlanMilestones', user, projectId).map(planMilestonePublic_)
+    .sort(function (a, b) {
+      return a.projectId.localeCompare(b.projectId) || a.order - b.order ||
+        String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'));
+    });
+  var items = planMine_('PlanItems', user, projectId)
+    .filter(function (r) { return includeArchived || !r.archivedAt; })
+    .sort(function (a, b) {
+      return a.projectId.localeCompare(b.projectId) || a.statusId.localeCompare(b.statusId) || planByRank_(a, b);
+    });
+
+  return {
+    projects: planDecorateProjects_(user, projects.map(planProjectPublic_)).sort(function (a, b) {
+      return a.sortOrder - b.sortOrder || String(a.createdAt).localeCompare(String(b.createdAt));
+    }),
+    statuses: statuses,
+    milestones: milestones,
+    items: planItemsOut_(user, items)
+  };
+}
+
+/* ---- planProjects.save / delete ---- */
+
+function planProjectFields_(body, current) {
+  var pick = function (key, parse) { return planHas_(body, key) ? parse(body[key]) : current[key]; };
+  var fields = {
+    name: pick('name', function (v) { return planLine_(v, 'name', PLAN_NAME_MAX_, true); }),
+    description: pick('description', function (v) { return planLong_(v, 'description'); }),
+    color: pick('color', planColor_),
+    icon: pick('icon', function (v) { return planLine_(v, 'icon', PLAN_ICON_MAX_, false); }),
+    state: pick('state', function (v) { return planEnum_(v, 'state', PLAN_PROJECT_STATES_, 'active'); }),
+    startDate: pick('startDate', function (v) { return planDate_(v, 'startDate'); }),
+    dueDate: pick('dueDate', function (v) { return planDate_(v, 'dueDate'); }),
+    linkedGoalId: pick('linkedGoalId', function (v) { return planRef_(v, 'linkedGoalId'); }),
+    sortOrder: pick('sortOrder', function (v) { return planNumber_(v, 'sortOrder', current.sortOrder); })
+  };
+  if (!fields.name) throw bad_('"name" is required');
+  planDateOrder_(fields.startDate, fields.dueDate);
+  return fields;
+}
+
+function planProjectsSave_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var id = String(planPick_(query, body, 'id') || '').trim();
+  var stamp = new Date().toISOString();
+
+  if (id) {
+    var existing = planOwned_('PlanProjects', user, id, 'Project');
+    planCheckBase_(existing, query, body, 'This project',
+      planDecorateProjects_(user, [planProjectPublic_(existing)])[0]);
+    var fields = planProjectFields_(body, planProjectPublic_(existing));
+    var row = planCopy_(existing);
+    for (var k in fields) row[k] = fields[k];
+    row.updatedAt = noteStamp_(existing.updatedAt);
+    planUpdate_('PlanProjects', [row]);
+    return { project: planDecorateProjects_(user, [planProjectPublic_(row)])[0] };
+  }
+
+  var mine = planMine_('PlanProjects', user);
+  if (mine.length >= PLAN_PROJECTS_MAX_) {
+    throw apiError_('You can have at most ' + PLAN_PROJECTS_MAX_ + ' projects', 400, 'LIMIT_REACHED');
+  }
+  var nextOrder = mine.reduce(function (max, p) { return Math.max(max, p.sortOrder + 1); }, 0);
+  var created = planProjectFields_(body, {
+    name: '', description: '', color: '', icon: '', state: 'active', startDate: '', dueDate: '',
+    linkedGoalId: '', sortOrder: nextOrder
+  });
+
+  var names = body.statusNames;
+  if (names !== undefined && names !== null && Object.prototype.toString.call(names) !== '[object Array]') {
+    throw bad_('"statusNames" must be an array of 4 names');
+  }
+  names = names || [];
+  if (names.length > PLAN_DEFAULT_STATUSES_.length) throw bad_('"statusNames" must have at most 4 names');
+  var statusNames = PLAN_DEFAULT_STATUSES_.map(function (s, i) {
+    return planLine_(names[i], 'statusNames', PLAN_STATUS_NAME_MAX_, false) || s.name;
+  });
+
+  var project = { id: uuid_(), userId: user.id, createdAt: stamp, updatedAt: stamp };
+  for (var f in created) project[f] = created[f];
+  var statuses = PLAN_DEFAULT_STATUSES_.map(function (s, i) {
+    return {
+      id: uuid_(), userId: user.id, projectId: project.id, name: statusNames[i], color: '',
+      order: i, kind: s.kind, createdAt: stamp, updatedAt: stamp
+    };
+  });
+
+  planInsert_('PlanProjects', [project]);
+  planInsert_('PlanStatuses', statuses);
+  return {
+    project: planDecorateProjects_(user, [planProjectPublic_(project)])[0],
+    statuses: statuses.map(planStatusPublic_)
+  };
+}
+
+function planProjectsDelete_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var existing = planOwned_('PlanProjects', user, planPick_(query, body, 'id'), 'Project');
+  planCheckBase_(existing, query, body, 'This project',
+    planDecorateProjects_(user, [planProjectPublic_(existing)])[0]);
+
+  var deleted = {
+    items: planDelete_('PlanItems', planMine_('PlanItems', user, existing.id)),
+    milestones: planDelete_('PlanMilestones', planMine_('PlanMilestones', user, existing.id)),
+    statuses: planDelete_('PlanStatuses', planMine_('PlanStatuses', user, existing.id))
+  };
+  planDelete_('PlanProjects', [planOwned_('PlanProjects', user, existing.id, 'Project')]);
+  return { id: existing.id, deleted: deleted };
+}
+
+/* ---- planStatuses.save / reorder / delete ---- */
+
+function planStatusesSave_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var id = String(planPick_(query, body, 'id') || '').trim();
+  var stamp = new Date().toISOString();
+  var pick = function (current, key, parse) { return planHas_(body, key) ? parse(body[key]) : current[key]; };
+  var parseName = function (v) { return planLine_(v, 'name', PLAN_STATUS_NAME_MAX_, true); };
+  var parseKind = function (v) { return planEnum_(v, 'kind', PLAN_STATUS_KINDS_, 'todo'); };
+
+  if (!id) {
+    var project = planOwned_('PlanProjects', user, body.projectId, 'Project');
+    var siblings = planMine_('PlanStatuses', user, project.id);
+    if (siblings.length >= PLAN_STATUSES_MAX_) {
+      throw apiError_('A project can have at most ' + PLAN_STATUSES_MAX_ + ' statuses', 400, 'LIMIT_REACHED');
+    }
+    var nextOrder = siblings.reduce(function (max, s) { return Math.max(max, s.order + 1); }, 0);
+    var status = {
+      id: uuid_(), userId: user.id, projectId: project.id,
+      name: parseName(body.name),
+      color: planColor_(body.color),
+      order: planNumber_(body.order, 'order', nextOrder),
+      kind: parseKind(body.kind),
+      createdAt: stamp, updatedAt: stamp
+    };
+    planInsert_('PlanStatuses', [status]);
+    return { status: planStatusPublic_(status), items: [] };
+  }
+
+  var existing = planOwned_('PlanStatuses', user, id, 'Status');
+  planCheckBase_(existing, query, body, 'This status', planStatusPublic_(existing));
+  if (planHas_(body, 'projectId') && body.projectId && String(body.projectId) !== existing.projectId) {
+    throw bad_('A status cannot move to another project');
+  }
+  var row = planCopy_(existing);
+  row.name = pick(existing, 'name', parseName);
+  row.color = pick(existing, 'color', planColor_);
+  row.order = pick(existing, 'order', function (v) { return planNumber_(v, 'order', existing.order); });
+  row.kind = pick(existing, 'kind', parseKind);
+  row.updatedAt = noteStamp_(existing.updatedAt);
+
+  /* A Kind change re-decides "done" for every card in the column. */
+  var changed = [];
+  if (row.kind !== (existing.kind || 'todo')) {
+    planMine_('PlanItems', user, existing.projectId).forEach(function (item) {
+      if (item.statusId !== existing.id) return;
+      var completedAt = planCompletedAt_(item, row.kind, stamp);
+      if (completedAt === item.completedAt) return;
+      var next = planCopy_(item);
+      next.completedAt = completedAt;
+      next.updatedAt = noteStamp_(item.updatedAt);
+      changed.push(next);
+    });
+  }
+
+  planUpdate_('PlanStatuses', [row]);
+  planUpdate_('PlanItems', changed);
+  return { status: planStatusPublic_(row), items: planItemsOut_(user, changed) };
+}
+
+/**
+ * statusIds must be exactly the project's statuses. A list that differs (a
+ * status was added or deleted elsewhere) is refused with CONFLICT and
+ * `current` = { statuses } as stored now.
+ */
+function planStatusesReorder_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var project = planOwned_('PlanProjects', user, planPick_(query, body, 'projectId'), 'Project');
+  var ids = body.statusIds;
+  if (Object.prototype.toString.call(ids) !== '[object Array]' || !ids.length) {
+    throw bad_('"statusIds" must be the list of the project\'s status IDs, in order');
+  }
+  var current = planMine_('PlanStatuses', user, project.id)
+    .sort(function (a, b) { return a.order - b.order; });
+  var byId = {};
+  current.forEach(function (s) { byId[s.id] = s; });
+  var seen = {};
+  var matches = ids.length === current.length && ids.every(function (id) {
+    var key = String(id);
+    if (!byId[key] || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+  if (!matches) {
+    var err = apiError_('The statuses changed somewhere else; reload and try again', 409, 'CONFLICT');
+    err.__current = { statuses: current.map(planStatusPublic_) };
+    throw err;
+  }
+
+  var changed = [];
+  var result = ids.map(function (id, i) {
+    var s = byId[String(id)];
+    if (s.order === i) return s;
+    var next = planCopy_(s);
+    next.order = i;
+    next.updatedAt = noteStamp_(s.updatedAt);
+    changed.push(next);
+    return next;
+  });
+  planUpdate_('PlanStatuses', changed);
+  return { statuses: result.map(planStatusPublic_) };
+}
+
+function planStatusesDelete_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var status = planOwned_('PlanStatuses', user, planPick_(query, body, 'id'), 'Status');
+  planCheckBase_(status, query, body, 'This status', planStatusPublic_(status));
+
+  if (planMine_('PlanStatuses', user, status.projectId).length <= 1) {
+    throw apiError_('A project must keep at least one status', 400, 'LAST_STATUS');
+  }
+  var cards = planMine_('PlanItems', user, status.projectId)
+    .filter(function (item) { return item.statusId === status.id; })
+    .sort(planByRank_);
+  var moveTo = planPick_(query, body, 'moveToStatusId');
+  var target = null;
+  if (moveTo) {
+    target = planSameProject_(planOwned_('PlanStatuses', user, moveTo, 'Status'), status.projectId, 'That status');
+    if (target.id === status.id) throw bad_('"moveToStatusId" must be a different status');
+  }
+  if (cards.length && !target) {
+    throw apiError_('This status still has cards; send moveToStatusId', 400, 'MOVE_TO_REQUIRED');
+  }
+
+  var stamp = new Date().toISOString();
+  var end = target ? planColumnEnd_(user, target.id) : 0;
+  var moved = cards.map(function (item, i) {
+    var next = planCopy_(item);
+    next.statusId = target.id;
+    next.rank = end + PLAN_RANK_STEP_ * (i + 1);
+    next.completedAt = planCompletedAt_(item, target.kind, stamp);
+    next.updatedAt = noteStamp_(item.updatedAt);
+    return next;
+  });
+  planUpdate_('PlanItems', moved);
+  planDelete_('PlanStatuses', [status]);
+  return { id: status.id, items: planItemsOut_(user, moved) };
+}
+
+/* ---- planItems.save / move / archive / delete ---- */
+
+function planItemFields_(body, current) {
+  var pick = function (key, parse) { return planHas_(body, key) ? parse(body[key]) : current[key]; };
+  var fields = {
+    title: pick('title', function (v) { return planLine_(v, 'title', PLAN_NAME_MAX_, true); }),
+    description: pick('description', function (v) { return planLong_(v, 'description'); }),
+    priority: pick('priority', function (v) { return planEnum_(v, 'priority', PLAN_PRIORITIES_, 'none'); }),
+    labels: pick('labels', planLabels_),
+    startDate: pick('startDate', function (v) { return planDate_(v, 'startDate'); }),
+    dueDate: pick('dueDate', function (v) { return planDate_(v, 'dueDate'); }),
+    checklist: pick('checklist', planChecklist_),
+    budget: pick('budget', planBudget_),
+    linkedTxIds: pick('linkedTxIds', planTxIds_),
+    linkedNoteId: pick('linkedNoteId', function (v) { return planRef_(v, 'linkedNoteId'); }),
+    milestoneId: pick('milestoneId', function (v) { return planRef_(v, 'milestoneId'); }),
+    statusId: pick('statusId', function (v) { return planRef_(v, 'statusId'); })
+  };
+  if (!fields.title) throw bad_('"title" is required');
+  planDateOrder_(fields.startDate, fields.dueDate);
+  return fields;
+}
+
+/** The stored form of the list fields. */
+function planItemStore_(row, fields) {
+  row.title = fields.title;
+  row.description = fields.description;
+  row.priority = fields.priority;
+  row.labels = fields.labels.join(', ');
+  row.startDate = fields.startDate;
+  row.dueDate = fields.dueDate;
+  row.checklist = fields.checklist.length ? JSON.stringify(fields.checklist) : '';
+  row.budget = fields.budget;
+  row.linkedTxIds = fields.linkedTxIds.join(',');
+  row.linkedNoteId = fields.linkedNoteId;
+  row.milestoneId = fields.milestoneId;
+  return row;
+}
+
+function planItemsSave_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var id = String(planPick_(query, body, 'id') || '').trim();
+  var stamp = new Date().toISOString();
+
+  if (!id) {
+    var project = planOwned_('PlanProjects', user, body.projectId, 'Project');
+    if (planMine_('PlanItems', user, project.id).length >= PLAN_ITEMS_MAX_) {
+      throw apiError_('A project can have at most ' + PLAN_ITEMS_MAX_ + ' cards', 400, 'LIMIT_REACHED');
+    }
+    var fields = planItemFields_(body, {
+      title: '', description: '', priority: 'none', labels: [], startDate: '', dueDate: '',
+      checklist: [], budget: null, linkedTxIds: [], linkedNoteId: '', milestoneId: '', statusId: ''
+    });
+    var status = fields.statusId
+      ? planSameProject_(planOwned_('PlanStatuses', user, fields.statusId, 'Status'), project.id, 'That status')
+      : planMine_('PlanStatuses', user, project.id).sort(function (a, b) { return a.order - b.order; })[0];
+    if (!status) throw bad_('This project has no status to put the card in');
+    if (fields.milestoneId) {
+      planSameProject_(planOwned_('PlanMilestones', user, fields.milestoneId, 'Milestone'), project.id, 'That milestone');
+    }
+    var item = planItemStore_({
+      id: uuid_(), userId: user.id, projectId: project.id, statusId: status.id,
+      rank: planColumnEnd_(user, status.id) + PLAN_RANK_STEP_,
+      completedAt: status.kind === 'done' ? stamp : '',
+      archivedAt: '', createdAt: stamp, updatedAt: stamp
+    }, fields);
+    planInsert_('PlanItems', [item]);
+    return { item: planItemOut_(user, item) };
+  }
+
+  var existing = planOwned_('PlanItems', user, id, 'Card');
+  planCheckBase_(existing, query, body, 'This card', planItemOut_(user, existing));
+  if (planHas_(body, 'projectId') && body.projectId && String(body.projectId) !== existing.projectId) {
+    throw bad_('A card cannot move to another project');
+  }
+  var current = planItemPublic_(existing);
+  var next = planItemFields_(body, current);
+  if (!next.statusId) next.statusId = existing.statusId;
+  if (next.milestoneId && next.milestoneId !== existing.milestoneId) {
+    planSameProject_(planOwned_('PlanMilestones', user, next.milestoneId, 'Milestone'), existing.projectId, 'That milestone');
+  }
+  var row = planItemStore_(planCopy_(existing), next);
+  if (next.statusId !== existing.statusId) {
+    var target = planSameProject_(planOwned_('PlanStatuses', user, next.statusId, 'Status'), existing.projectId, 'That status');
+    row.statusId = target.id;
+    row.rank = planColumnEnd_(user, target.id) + PLAN_RANK_STEP_;
+    row.completedAt = planCompletedAt_(existing, target.kind, stamp);
+  }
+  row.updatedAt = noteStamp_(existing.updatedAt);
+  planUpdate_('PlanItems', [row]);
+  return { item: planItemOut_(user, row) };
+}
+
+/**
+ * POST planItems.move { id, statusId?, afterId? | beforeId? | rank?, baseUpdatedAt }
+ *   afterId   the card that will sit directly above the moved one
+ *   beforeId  the card that will sit directly below it
+ *   neither   the end of the column (or exactly `rank`, if given)
+ * → { item, renumbered: [{ id, rank }] }
+ */
+function planItemsMove_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var item = planOwned_('PlanItems', user, planPick_(query, body, 'id'), 'Card');
+  planCheckBase_(item, query, body, 'This card', planItemOut_(user, item));
+
+  var statusId = String(planPick_(query, body, 'statusId') || item.statusId);
+  var status = planSameProject_(planOwned_('PlanStatuses', user, statusId, 'Status'), item.projectId, 'That status');
+  var column = planMine_('PlanItems', user, item.projectId)
+    .filter(function (r) { return r.statusId === status.id && r.id !== item.id; })
+    .sort(planByRank_);
+  var indexOf = function (id, field) {
+    for (var i = 0; i < column.length; i += 1) if (column[i].id === String(id)) return i;
+    throw bad_('"' + field + '" must be a card in the target column');
+  };
+
+  var afterId = planPick_(query, body, 'afterId');
+  var beforeId = planPick_(query, body, 'beforeId');
+  var a = afterId ? indexOf(afterId, 'afterId') : -1;
+  var b = beforeId ? indexOf(beforeId, 'beforeId') : -1;
+  if (afterId && beforeId && b !== a + 1) throw bad_('"afterId" and "beforeId" must be next to each other');
+
+  var explicit = planPick_(query, body, 'rank');
+  var newRank;
+  var renumbered = [];
+  var others = [];
+
+  if (!afterId && !beforeId && explicit !== undefined && explicit !== null && explicit !== '') {
+    newRank = num_(explicit, 'rank', { min: -1e15, max: 1e15 });
+  } else {
+    var pos = afterId ? a + 1 : beforeId ? b : column.length;
+    var lo = pos > 0 ? column[pos - 1].rank : null;
+    var hi = pos < column.length ? column[pos].rank : null;
+    if (lo === null && hi === null) newRank = PLAN_RANK_STEP_;
+    else if (lo === null) newRank = hi - PLAN_RANK_STEP_;
+    else if (hi === null) newRank = lo + PLAN_RANK_STEP_;
+    else newRank = (lo + hi) / 2;
+
+    if (lo !== null && hi !== null && (hi - lo < PLAN_RANK_MIN_GAP_ || newRank <= lo || newRank >= hi)) {
+      /* Out of room: renumber this one column, the moved card in its place. */
+      var ordered = column.slice();
+      ordered.splice(pos, 0, item);
+      ordered.forEach(function (card, i) {
+        var rank = PLAN_RANK_STEP_ * (i + 1);
+        if (card === item) {
+          newRank = rank;
+        } else if (card.rank !== rank) {
+          var next = planCopy_(card);
+          next.rank = rank;
+          others.push(next);
+          renumbered.push({ id: card.id, rank: rank });
+        }
+      });
+    }
+  }
+
+  var moved = planCopy_(item);
+  moved.statusId = status.id;
+  moved.rank = newRank;
+  moved.completedAt = planCompletedAt_(item, status.kind, new Date().toISOString());
+  moved.updatedAt = noteStamp_(item.updatedAt);
+  planUpdate_('PlanItems', [moved].concat(others));
+  return { item: planItemOut_(user, moved), renumbered: renumbered };
+}
+
+/** POST planItems.archive { id, archived: true|false, baseUpdatedAt } → { item } */
+function planItemsArchive_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var item = planOwned_('PlanItems', user, planPick_(query, body, 'id'), 'Card');
+  planCheckBase_(item, query, body, 'This card', planItemOut_(user, item));
+  var archived = bool_(planPick_(query, body, 'archived'), true);
+  var row = planCopy_(item);
+  row.archivedAt = archived ? (item.archivedAt || new Date().toISOString()) : '';
+  row.updatedAt = noteStamp_(item.updatedAt);
+  planUpdate_('PlanItems', [row]);
+  return { item: planItemOut_(user, row) };
+}
+
+function planItemsDelete_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var item = planOwned_('PlanItems', user, planPick_(query, body, 'id'), 'Card');
+  planCheckBase_(item, query, body, 'This card', planItemOut_(user, item));
+  planDelete_('PlanItems', [item]);
+  return { id: item.id };
+}
+
+/* ---- planMilestones.save / delete ---- */
+
+function planMilestoneFields_(body, current) {
+  var pick = function (key, parse) { return planHas_(body, key) ? parse(body[key]) : current[key]; };
+  var fields = {
+    title: pick('title', function (v) { return planLine_(v, 'title', PLAN_NAME_MAX_, true); }),
+    description: pick('description', function (v) { return planLong_(v, 'description'); }),
+    dueDate: pick('dueDate', function (v) { return planDate_(v, 'dueDate'); }),
+    state: pick('state', function (v) { return planEnum_(v, 'state', PLAN_MILESTONE_STATES_, 'open'); }),
+    order: pick('order', function (v) { return planNumber_(v, 'order', current.order); })
+  };
+  if (!fields.title) throw bad_('"title" is required');
+  return fields;
+}
+
+function planMilestonesSave_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var id = String(planPick_(query, body, 'id') || '').trim();
+  var stamp = new Date().toISOString();
+
+  if (!id) {
+    var project = planOwned_('PlanProjects', user, body.projectId, 'Project');
+    var siblings = planMine_('PlanMilestones', user, project.id);
+    if (siblings.length >= PLAN_MILESTONES_MAX_) {
+      throw apiError_('A project can have at most ' + PLAN_MILESTONES_MAX_ + ' milestones', 400, 'LIMIT_REACHED');
+    }
+    var nextOrder = siblings.reduce(function (max, m) { return Math.max(max, m.order + 1); }, 0);
+    var fields = planMilestoneFields_(body, { title: '', description: '', dueDate: '', state: 'open', order: nextOrder });
+    var milestone = { id: uuid_(), userId: user.id, projectId: project.id, createdAt: stamp, updatedAt: stamp };
+    for (var f in fields) milestone[f] = fields[f];
+    planInsert_('PlanMilestones', [milestone]);
+    return { milestone: planMilestonePublic_(milestone) };
+  }
+
+  var existing = planOwned_('PlanMilestones', user, id, 'Milestone');
+  planCheckBase_(existing, query, body, 'This milestone', planMilestonePublic_(existing));
+  if (planHas_(body, 'projectId') && body.projectId && String(body.projectId) !== existing.projectId) {
+    throw bad_('A milestone cannot move to another project');
+  }
+  var next = planMilestoneFields_(body, planMilestonePublic_(existing));
+  var row = planCopy_(existing);
+  for (var k in next) row[k] = next[k];
+  row.updatedAt = noteStamp_(existing.updatedAt);
+  planUpdate_('PlanMilestones', [row]);
+  return { milestone: planMilestonePublic_(row) };
+}
+
+/** Clears the milestone from its cards (they stay), then deletes it. */
+function planMilestonesDelete_(user, query, body) {
+  body = body || {};
+  query = query || {};
+  var milestone = planOwned_('PlanMilestones', user, planPick_(query, body, 'id'), 'Milestone');
+  planCheckBase_(milestone, query, body, 'This milestone', planMilestonePublic_(milestone));
+  var cleared = planMine_('PlanItems', user, milestone.projectId)
+    .filter(function (item) { return item.milestoneId === milestone.id; })
+    .map(function (item) {
+      var next = planCopy_(item);
+      next.milestoneId = '';
+      next.updatedAt = noteStamp_(item.updatedAt);
+      return next;
+    });
+  planUpdate_('PlanItems', cleared);
+  planDelete_('PlanMilestones', [milestone]);
+  return { id: milestone.id, items: planItemsOut_(user, cleared) };
+}
+
+/* ---- Real-sheet test ---- */
+
+/**
+ * Proves Planning against the real spreadsheet. Run from the Apps Script
+ * editor, then View → Logs: one PASS / FAIL line per check and a total.
+ *
+ * SAFE BY CONSTRUCTION
+ *  - Every row it writes belongs to a throwaway user ID
+ *    ("zz-test-planning-" + a fresh UUID). Cleanup deletes only rows whose
+ *    User ID is exactly that ID, in `finally`, so it runs even when a check
+ *    fails or the test throws. Real users' rows are never written or deleted.
+ *  - The column-move / extra-column checks run on scratch sheets named
+ *    "zzPlanTest_<run>_…", which the test creates and deletes itself.
+ *  - It holds the script lock while it runs, so the app's writes wait (up to
+ *    20 s, then "busy"); run it when nobody is using the app.
+ *  - Transactions, Goals and Notes are only read.
+ */
+function testPlanningRoundTrip() {
+  var TEST_PREFIX = 'zz-test-planning-';
+  var user = { id: TEST_PREFIX + uuid_() };
+  var run = user.id.replace(/[^A-Za-z0-9]/g, '').slice(-8);
+  var passed = 0;
+  var failed = 0;
+  var check = function (ok, what) {
+    if (ok) passed += 1; else failed += 1;
+    Logger.log((ok ? 'PASS  ' : 'FAIL  ') + what);
+  };
+  var refused = function (fn, code, what) {
+    try {
+      fn();
+      check(false, what + ' (was accepted)');
+      return null;
+    } catch (err) {
+      check(Boolean(err) && err.__code === code, what + ' → ' + (err && err.__code ? err.__code : String(err)));
+      return err;
+    }
+  };
+  var same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b); };
+  var fresh = function () { PLAN_CACHE_ = {}; };
+  var headerRow = function (sheet) {
+    return sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
+      .map(function (h) { return String(h); });
+  };
+  var cellUnder = function (sheet, header, rowNumber) {
+    var col = headerRow(sheet).indexOf(header) + 1;
+    return col > 0 ? sheet.getRange(rowNumber, col).getValue() : undefined;
+  };
+
+  var ss = spreadsheet_();
+  var planNames = Object.keys(PLAN_SHEETS_);
+  var snapshot = function () {
+    var out = {};
+    ss.getSheets().forEach(function (sheet) {
+      var name = sheet.getName();
+      if (PLAN_SHEETS_[name] || name.indexOf('zzPlanTest_') === 0) return;
+      out[name] = [sheet.getLastRow(), sheet.getLastColumn(), headerRow(sheet).join('|')];
+    });
+    return out;
+  };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  var scratchNames = [];
+  var before = snapshot();
+  var left = -1;
+
+  try {
+    /* ---- A. Scratch sheets: creation, missing headers, moved and extra columns ---- */
+    planNames.forEach(function (name) {
+      PLAN_NAME_OVERRIDE_[name] = 'zzPlanTest_' + run + '_' + name;
+      scratchNames.push(PLAN_NAME_OVERRIDE_[name]);
+    });
+    fresh();
+    var madeScratch = createPlanningSheets_();
+    check(madeScratch.created.length === 4, 'missing Planning sheets are created (4 of 4)');
+    check(planNames.every(function (name) {
+      var expected = planColumns_(name).map(function (c) { return c.header; });
+      return same(headerRow(ss.getSheetByName(planSheetName_(name))), expected);
+    }), 'new sheets get every header, in schema order');
+
+    var msName = planSheetName_('PlanMilestones');
+    ss.deleteSheet(ss.getSheetByName(msName));
+    var partial = ss.insertSheet(msName);
+    partial.getRange(1, 1, 2, 3).setValues([['ID', 'My notes', 'Title'], ["'m-1", 'keep me', "'Old title"]]);
+    fresh();
+    var ensured = planEnsure_('PlanMilestones');
+    var partialHeaders = headerRow(partial);
+    check(!ensured.created && ensured.added.length === planColumns_('PlanMilestones').length - 2,
+      'missing headers are appended to an existing sheet (' + ensured.added.length + ' added)');
+    check(partialHeaders[0] === 'ID' && partialHeaders[1] === 'My notes' && partialHeaders[2] === 'Title' &&
+      partial.getRange(2, 2).getValue() === 'keep me' && partial.getRange(2, 3).getValue() === 'Old title',
+      'existing headers and values are left where they were');
+
+    fresh();
+    var sp = planProjectsSave_(user, {}, { name: 'Scratch' });
+    var first = planItemsSave_(user, {}, { projectId: sp.project.id, title: 'Before' }).item;
+    var itemsSheet = ss.getSheetByName(planSheetName_('PlanItems'));
+    var titleCol = headerRow(itemsSheet).indexOf('Title') + 1;
+    itemsSheet.moveColumns(itemsSheet.getRange(1, titleCol, itemsSheet.getLastRow(), 1), 1);
+    itemsSheet.insertColumnBefore(3);
+    itemsSheet.getRange(1, 3).setValue('Extra');
+    itemsSheet.getRange(2, 3).setValue('keep-me');
+    check(headerRow(itemsSheet)[0] === 'Title' && headerRow(itemsSheet)[2] === 'Extra',
+      'set-up: Title moved to column A, an "Extra" column added at C');
+    fresh();
+    var readBack = planProjectsList_(user, {}).items[0];
+    check(readBack && readBack.title === 'Before' && readBack.statusId === first.statusId && readBack.id === first.id,
+      'reads by header after a column is moved');
+    fresh();
+    var edited = planItemsSave_(user, {}, { id: first.id, baseUpdatedAt: first.updatedAt, title: 'After =1+1', priority: 'high' }).item;
+    var second = planItemsSave_(user, {}, { projectId: sp.project.id, title: 'Second' }).item;
+    fresh();
+    var listed = planProjectsList_(user, {}).items;
+    check(listed.length === 2 && listed[0].title === 'After =1+1' && listed[0].priority === 'high' &&
+      listed[1].title === 'Second' && listed[1].id === second.id && edited.updatedAt === listed[0].updatedAt,
+      'update and insert still land in the right columns after the move');
+    check(cellUnder(itemsSheet, 'Title', 2) === 'After =1+1' && cellUnder(itemsSheet, 'ID', 2) === first.id &&
+      cellUnder(itemsSheet, 'Priority', 2) === 'high' && cellUnder(itemsSheet, 'Title', 3) === 'Second',
+      'cells sit under the right headers');
+    check(itemsSheet.getRange(2, 3).getValue() === 'keep-me' && itemsSheet.getRange(3, 3).getValue() === '',
+      'the extra column keeps its value and is never written');
+
+    PLAN_NAME_OVERRIDE_ = {};
+    fresh();
+
+    /* ---- B. The real Planning sheets, with the throwaway user ---- */
+    var made = createPlanningSheets_();
+    check(planNames.every(function (name) {
+      var sheet = ss.getSheetByName(name);
+      if (!sheet) return false;
+      var headers = headerRow(sheet).map(function (h) { return h.trim().toLowerCase(); });
+      return planColumns_(name).every(function (c) { return headers.indexOf(c.header.toLowerCase()) !== -1; });
+    }), 'the four Planning sheets exist with every header (created: ' +
+      (made.created.join(', ') || 'none') + '; columns added: ' + (made.patched.join('; ') || 'none') + ')');
+
+    var p = planProjectsSave_(user, {}, { name: 'Test project', linkedGoalId: 'zz-missing-goal' });
+    check(same(p.statuses.map(function (s) { return s.kind; }), ['todo', 'todo', 'doing', 'done']) &&
+      same(p.statuses.map(function (s) { return s.name; }), ['Planning', 'Ready', 'In progress', 'Done']),
+      'a new project gets 4 default statuses with the right Kinds (English names by default)');
+    check(p.project.linkedGoalMissing === true, 'a linked goal that does not exist is flagged linkedGoalMissing');
+    var p2 = planProjectsSave_(user, {}, { name: 'โครงการทดสอบ', statusNames: ['วางแผน', 'พร้อม', 'กำลังทำ', 'เสร็จ'] });
+    check(same(p2.statuses.map(function (s) { return s.name; }), ['วางแผน', 'พร้อม', 'กำลังทำ', 'เสร็จ']),
+      'localized status names are used when sent');
+    var planning = p.statuses[0];
+    var ready = p.statuses[1];
+    var doing = p.statuses[2];
+    var done = p.statuses[3];
+
+    var samples = ['=1+1', '+66812345678', '-5', '007', '2026-01-01', 'ภาษาไทย ทดสอบ', '🎉 emoji 👍',
+      'line one\nline two', '# Heading\n\n- [ ] task\n**bold** `code` | pipe'];
+    var textCards = samples.map(function (s) {
+      return planItemsSave_(user, {}, {
+        projectId: p.project.id, statusId: planning.id,
+        title: s.indexOf('\n') === -1 ? s : 'multi-line',
+        description: s,
+        labels: s.indexOf('\n') === -1 && s.length <= 30 ? [s] : []
+      }).item;
+    });
+    var proj = planProjectsSave_(user, {}, { id: p.project.id, baseUpdatedAt: p.project.updatedAt, name: '=1+1', description: samples.join('\n') }).project;
+    fresh();
+    var all = planProjectsList_(user, { projectId: p.project.id });
+    var back = {};
+    all.items.forEach(function (it) { back[it.id] = it; });
+    check(textCards.every(function (c, i) {
+      var b = back[c.id];
+      return b && b.description === samples[i] && b.title === c.title && same(b.labels, c.labels);
+    }), 'plain text round-trips exactly: ' + samples.length + ' samples in titles, descriptions and labels');
+    check(all.projects[0].name === '=1+1' && all.projects[0].description === samples.join('\n') && all.projects[0].updatedAt === proj.updatedAt,
+      'project name and Markdown description round-trip exactly');
+    var itemsReal = ss.getSheetByName('PlanItems');
+    var row1 = planTable_('PlanItems').rows.filter(function (r) { return r.id === textCards[0].id; })[0];
+    var titleCell = itemsReal.getRange(row1._row, headerRow(itemsReal).indexOf('Title') + 1);
+    check(titleCell.getFormula() === '' && titleCell.getValue() === '=1+1', '"=1+1" is stored as text, not a formula');
+
+    var ms = planMilestonesSave_(user, {}, { projectId: p.project.id, title: '007', dueDate: '2026-03-01' }).milestone;
+    var missingTx = 'zz-missing-tx-' + run;
+    var full = planItemsSave_(user, {}, {
+      projectId: p.project.id, statusId: planning.id, milestoneId: ms.id,
+      title: 'Full card', description: '**md**', priority: 'high',
+      labels: [' Alpha ', 'beta', 'alpha', '=x'], startDate: '2026-01-01', dueDate: '2026-02-28',
+      checklist: [{ text: 'one', done: false }, { id: 'k2', text: '=two', done: true }],
+      budget: 1500.5, linkedTxIds: [missingTx, missingTx], linkedNoteId: 'zz-missing-note'
+    }).item;
+    check(same(full.labels, ['Alpha', 'beta', '=x']), 'labels are trimmed and de-duplicated');
+    check(full.checklist.length === 2 && full.checklist[0].id && full.checklist[1].id === 'k2' &&
+      full.checklist[1].text === '=two' && full.checklist[1].done === true, 'checklist keeps ids, adds missing ones');
+    check(full.budget === 1500.5 && full.startDate === '2026-01-01' && full.dueDate === '2026-02-28' && full.milestoneId === ms.id,
+      'budget, dates and milestone are stored');
+    fresh();
+    var fullBack = planProjectsList_(user, { projectId: p.project.id }).items.filter(function (it) { return it.id === full.id; })[0];
+    check(same(fullBack, full), 'the card reads back identical to what save answered');
+    check(same(fullBack.missingTxIds, [missingTx]) && fullBack.spent === 0 && same(fullBack.linkedTxIds, [missingTx]),
+      'a linked transaction ID that does not exist is listed in missingTxIds');
+    check(fullBack.linkedNoteMissing === true, 'a linked note that does not exist is flagged linkedNoteMissing');
+
+    var latest = {};
+    var keep = function (it) { latest[it.id] = it; return it; };
+    keep(full);
+    var A = keep(planItemsSave_(user, {}, { projectId: p.project.id, statusId: doing.id, title: 'A' }).item);
+    var B = keep(planItemsSave_(user, {}, { projectId: p.project.id, statusId: doing.id, title: 'B' }).item);
+    var C = keep(planItemsSave_(user, {}, { projectId: p.project.id, statusId: doing.id, title: 'C' }).item);
+    var move = function (it, extra) {
+      var req = { id: it.id, baseUpdatedAt: latest[it.id].updatedAt };
+      for (var k in extra) req[k] = extra[k];
+      var res = planItemsMove_(user, {}, req);
+      keep(res.item);
+      return res;
+    };
+    var columnOrder = function (statusId) {
+      fresh();
+      return planProjectsList_(user, { projectId: p.project.id }).items
+        .filter(function (it) { return it.statusId === statusId; })
+        .map(function (it) { return it.title; });
+    };
+
+    var toDone = move(full, { statusId: done.id });
+    check(toDone.item.statusId === done.id && Boolean(toDone.item.completedAt) && toDone.item.title === 'Full card' &&
+      toDone.item.rank > 0 && Boolean(toDone.item.updatedAt), 'move to a done status sets completedAt; full card returned');
+    var toDoing = move(full, { statusId: doing.id, afterId: A.id });
+    check(toDoing.item.completedAt === '' && same(columnOrder(doing.id), ['A', 'Full card', 'B', 'C']),
+      'move out of done clears completedAt; lands after the afterId card');
+    move(C, { beforeId: A.id });
+    check(same(columnOrder(doing.id), ['C', 'A', 'Full card', 'B']), 'move within a column with beforeId');
+
+    var trigger = null;
+    var others = null;
+    for (var n = 0; n < 60 && !trigger; n += 1) {
+      var mover = n % 2 === 0 ? B : full;
+      fresh();
+      others = planProjectsList_(user, { projectId: p.project.id }).items
+        .filter(function (it) { return it.statusId === doing.id && it.id !== mover.id; });
+      var res = move(mover, { afterId: A.id });
+      if (res.renumbered.length) trigger = { res: res, mover: mover, moves: n + 1 };
+    }
+    check(Boolean(trigger), 'running out of room renumbers the column' + (trigger ? ' (after ' + trigger.moves + ' moves)' : ''));
+    if (trigger) {
+      fresh();
+      var col = planProjectsList_(user, { projectId: p.project.id }).items.filter(function (it) { return it.statusId === doing.id; });
+      var ranks = col.map(function (it) { return it.rank; });
+      check(same(ranks, ranks.map(function (r, i) { return PLAN_RANK_STEP_ * (i + 1); })) &&
+        col[1].id === A.id && col[2].id === trigger.mover.id,
+        'renumbered ranks are 1024, 2048, …, the moved card right after A');
+      check(others.every(function (o) {
+        var now = col.filter(function (it) { return it.id === o.id; })[0];
+        return now && now.updatedAt === o.updatedAt;
+      }), 'renumbering leaves the other cards\' updatedAt unchanged');
+      check(trigger.res.renumbered.every(function (r) {
+        var now = col.filter(function (it) { return it.id === r.id; })[0];
+        return now && now.rank === r.rank;
+      }), 'renumbered lists the new ranks');
+    }
+
+    var staleBase = full.updatedAt;
+    var conflict = refused(function () {
+      planItemsSave_(user, {}, { id: full.id, baseUpdatedAt: staleBase, title: 'Lost' });
+    }, 'CONFLICT', 'a stale update is refused');
+    check(Boolean(conflict) && conflict.__current && conflict.__current.id === full.id &&
+      conflict.__current.updatedAt === latest[full.id].updatedAt && conflict.__current.title === 'Full card',
+      'the refusal carries the current row');
+    refused(function () {
+      planItemsMove_(user, {}, { id: full.id, baseUpdatedAt: staleBase, statusId: ready.id });
+    }, 'CONFLICT', 'a stale move is refused');
+    refused(function () {
+      planItemsSave_(user, {}, { id: full.id, title: 'No base' });
+    }, 'VALIDATION_ERROR', 'an update without baseUpdatedAt is refused');
+    var forced = keep(planItemsSave_(user, {}, { id: full.id, force: true, title: 'Forced' }).item);
+    check(forced.title === 'Forced', 'force: true overwrites');
+
+    var R = keep(planItemsSave_(user, {}, { projectId: p.project.id, statusId: ready.id, title: 'R' }).item);
+    var doingBefore = columnOrder(doing.id);
+    refused(function () {
+      planStatusesDelete_(user, {}, { id: doing.id, baseUpdatedAt: doing.updatedAt });
+    }, 'MOVE_TO_REQUIRED', 'deleting a status with cards needs moveToStatusId');
+    refused(function () {
+      planStatusesDelete_(user, {}, { id: doing.id, baseUpdatedAt: doing.updatedAt, moveToStatusId: p2.statuses[0].id });
+    }, 'WRONG_PROJECT', 'moveToStatusId from another project is refused');
+    fresh();
+    var doingCards = planProjectsList_(user, { projectId: p.project.id }).items.filter(function (it) { return it.statusId === doing.id; });
+    var removed = planStatusesDelete_(user, {}, { id: doing.id, baseUpdatedAt: doing.updatedAt, moveToStatusId: ready.id });
+    check(removed.items.length === doingCards.length && same(columnOrder(ready.id), ['R'].concat(doingBefore)),
+      'with moveToStatusId the cards move to the end of that column, in order');
+    check(removed.items.every(function (it) {
+      var old = doingCards.filter(function (d) { return d.id === it.id; })[0];
+      return it.statusId === ready.id && old && it.updatedAt !== old.updatedAt;
+    }), 'moved cards get a new updatedAt and are returned');
+    removed.items.forEach(keep);
+
+    var toDoneKind = planStatusesSave_(user, {}, { id: ready.id, baseUpdatedAt: ready.updatedAt, kind: 'done' });
+    check(toDoneKind.items.length === doingCards.length + 1 && toDoneKind.items.every(function (it) { return Boolean(it.completedAt); }),
+      'changing a status Kind to done sets completedAt on its cards and returns them');
+    var backKind = planStatusesSave_(user, {}, { id: ready.id, baseUpdatedAt: toDoneKind.status.updatedAt, kind: 'todo' });
+    check(backKind.items.length === doingCards.length + 1 && backKind.items.every(function (it) { return it.completedAt === ''; }),
+      'and changing it back clears completedAt');
+    backKind.items.forEach(keep);
+
+    var reorder = planStatusesReorder_(user, {}, { projectId: p.project.id, statusIds: [done.id, planning.id, ready.id] });
+    check(same(reorder.statuses.map(function (s) { return s.id; }), [done.id, planning.id, ready.id]) &&
+      same(reorder.statuses.map(function (s) { return s.order; }), [0, 1, 2]), 'statuses reorder');
+    refused(function () {
+      planStatusesReorder_(user, {}, { projectId: p.project.id, statusIds: [done.id, planning.id] });
+    }, 'CONFLICT', 'a reorder that does not list every status is refused');
+
+    fresh();
+    var p2Statuses = planProjectsList_(user, { projectId: p2.project.id }).statuses;
+    p2Statuses.slice(0, 3).forEach(function (s) {
+      planStatusesDelete_(user, {}, { id: s.id, baseUpdatedAt: s.updatedAt });
+    });
+    refused(function () {
+      planStatusesDelete_(user, {}, { id: p2Statuses[3].id, baseUpdatedAt: p2Statuses[3].updatedAt });
+    }, 'LAST_STATUS', 'deleting the last status is refused');
+
+    var msGone = planMilestonesDelete_(user, {}, { id: ms.id, baseUpdatedAt: ms.updatedAt });
+    fresh();
+    var afterMs = planProjectsList_(user, { projectId: p.project.id });
+    check(msGone.items.length === 1 && msGone.items[0].id === full.id && msGone.items[0].milestoneId === '' &&
+      afterMs.milestones.length === 0 && afterMs.items.some(function (it) { return it.id === full.id && it.milestoneId === ''; }),
+      'deleting a milestone clears milestoneId on its cards and keeps the cards');
+    keep(msGone.items[0]);
+
+    var arch = keep(planItemsArchive_(user, {}, { id: full.id, baseUpdatedAt: latest[full.id].updatedAt, archived: true }).item);
+    fresh();
+    var hidden = planProjectsList_(user, { projectId: p.project.id }).items.some(function (it) { return it.id === full.id; });
+    var shown = planProjectsList_(user, { projectId: p.project.id, includeArchived: 'true' }).items
+      .filter(function (it) { return it.id === full.id; })[0];
+    check(Boolean(arch.archivedAt) && !hidden && shown && shown.archivedAt === arch.archivedAt,
+      'archiving hides a card from planProjects.list; includeArchived shows it');
+    var unarch = keep(planItemsArchive_(user, {}, { id: full.id, baseUpdatedAt: arch.updatedAt, archived: false }).item);
+    check(unarch.archivedAt === '', 'unarchive');
+
+    fresh();
+    var countBefore = planMine_('PlanItems', user).length;
+    var fullBefore = planMine_('PlanItems', user).filter(function (r) { return r.id === full.id; })[0];
+    var long = new Array(PLAN_NAME_MAX_ + 2).join('x');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: 'x', priority: 'super' }); },
+      'VALIDATION_ERROR', 'an invalid priority is refused');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: long }); },
+      'VALIDATION_ERROR', 'a title over ' + PLAN_NAME_MAX_ + ' characters is refused');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: 'x', statusId: p2Statuses[3].id }); },
+      'WRONG_PROJECT', 'a status from another project is refused');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: 'x', dueDate: '2026-02-30' }); },
+      'VALIDATION_ERROR', 'an impossible date is refused');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: 'x', budget: -1 }); },
+      'VALIDATION_ERROR', 'a negative budget is refused');
+    refused(function () { planItemsSave_(user, {}, { projectId: p.project.id, title: 'x', checklist: '{oops' }); },
+      'VALIDATION_ERROR', 'a broken checklist is refused');
+    refused(function () { planProjectsSave_(user, {}, { name: 'x', state: 'paused' }); },
+      'VALIDATION_ERROR', 'an invalid project state is refused');
+    refused(function () {
+      planItemsSave_(user, {}, { id: full.id, baseUpdatedAt: latest[full.id].updatedAt, title: 'Changed', priority: 'nope' });
+    }, 'VALIDATION_ERROR', 'an update with one invalid field is refused');
+    fresh();
+    var fullAfter = planMine_('PlanItems', user).filter(function (r) { return r.id === full.id; })[0];
+    check(planMine_('PlanItems', user).length === countBefore && fullAfter.title === fullBefore.title &&
+      fullAfter.updatedAt === fullBefore.updatedAt, 'refused writes wrote nothing');
+    check(planProjectsList_({ id: user.id + '-other' }, {}).projects.length === 0, 'another user sees none of it');
+    refused(function () { planProjectsList_({ id: user.id + '-other' }, { projectId: p.project.id }); },
+      'NOT_FOUND', 'another user cannot load the project');
+
+    fresh();
+    var projNow = planProjectsList_(user, { projectId: p.project.id }).projects[0];
+    var del = planProjectsDelete_(user, {}, { id: p.project.id, baseUpdatedAt: projNow.updatedAt });
+    fresh();
+    var leftover = ['PlanStatuses', 'PlanItems', 'PlanMilestones'].reduce(function (sum, name) {
+      return sum + planTable_(name).rows.filter(function (r) { return r.projectId === p.project.id; }).length;
+    }, 0) + planTable_('PlanProjects').rows.filter(function (r) { return r.id === p.project.id; }).length;
+    check(leftover === 0 && del.deleted.items > 0 && del.deleted.statuses === 3,
+      'deleting a project removes its statuses, cards and milestones');
+  } catch (err) {
+    check(false, 'stopped early: ' + (err && err.stack ? err.stack : err));
+  } finally {
+    PLAN_NAME_OVERRIDE_ = {};
+    PLAN_CACHE_ = {};
+    try {
+      scratchNames.forEach(function (name) {
+        var sheet = ss.getSheetByName(name);
+        if (sheet && name.indexOf('zzPlanTest_' + run + '_') === 0) ss.deleteSheet(sheet);
+      });
+      /* Only ever rows whose User ID is exactly this run's throwaway ID. */
+      if (user.id.indexOf(TEST_PREFIX) === 0 && user.id.length > TEST_PREFIX.length + 30) {
+        planNames.forEach(function (name) {
+          planForget_(name);
+          var table = planTable_(name);
+          if (table.sheet) planDelete_(name, table.rows.filter(function (r) { return r.userId === user.id; }));
+        });
+        PLAN_CACHE_ = {};
+        left = planNames.reduce(function (sum, name) {
+          return sum + planTable_(name).rows.filter(function (r) { return r.userId === user.id; }).length;
+        }, 0);
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  check(left === 0, 'cleanup removed every row with the test user ID');
+  check(scratchNames.every(function (name) { return !ss.getSheetByName(name); }), 'scratch sheets removed');
+  check(same(snapshot(), before), 'every other sheet is untouched (rows, columns, header row)');
+  Logger.log('TOTAL: ' + passed + ' passed, ' + failed + ' failed' + (failed ? '' : ' — Planning OK'));
+  return { passed: passed, failed: failed };
+}
+
+/* =========================================================================
  * One-time setup / diagnostics — run these from the Apps Script editor
  * ========================================================================= */
 
@@ -6888,6 +8540,12 @@ function createMissingSheets() {
       patched.push(name + ' (+' + missing.join(', ') + ')');
     }
   });
+
+  /* Planning's four sheets live outside SHEETS (see "Planning"); same rule:
+     only ever creates a sheet or appends a header. */
+  var planning = createPlanningSheets_();
+  created = created.concat(planning.created);
+  patched = patched.concat(planning.patched);
 
   Logger.log(created.length ? 'Created: ' + created.join(', ') : 'No sheets needed creating.');
   if (patched.length) Logger.log('Added columns to: ' + patched.join('; '));

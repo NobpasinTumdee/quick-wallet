@@ -120,6 +120,8 @@ export function resolveMobileNav(raw: unknown): MobileNavConfig {
      Anything not already placed will do — a filled slot beats a gap. */
   for (const route of ROUTES) {
     if (tabs.length >= TAB_SLOTS) break;
+    /* Only ever there by choice. */
+    if (route === 'planning') continue;
     if (seen.has(route)) continue;
     seen.add(route);
     tabs.push(route);

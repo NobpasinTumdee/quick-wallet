@@ -36,6 +36,9 @@ export const ROUTES = [
   /* Home-screen widget tokens and setup, reached from Settings and More.
      After notes for the same reason notes is last. */
   'widgets',
+  /* Projects and boards. Last, and never backfilled into the phone tab bar
+     (see resolveMobileNav); people can still choose it there. */
+  'planning',
 ] as const;
 
 /**
@@ -124,6 +127,14 @@ function subscribeHash(onChange: () => void): () => void {
 /** `hashParam`, kept current as the hash changes (the route alone does not re-render on a new query). */
 export function useHashParam(name: string): string | null {
   return useSyncExternalStore(subscribeHash, () => hashParam(name), () => null);
+}
+
+/** Opens Planning: the project list, or one project's board. */
+export function openPlanning(projectId: string | null): void {
+  const target = projectId ? `#/planning?project=${encodeURIComponent(projectId)}` : '#/planning';
+  if (window.location.hash === target) return;
+  lastNavigateAt = performance.now();
+  window.location.hash = target;
 }
 
 /** Opens the review of `period` (YYYY-MM). */

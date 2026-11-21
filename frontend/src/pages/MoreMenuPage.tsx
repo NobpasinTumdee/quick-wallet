@@ -2,6 +2,7 @@ import {
   ChartNoAxesCombined,
   CreditCard,
   Database,
+  FolderKanban,
   HandCoins,
   Landmark,
   LayoutDashboard,
@@ -130,6 +131,7 @@ const SECTIONS: MenuSection[] = [
     entries: [
       { route: 'goals', labelKey: 'nav.goals', descriptionKey: 'more.goals', icon: PiggyBank },
       { route: 'notes', labelKey: 'nav.notes', descriptionKey: 'more.notes', icon: NotebookPen },
+      { route: 'planning', labelKey: 'nav.planning', descriptionKey: 'more.planning', icon: FolderKanban },
       { route: 'budgets', labelKey: 'nav.budgets', descriptionKey: 'more.budgets', icon: Target },
       {
         route: 'subscriptions',

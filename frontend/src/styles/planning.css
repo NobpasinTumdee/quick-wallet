@@ -1,0 +1,2314 @@
+/* ==========================================================================
+   Planning (#/planning) — the rest
+   --------------------------------------------------------------------------
+   Ships with the page's lazy chunk. The layout (grid, board, columns) is in
+   app.css, because the skeleton uses it before this file has loaded.
+   Theme tokens only. Text sits on --surface / --surface-2 in --text or
+   --text-muted (never --text-faint); status colours are mixed toward --text
+   so they keep 4.5:1 in every theme, light, dark and custom accents.
+   ========================================================================== */
+
+/* Quiet text, mixed toward --text: several bank themes put --text-muted
+   just under 4.5:1 on --surface-2 and the column wash. */
+:root {
+  --plan-muted: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+}
+
+.plan-back {
+  color: var(--plan-muted);
+}
+
+.plan-quiet {
+  color: var(--plan-muted);
+  font-size: var(--text-sm);
+}
+
+.plan-new {
+  margin-left: auto;
+}
+
+/* ---- Project tiles ---- */
+
+.plan-tile {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.plan-tile:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-tile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-tile-name {
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.plan-tile-progress {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.plan-tile-pct {
+  font-weight: 600;
+}
+
+.plan-tile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: auto;
+}
+
+.plan-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--plan-color, var(--accent)) 20%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--plan-color, var(--accent)) 45%, transparent);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.plan-mark--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 21px;
+}
+
+/* ---- Tags (due dates, overdue) ---- */
+
+.plan-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.plan-tag--overdue {
+  background: color-mix(in srgb, var(--negative) 10%, var(--surface));
+  color: color-mix(in srgb, var(--negative) 48%, var(--text));
+}
+
+.plan-tag--soon {
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface));
+  color: color-mix(in srgb, var(--warning) 55%, var(--text));
+}
+
+/* ---- Board header ---- */
+
+.plan-back-label {
+  margin-left: 2px;
+}
+
+.plan-board-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.plan-board-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-board-pct {
+  flex: 0 0 auto;
+  color: var(--plan-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+  .plan-back-label {
+    display: none;
+  }
+}
+
+/* ---- Columns ---- */
+
+.plan-col-head {
+  /* The header is the column's drag handle on touch and mouse. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+}
+
+.plan-col-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.plan-col-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-col-count {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-align: center;
+}
+
+.plan-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.plan-col-grab,
+.plan-col-menu {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  cursor: pointer;
+}
+
+.plan-col-grab {
+  width: 24px;
+  cursor: grab;
+}
+
+.plan-col-grab:hover,
+.plan-col-menu:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.plan-col-grab:focus-visible,
+.plan-col-menu:focus-visible,
+.plan-add-card:focus-visible,
+.plan-add-status:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.plan-col-empty {
+  margin: var(--space-2) 0;
+  color: var(--plan-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.plan-col-foot {
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.plan-add-card,
+.plan-add-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plan-add-card:hover,
+.plan-add-status:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.plan-col--add {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-strong);
+  align-self: flex-start;
+  padding: var(--space-2);
+}
+
+.plan-col.is-placeholder {
+  border: 2px dashed color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.plan-col.is-placeholder > * {
+  visibility: hidden;
+}
+
+.plan-col.is-lifted {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Cards ---- */
+
+.plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: grab;
+  /* A long-press is a drag, not a selection, a callout or an image ghost.
+     Panning stays the browser's until the press turns into a drag. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.plan-card img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.plan-card:hover {
+  border-color: var(--border-strong);
+}
+
+.plan-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-card.is-placeholder {
+  border: 2px dashed color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: none;
+}
+
+.plan-card.is-placeholder > * {
+  visibility: hidden;
+}
+
+/* Keyboard pick-up: the card itself shows it, there is no floating copy. */
+.plan-card.is-lifted {
+  visibility: visible;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.plan-card.is-lifted > * {
+  visibility: visible;
+}
+
+.plan-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.plan-card-title {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* Priority: a small bar whose height and colour both rise with it, so it
+   reads without colour too (and the name is there for screen readers). */
+.plan-prio {
+  flex: 0 0 auto;
+  width: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: var(--text-muted);
+}
+
+.plan-prio--low {
+  height: 8px;
+}
+
+.plan-prio--medium {
+  height: 12px;
+  background: color-mix(in srgb, var(--warning) 70%, var(--text));
+}
+
+.plan-prio--high {
+  height: 16px;
+  background: color-mix(in srgb, var(--negative) 65%, var(--text));
+}
+
+.plan-prio--urgent {
+  width: 6px;
+  height: 16px;
+  background: var(--negative);
+}
+
+.plan-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.plan-label {
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-label--more {
+  color: var(--plan-muted);
+}
+
+.plan-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.plan-over {
+  color: color-mix(in srgb, var(--negative) 55%, var(--text));
+  font-weight: 600;
+}
+
+/* ---- Dragging ---- */
+
+.plan-board-page.is-dragging,
+.plan-board-page.is-dragging * {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.plan-float {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.plan-float .plan-card-title,
+.plan-float .plan-col-title {
+  color: var(--text);
+}
+
+.plan-float {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+/* The lift: only with full motion. Reduced and Off just show the copy. */
+.plan-motion-full .plan-float {
+  animation: plan-lift var(--dur-fast) var(--ease-out) both;
+}
+
+@keyframes plan-lift {
+  from {
+    box-shadow: var(--shadow-sm);
+    opacity: 0.85;
+  }
+  to {
+    box-shadow: var(--shadow-lg);
+    opacity: 1;
+  }
+}
+
+.plan-motion-full .plan-card {
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* ---- Quick add ---- */
+
+.plan-quick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ---- Sheets ---- */
+
+.plan-sheet-aside {
+  margin-right: auto;
+}
+
+.plan-sheet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.plan-sheet-row--end {
+  align-items: flex-end;
+}
+
+.plan-swatch-none {
+  background: linear-gradient(
+    135deg,
+    var(--surface) 45%,
+    var(--border-strong) 45%,
+    var(--border-strong) 55%,
+    var(--surface) 55%
+  );
+}
+
+.plan-swatch-icon {
+  display: inline-grid;
+  place-items: center;
+  background: var(--surface-2);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.plan-move-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-move-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-move-option > span:nth-child(2) {
+  flex: 1 1 auto;
+}
+
+.plan-move-option.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.plan-move-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- The New phone layout: its softer card language ---- */
+
+@media (max-width: 639px) {
+  :root.ui-mobile-v2 .plan-tile {
+    border-color: transparent;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+  }
+
+  :root.ui-mobile-v2 .plan-col {
+    border-color: transparent;
+    border-radius: var(--radius-lg);
+  }
+
+  :root.ui-mobile-v2 .plan-card {
+    border-color: transparent;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-xs);
+    padding: var(--space-3);
+  }
+
+  :root.ui-mobile-v2 .plan-card.is-placeholder {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+    box-shadow: none;
+  }
+}
+
+/* ==========================================================================
+   Round 2 — the card sheet, filters, table, archived
+   ========================================================================== */
+
+.plan-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.plan-hint {
+  margin: 0;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-hint--error {
+  color: color-mix(in srgb, var(--negative) 55%, var(--text));
+}
+
+.plan-icon-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  cursor: pointer;
+}
+
+.plan-icon-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.plan-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.plan-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.plan-icon-btn--danger:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--negative) 60%, var(--text));
+}
+
+/* ---- The sheet ---- */
+
+.modal.plan-detail .modal-body {
+  padding-top: var(--space-3);
+}
+
+.plan-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.plan-banner {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.plan-title-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-title-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: max(18px, var(--text-lg));
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  resize: none;
+}
+
+.plan-title-input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.plan-counter {
+  align-self: flex-end;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-chips-row {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* Room for the focus ring inside the scroller. */
+  padding: 2px;
+  margin: -2px;
+}
+
+.plan-chips-row::-webkit-scrollbar {
+  display: none;
+}
+
+.plan-prio-chip,
+.plan-option {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.plan-prio-chip .plan-prio,
+.plan-option .plan-prio,
+.plan-prio-cell .plan-prio {
+  position: static;
+  flex: none;
+}
+
+.plan-prio-chip.is-active,
+.plan-option.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.plan-prio-chip:focus-visible,
+.plan-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Description ---- */
+
+.plan-desc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-desc-head,
+.plan-linked-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  width: 100%;
+}
+
+.plan-desc-title,
+.plan-linked-head h4 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-linked-head h4 {
+  flex: 1 1 auto;
+}
+
+.plan-desc-state {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-desc-state.is-failed {
+  flex-wrap: wrap;
+  color: color-mix(in srgb, var(--negative) 55%, var(--text));
+}
+
+.plan-desc-empty {
+  min-height: 64px;
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.plan-desc-empty:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.plan-detail .note-body.plan-desc-body,
+.plan-detail .note-read.plan-desc-read {
+  min-height: 8rem;
+  padding-bottom: var(--space-3);
+}
+
+/* In a sheet the format bar sticks to the top of the sheet's body. */
+.plan-detail .note-format-slot {
+  top: calc(-1 * var(--space-3));
+}
+
+/* Docked above a phone keyboard, the bar (portalled to the page) sits over
+   the sheet, and the sheet's own footer gets out of its way. */
+:root.plan-sheet-open .note-format.is-docked {
+  z-index: calc(var(--z-sheet) + 8);
+}
+
+:root.plan-sheet-open:has(.note-format.is-docked) .plan-detail .modal-foot {
+  display: none;
+}
+
+/* ---- Sections ---- */
+
+.plan-section {
+  border-top: 1px solid var(--divider);
+}
+
+.plan-section-head {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-section-head button,
+.plan-group-head button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-section-head button:focus-visible,
+.plan-group-head button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.plan-section-sum {
+  color: var(--plan-muted);
+  font-weight: 400;
+}
+
+.plan-section-caret {
+  flex: none;
+  color: var(--plan-muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.plan-section:not(.is-open) .plan-section-caret,
+.plan-section-caret.is-closed {
+  transform: rotate(-90deg);
+}
+
+.plan-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  min-width: 0;
+}
+
+.plan-section-body[hidden] {
+  display: none;
+}
+
+.plan-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.plan-fields .span-2 {
+  grid-column: 1 / -1;
+}
+
+.plan-fields .field,
+.plan-range .field {
+  min-width: 0;
+}
+
+.plan-fields .control,
+.plan-range .control {
+  min-height: 44px;
+}
+
+@media (max-width: 379px) {
+  .plan-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.plan-label-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.plan-picker-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-picker-field--chips {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.plan-picker-field--chips .plan-labels {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.plan-stamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-detail .modal-foot {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.plan-foot-end {
+  margin-left: auto;
+}
+
+@media (max-width: 359px) {
+  .plan-foot-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* ---- Labels ---- */
+
+.plan-labels-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 32px;
+  padding-left: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.plan-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-chip-x {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: -2px 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--plan-muted);
+  cursor: pointer;
+}
+
+.plan-chip-x:hover {
+  color: var(--text);
+}
+
+.plan-chip-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+.plan-label-add,
+.plan-check-add {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-label-add .control,
+.plan-check-add .control {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.plan-label-add .btn,
+.plan-check-add .btn {
+  flex: none;
+  min-height: 44px;
+}
+
+.plan-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-suggest-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plan-suggest-chip.is-active,
+.plan-suggest-chip:hover {
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+/* ---- Checklist ---- */
+
+.plan-check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-check-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.plan-check-progress .progress {
+  flex: 1 1 auto;
+}
+
+.plan-check-count {
+  color: var(--plan-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-check-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-check-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.plan-check-row.is-dragging {
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-check-grab {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.plan-check-grab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.plan-check-box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 12px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.plan-check-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: max(16px, var(--text-base));
+}
+
+.plan-check-text:focus {
+  border-bottom-color: var(--accent);
+}
+
+.plan-check-row.is-done .plan-check-text {
+  color: var(--plan-muted);
+  text-decoration: line-through;
+}
+
+.plan-check-moves {
+  display: inline-flex;
+  flex: none;
+}
+
+@media (max-width: 359px) {
+  .plan-check-moves .plan-icon-btn,
+  .plan-check-row > .plan-icon-btn {
+    width: 40px;
+  }
+
+  .plan-check-box {
+    margin: 12px 8px;
+  }
+}
+
+/* ---- Budget and linked rows ---- */
+
+.plan-budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-budget-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.plan-budget-sum > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-budget-sum dt {
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-budget-sum dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-budget-sum .is-over dt,
+.plan-budget-sum .is-over dd {
+  color: color-mix(in srgb, var(--negative) 55%, var(--text));
+}
+
+.plan-linked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-linked > * {
+  max-width: 100%;
+}
+
+.plan-linked .plan-tx-list,
+.plan-linked > .plan-tx {
+  align-self: stretch;
+}
+
+.plan-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-tx-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.plan-tx {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+button.plan-tx {
+  cursor: pointer;
+}
+
+button.plan-tx:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+button.plan-tx:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.plan-tx:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.plan-tx.is-linked {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.plan-tx-check {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--accent-contrast);
+}
+
+.plan-tx-check.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.plan-tx-check--icon {
+  border: 0;
+  color: var(--plan-muted);
+}
+
+.plan-tx-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plan-tx-title,
+.plan-tx-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-tx-title {
+  font-size: var(--text-sm);
+}
+
+.plan-tx-meta {
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+}
+
+.plan-tx-amount {
+  flex: none;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.plan-tx-sk {
+  height: 52px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+/* ---- Pickers ---- */
+
+.plan-picker-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.plan-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--plan-muted);
+}
+
+.plan-search:focus-within {
+  border-color: var(--accent);
+}
+
+.plan-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: max(16px, var(--text-sm));
+}
+
+.plan-search input::placeholder {
+  color: var(--text-faint);
+}
+
+.plan-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.plan-picker-empty {
+  padding: var(--space-5) 0;
+  text-align: center;
+}
+
+.plan-move-option--new {
+  border-style: dashed;
+}
+
+/* ---- Toolbar ---- */
+
+.plan-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-bottom: var(--space-3);
+}
+
+.plan-tools-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-tools-btn {
+  flex: none;
+  min-height: 44px;
+}
+
+.plan-tools-search {
+  flex: 0 1 280px;
+}
+
+.plan-tools-icon {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.plan-tools-icon.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.plan-tools-num {
+  color: var(--plan-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-tools-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg);
+}
+
+.plan-tools-overlay .plan-search {
+  flex: 1 1 auto;
+}
+
+.plan-tools-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.plan-view-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+
+.plan-view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--plan-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plan-view-toggle button.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.plan-view-toggle button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.plan-tools-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.plan-tools-match {
+  flex: none;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.plan-chip-scroll {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.plan-chip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.plan-chip-scroll .filter-chip {
+  flex: none;
+  min-height: 36px;
+}
+
+.plan-tools-chips > .btn {
+  flex: none;
+}
+
+/* Below 640px the toolbar keeps icons, and the labels go to screen readers. */
+@media (max-width: 639px) {
+  .plan-tools-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .plan-tools-btn {
+    gap: 6px;
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  .plan-view-toggle button {
+    padding: 0 10px;
+  }
+
+  /* Three views, a filter count and an Archived count need 330px+: on a narrow
+     phone the view toggle and Archived wrap to a second line, still on the right. */
+  .plan-tools-row {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .plan-tools-end {
+    margin-left: auto;
+  }
+
+  .plan-tools-overlay {
+    align-items: flex-start;
+  }
+}
+
+/* ---- Filters sheet ---- */
+
+.plan-filter-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.plan-filter-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.plan-filter-group legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.plan-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.plan-option {
+  max-width: 100%;
+}
+
+.plan-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.plan-switch input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.plan-switch--sm {
+  font-size: var(--text-sm);
+}
+
+/* ---- Table ---- */
+
+.plan-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.plan-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.plan-sort .control {
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+}
+
+.plan-table-empty {
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.plan-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.plan-table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.plan-table th,
+.plan-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.plan-table thead th {
+  background: var(--surface);
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.plan-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.plan-th-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.plan-th-btn:hover {
+  color: var(--text);
+}
+
+.plan-th-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.plan-tr {
+  cursor: pointer;
+}
+
+.plan-tr:hover > * {
+  background: var(--surface-2);
+}
+
+.plan-td-title {
+  max-width: 320px;
+  font-weight: 500;
+}
+
+.plan-row-open {
+  display: -webkit-box;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  cursor: pointer;
+}
+
+.plan-row-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.plan-td-num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-table .plan-labels {
+  flex-wrap: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+}
+
+.plan-status-pill,
+.plan-prio-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.plan-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-group-head {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-group-empty {
+  margin: 0 0 var(--space-2);
+}
+
+.plan-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-row-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-row-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-row-card .plan-card-title {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Phones: the card sheet is full height ---- */
+
+@media (max-width: 767px) {
+  .modal.plan-detail {
+    height: calc(var(--vv-height, 100dvh) - env(safe-area-inset-top, 0px));
+    max-height: calc(var(--vv-height, 100dvh) - env(safe-area-inset-top, 0px));
+  }
+
+  :root.has-keypad .modal.plan-detail {
+    height: calc(var(--vv-height, 100dvh) - var(--keypad-inset, 0px) - env(safe-area-inset-top, 0px));
+    max-height: calc(var(--vv-height, 100dvh) - var(--keypad-inset, 0px) - env(safe-area-inset-top, 0px));
+  }
+
+  .modal.plan-detail .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .modal.plan-detail .modal-foot {
+    gap: var(--space-2);
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .modal.plan-picker {
+    height: min(90dvh, calc(var(--vv-height, 100dvh) - env(safe-area-inset-top, 0px) - var(--space-3)));
+  }
+
+  .modal.plan-picker .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+/* The New layout's softer cards for the phone list. */
+@media (max-width: 639px) {
+  :root.ui-mobile-v2 .plan-row-card {
+    border-color: transparent;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+  }
+
+  :root.ui-mobile-v2 .plan-view-toggle,
+  :root.ui-mobile-v2 .plan-tools-icon {
+    border-color: transparent;
+    box-shadow: var(--shadow-xs);
+  }
+}
+
+/* Phones: ↑ / ↓ only on the entry being edited, so the text keeps its width. */
+@media (max-width: 639px) {
+  .plan-check-row:not(:focus-within) .plan-check-moves {
+    display: none;
+  }
+}
+
+/* The shared hint colour is too faint on the dark sheet: Planning's muted token keeps 4.5:1. */
+.modal.plan-detail .field-hint,
+.modal.plan-picker .field-hint {
+  color: var(--plan-muted);
+}
+
+/* Delete in the card sheet: the shared red is just under 4.5:1 on the light
+   sheet, so it leans toward the text colour here (same in both themes). */
+.modal.plan-detail .btn--danger,
+.modal.plan-detail .btn--danger:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--negative) 78%, var(--text));
+}
+
+/* ==========================================================================
+   Round 3: header goal and money, Milestones view, linked goal field
+   ========================================================================== */
+
+/* ---- Under the board header: the goal chip and the budget totals ---- */
+.plan-board-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: calc(var(--space-2) * -1) 0 var(--space-3);
+  min-width: 0;
+}
+
+.plan-goal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plan-goal-chip:hover {
+  background: var(--surface-2);
+}
+
+.plan-goal-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-goal-chip-title {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-goal-chip-bar {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.plan-goal-chip-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.plan-goal-chip-pct {
+  flex: none;
+  color: var(--plan-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-goal-chip--gone {
+  cursor: default;
+  border-color: color-mix(in srgb, var(--negative) 35%, var(--border));
+  color: color-mix(in srgb, var(--negative) 48%, var(--text));
+  white-space: normal;
+}
+
+.plan-goal-chip--loading {
+  width: 160px;
+  background: var(--surface-2);
+}
+
+.plan-money {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.plan-money-part {
+  white-space: nowrap;
+}
+
+.plan-money-label {
+  color: var(--plan-muted);
+}
+
+.plan-money-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-money-part.is-over,
+.plan-money-part.is-over .plan-money-label {
+  color: color-mix(in srgb, var(--negative) 48%, var(--text));
+}
+
+.plan-money--tile {
+  font-size: var(--text-xs);
+}
+
+/* ---- Linked goal field (project sheet) ---- */
+.plan-goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-goal-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.plan-goal-current-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plan-goal-current-title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-goal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.plan-goal-actions .btn {
+  min-height: 44px;
+}
+
+.plan-goal-field .plan-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+
+/* ---- Milestones view ---- */
+.plan-ms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 760px;
+}
+
+.plan-ms-head {
+  margin: 0;
+  color: var(--plan-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-ms-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-ms-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.plan-ms-row.is-dragging {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.plan-ms-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+}
+
+.plan-ms-handle {
+  display: none;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 44px;
+  color: var(--plan-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.plan-ms-row.is-dragging .plan-ms-handle {
+  cursor: grabbing;
+}
+
+.plan-ms-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.plan-ms-main:hover {
+  background: var(--surface-2);
+}
+
+.plan-ms-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.plan-ms-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--space-2);
+  min-width: 0;
+}
+
+.plan-ms-title {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.plan-ms-row.is-closed .plan-ms-title {
+  color: var(--plan-muted);
+}
+
+.plan-ms-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.plan-ms-progress > :first-child {
+  flex: 1;
+  min-width: 48px;
+}
+
+.plan-ms-count {
+  flex: none;
+  color: var(--plan-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-ms-moves {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A mouse gets the handle; touch keeps ↑ / ↓ (and the closed list always does). */
+@media (pointer: fine) {
+  .plan-ms-list:not(.plan-ms-list--closed) .plan-ms-handle {
+    display: inline-grid;
+  }
+
+  .plan-ms-list:not(.plan-ms-list--closed) .plan-ms-moves {
+    display: none;
+  }
+}
+
+/* Phones: ↑ / ↓ stacked, so the title keeps its width. */
+@media (max-width: 479px) {
+  .plan-ms-moves {
+    flex-direction: column;
+  }
+
+  .plan-ms-moves .plan-icon-btn {
+    height: 36px;
+  }
+}
+
+.plan-ms-alldone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--positive) 10%, var(--surface));
+  color: color-mix(in srgb, var(--positive) 45%, var(--text));
+  font-size: var(--text-sm);
+}
+
+.plan-ms-alldone > span {
+  flex: 1;
+  min-width: 10em;
+}
+
+.plan-ms-alldone .btn {
+  min-height: 40px;
+}
+
+.plan-ms-fold {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--plan-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.plan-ms-fold:hover {
+  background: var(--surface-2);
+}
+
+.plan-ms-chev {
+  transition: transform 0.15s ease;
+}
+
+.plan-ms-chev.is-open {
+  transform: rotate(180deg);
+}
+
+.plan-ms-none {
+  margin: 0;
+}
+
+.plan-ms-foot {
+  display: flex;
+  padding-bottom: var(--space-4);
+}
+
+.plan-ms-foot .btn {
+  min-height: 44px;
+}
+
+/* Phones: New milestone is the list's main action, full width at the bottom. */
+@media (max-width: 639px) {
+  .plan-ms-foot .btn {
+    flex: 1;
+  }
+}
+
+.plan-ms-desc .plan-desc-empty {
+  width: 100%;
+}

@@ -35,6 +35,8 @@ export function apiBaseUrl(): string {
 export class ApiError extends Error {
   status: number;
   code: string;
+  /** Planning's 409 CONFLICT carries the row as stored now (docs/planning-api.md). */
+  current?: unknown;
   constructor(message: string, status: number, code = 'UNKNOWN') {
     super(message);
     this.name = 'ApiError';
@@ -163,6 +165,8 @@ const NAMED_ACTIONS: Record<string, string> = {
   /* Without this the CRUD rules below would read "raw-data" as a row id and
      resolve a GET to `analytics.get`. */
   'analytics/raw-data': 'analytics.getRawData',
+  /* No row id to put in the path: it reorders a whole project's statuses. */
+  'planStatuses/reorder': 'planStatuses.reorder',
 };
 
 /* NOTE: `bill-splits` must NOT be listed above. NAMED_ACTIONS is consulted
@@ -308,7 +312,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const text = await response.text();
 
-  let payload: { ok?: boolean; data?: T; error?: string; code?: string; status?: number };
+  let payload: { ok?: boolean; data?: T; error?: string; code?: string; status?: number; current?: unknown };
   try {
     payload = JSON.parse(text);
   } catch {
@@ -327,6 +331,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       unauthorizedHandlers.forEach((handler) => handler());
     }
     const failure = new ApiError(payload?.error || 'Request failed', status, payload?.code ?? 'UNKNOWN');
+    if (payload && 'current' in payload) failure.current = payload.current;
     trace(path, action, Date.now() - startedAt, undefined, failure);
     throw failure;
   }

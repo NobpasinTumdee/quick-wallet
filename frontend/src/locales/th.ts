@@ -72,6 +72,7 @@ export const th: TranslationSchema = {
     goals: 'เป้าหมาย',
     notes: 'บันทึก',
     widgets: 'วิดเจ็ตและทางลัด',
+    planning: 'วางแผน',
     settings: 'ตั้งค่า',
     more: 'เพิ่มเติม',
     shortcuts: 'ทางลัด',
@@ -1297,6 +1298,9 @@ export const th: TranslationSchema = {
     /* The card's other strings load with it: locales/safeSpend.ts. */
     title: 'ใช้ได้อีก',
   },
+  planDueSoon: {
+    title: 'งานใกล้ครบกำหนด',
+  },
   review: {
     /* The page's own strings load with it: locales/review.ts. */
     title: 'สรุปประจำเดือน',
@@ -1709,6 +1713,7 @@ export const th: TranslationSchema = {
     debt: 'เงินกู้ เงินที่ยืมมา และต้นทุนของมัน',
     goals: 'สิ่งที่คุณกำลังเก็บเงินเพื่อซื้อ และคืบหน้าไปแค่ไหน',
     notes: 'บันทึกความคิดและแผนยาว ๆ เชื่อมกับรายการของคุณ',
+    planning: 'โปรเจกต์เป็นบอร์ดการ์ด ย้ายจากวางแผนจนเสร็จ',
     budgets: 'วงเงินรายเดือนแยกตามหมวด และเหลืออีกเท่าไร',
     settings: 'สกุลเงิน ภาษา ธีม และไฟล์ข้อมูลของคุณ',
     widgets: 'วิดเจ็ตหน้าจอโฮมและทางลัดเพิ่มรายการด่วนสำหรับโทรศัพท์',

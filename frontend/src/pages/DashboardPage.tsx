@@ -82,6 +82,10 @@ const HomeAnalyticsCard = lazyWithRetry(() =>
 const FavouritesCard = lazyWithRetry(() =>
   import('../components/favourites/FavouritesCard').then((m) => ({ default: m.FavouritesCard })),
 );
+/* Home's Due soon card: Planning's store and strings load with it, only once it is placed. */
+const DueSoonCard = lazyWithRetry(() =>
+  import('../components/planning/DueSoonCard').then((m) => ({ default: m.DueSoonCard })),
+);
 /* Safe to spend: the same; it reads the recurring and debt lists only once mounted. */
 const SafeSpendCard = lazyWithRetry(() =>
   import('../components/safeSpend/SafeSpendCard').then((m) => ({ default: m.SafeSpendCard })),
@@ -751,6 +755,10 @@ export function DashboardPage({
               goals={goals.items}
               fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}
             />
+          </Suspense>
+        ) : id === 'dueSoon' ? (
+          <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>
+            <DueSoonCard sizeClass={sizeClass} fill={fill} fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })} />
           </Suspense>
         ) : isHomeExtraCardId(id) ? (
           <Suspense fallback={renderCardSkeleton(id, { sizeClass, mobileV2 })}>

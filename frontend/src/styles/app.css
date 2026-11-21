@@ -18820,3 +18820,249 @@ table.data.tx-table tbody tr.tx-day-row:hover {
 .fav-body .fav-section-title {
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Planning (#/planning) — layout only
+   --------------------------------------------------------------------------
+   The skeleton is the Suspense fallback before the page's lazy CSS
+   (styles/planning.css) loads, so the grid, the board and its columns are
+   laid out here. Everything else ships with the page.
+   ========================================================================== */
+
+.plan {
+  min-width: 0;
+}
+
+.plan-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 132px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.plan-board-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plan-board-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 44px;
+  margin-bottom: var(--space-3);
+}
+
+.plan-board {
+  /* Positioned, so absolutely placed children (an .sr-only label in a card
+     off to the side) are clipped by the board, not the page. */
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--space-2);
+  overscroll-behavior-x: contain;
+}
+
+.plan-col {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 280px;
+  width: 280px;
+  min-height: 0;
+  max-height: 100%;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1px solid var(--border);
+}
+
+.plan-col-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+}
+
+.plan-col-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.plan-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-card-sk {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 639px) {
+  /* Phones: one column at a time, the next one peeking, snapping sideways.
+     The page scrolls vertically, not the column. */
+  .plan-board {
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--space-1);
+    margin-inline: calc(-1 * var(--space-1));
+    padding-inline: var(--space-1);
+  }
+
+  .plan-col {
+    flex-basis: 85%;
+    width: 85%;
+    max-height: none;
+    scroll-snap-align: start;
+  }
+
+  .plan-col-body {
+    overflow-y: visible;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Due soon (Home card, Planning cards due within 7 days). Here rather than in
+ * the card's chunk because its skeleton draws first. Theme tokens only; the
+ * quiet text and the tags are mixed toward --text so they keep 4.5:1.
+ * ------------------------------------------------------------------------- */
+.due-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  /* Bottom space here, not on the list or link: FitList counts the body's padding. */
+  padding-bottom: var(--space-2);
+}
+.due-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 var(--space-2);
+  list-style: none;
+}
+.due-row + .due-row {
+  border-top: 1px solid var(--border);
+}
+.due-row-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.due-row-btn:hover {
+  background: var(--surface-2);
+}
+.due-row-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.due-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.due-row-title {
+  overflow: hidden;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.due-row-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+  font-size: var(--text-xs);
+}
+.due-row-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.due-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--due-color, var(--text-muted));
+}
+.due-row-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.due-row-tag--overdue {
+  background: color-mix(in srgb, var(--negative) 10%, var(--surface));
+  color: color-mix(in srgb, var(--negative) 48%, var(--text));
+}
+.due-row-tag--soon {
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface));
+  color: color-mix(in srgb, var(--warning) 55%, var(--text));
+}
+.due-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+}
+.due-card .fit-more-link {
+  align-self: flex-start;
+  margin: 0 var(--space-2);
+}

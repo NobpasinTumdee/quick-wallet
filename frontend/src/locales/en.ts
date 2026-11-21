@@ -65,6 +65,7 @@ export const en = {
     goals: 'Goals',
     notes: 'Notes',
     widgets: 'Widgets & shortcuts',
+    planning: 'Planning',
     settings: 'Settings',
     more: 'More',
     /** The gesture button's accessible name — never rendered as text.
@@ -1333,6 +1334,10 @@ export const en = {
     /* The card's other strings load with it: locales/safeSpend.ts. */
     title: 'Safe to spend',
   },
+  planDueSoon: {
+    /* Home's Due soon card: the rest of its strings travel with Planning's (locales/planning.ts). */
+    title: 'Due soon',
+  },
   review: {
     /* The page's own strings load with it: locales/review.ts. */
     title: 'Month review',
@@ -1778,6 +1783,7 @@ export const en = {
     debt: 'Loans and borrowed money, and what they cost you',
     goals: 'What you are saving towards, and how far along',
     notes: 'Longer thoughts and plans, linked to your records',
+    planning: 'Projects as boards of cards you move from plan to done',
     budgets: 'Monthly limits per category, and how much is left',
     settings: 'Currency, language, theme and your workbook',
     widgets: 'Home-screen widgets and quick-add shortcuts for your phone',

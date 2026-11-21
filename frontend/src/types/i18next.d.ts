@@ -20,6 +20,8 @@ declare module 'i18next' {
       translation: typeof import('../locales/en').en & {
         safeSpend: typeof import('../locales/safeSpend').safeSpendEn;
         review: typeof import('../locales/review').reviewEn;
+        /* Planning's strings load with its page (locales/planning.ts). */
+        planning: typeof import('../locales/planning').planningEn;
       };
     };
     /** Values are read as plain strings, never as `null`. */

@@ -41,6 +41,7 @@ export const NAV_LABEL_KEYS: Record<Route, TranslationKey> = {
   'deep-analytics': 'nav.deepAnalytics',
   notes: 'nav.notes',
   widgets: 'nav.widgets',
+  planning: 'nav.planning',
   /* Linked to, never listed (HIDDEN_ROUTES). */
   review: 'review.title',
   /* Reachable but never navigable — it has no nav entry anywhere. Named so the

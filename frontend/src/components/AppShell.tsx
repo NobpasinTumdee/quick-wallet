@@ -21,6 +21,7 @@ import {
   Wallet,
   type LucideIcon,
   Smartphone,
+  FolderKanban,
 } from 'lucide-react';
 import { RefObject, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +48,8 @@ import { NAV_LABEL_KEYS } from '../lib/navLabels';
 import { TranslationKey } from '../locales';
 import { Route, lastNavigationAt, openReview, useHashParam, useRoute } from '../lib/router';
 import { ReviewSkeleton } from './skeleton/ReviewSkeleton';
+import { PlanningSkeleton } from './skeleton/pageSkeletons';
+import { runRouteRefresher } from '../lib/routeRefresh';
 import { motionMode, setCustomizing } from '../lib/motion';
 import { cancelPageEntry, playPageEntry } from '../lib/pageEntry';
 import { BudgetsPage } from '../pages/BudgetsPage';
@@ -129,6 +132,7 @@ const NAV_MAIN: NavItem[] = [
   { route: 'wallets', labelKey: NAV_LABEL_KEYS.wallets, icon: Wallet },
   { route: 'goals', labelKey: NAV_LABEL_KEYS.goals, icon: PiggyBank },
   { route: 'notes', labelKey: NAV_LABEL_KEYS.notes, icon: NotebookPen },
+  { route: 'planning', labelKey: NAV_LABEL_KEYS.planning, icon: FolderKanban },
   { route: 'splits', labelKey: NAV_LABEL_KEYS.splits, icon: HandCoins },
   { route: 'investments', labelKey: NAV_LABEL_KEYS.investments, icon: TrendingUp },
   { route: 'analytics', labelKey: NAV_LABEL_KEYS.analytics, icon: ChartNoAxesCombined },
@@ -199,6 +203,8 @@ const DeepAnalyticsPage = lazyWithRetry(() => import('../pages/DeepAnalyticsPage
 const WidgetsPage = lazyWithRetry(() => import('../pages/WidgetsPage'));
 /* A finished month's review: opened from its banner, the month pill or Analytics. */
 const MonthReviewPage = lazyWithRetry(() => import('../pages/MonthReviewPage'));
+/* Projects and boards: the page, its store, drag code and CSS are one chunk. */
+const PlanningPage = lazyWithRetry(() => import('../pages/PlanningPage'));
 
 /* Lights Analytics in the sidebar, like Deep Analytics; never listed itself. */
 const REVIEW_ITEM: NavItem = {
@@ -322,6 +328,9 @@ function warmRoute(route: Route, period: string): void {
       /* The Markdown reader is its own chunk; fetch it before a note is opened. */
       void import('./notes/MarkdownView').catch(() => undefined);
       break;
+    case 'planning':
+      void import('../pages/PlanningPage').catch(() => undefined);
+      break;
     default:
       break;
   }
@@ -359,6 +368,8 @@ const ROUTE_DATA: Record<Route, string[]> = {
   notes: ['/api/notes'],
   widgets: ['/api/widgetTokens', '/api/wallets'],
   review: ['/api/dashboard', '/api/transactions', '/api/subscriptions', '/api/goals'],
+  /* Its own store (lib/planning/store.ts), refreshed through routeRefresh. */
+  planning: [],
   notFound: [],
 };
 
@@ -435,6 +446,7 @@ export function AppShell() {
   const [route, go] = useRoute();
   /* The review's month rides in its hash; anything else falls back to last month. */
   const reviewParam = useHashParam('period');
+  const planningProject = useHashParam('project');
   const reviewPeriod = parsePeriod(reviewParam) ?? shiftPeriod(currentPeriod(), -1);
   const { user, logout } = useAuth();
   const { settings, reload: reloadSettings } = useSettings();
@@ -546,6 +558,7 @@ export function AppShell() {
   const refreshCurrentRoute = useCallback(async () => {
     const work: Promise<unknown>[] = [refreshPrefixes(ROUTE_DATA[route])];
     if (route === 'settings') work.push(reloadSettings());
+    work.push(runRouteRefresher(route));
     await Promise.all(work);
   }, [route, reloadSettings]);
 
@@ -887,6 +900,11 @@ export function AppShell() {
             {route === 'review' && (
               <Suspense fallback={<ReviewSkeleton />}>
                 <MonthReviewPage period={reviewPeriod} onNavigate={go} />
+              </Suspense>
+            )}
+            {route === 'planning' && (
+              <Suspense fallback={<PlanningSkeleton board={Boolean(planningProject)} />}>
+                <PlanningPage />
               </Suspense>
             )}
             {route === 'notFound' && <NotFoundPage onNavigate={go} />}

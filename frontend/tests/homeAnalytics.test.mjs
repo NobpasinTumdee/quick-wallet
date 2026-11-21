@@ -39,8 +39,8 @@ test('board registry: Home\'s own cards first, unchanged, then Favourites, Safe 
   assert.deepEqual(ownCards(HOME_BOARD_CARDS), [...HOME_CARDS]);
   const added = HOME_BOARD_CARDS.slice(HOME_CARDS.length);
   /* Home's own optional cards (More cards) come first, then every Analytics card. */
-  assert.deepEqual(added.map((def) => def.id), ['favourites', 'safeSpend', ...ANALYTICS_IDS]);
-  assert.ok(added.filter((def) => def.extra).every((def) => def.id === 'favourites' || def.id === 'safeSpend'));
+  assert.deepEqual(added.map((def) => def.id), ['favourites', 'safeSpend', 'dueSoon', ...ANALYTICS_IDS]);
+  assert.ok(added.filter((def) => def.extra).every((def) => def.id === 'favourites' || def.id === 'safeSpend' || def.id === 'dueSoon'));
   assert.ok(added.every((def) => def.addable === true));
   assert.ok(HOME_CARDS.every((def) => !def.addable) && ANALYTICS_CARDS.every((def) => !def.addable));
   for (const id of ['breakdown', 'recent', 'categoryPie', 'payees']) assert.ok(HOME_BOARD_HALVES.has(id), id);

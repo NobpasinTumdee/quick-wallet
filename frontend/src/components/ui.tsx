@@ -567,6 +567,7 @@ export function Modal({
   children,
   footer,
   width = 520,
+  className,
 }: {
   open: boolean;
   title: ReactNode;
@@ -574,6 +575,8 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   width?: number;
+  /** Extra classes on the sheet itself (a full-height variant, say). */
+  className?: string;
 }) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -650,7 +653,7 @@ export function Modal({
       >
         <div
           ref={dialogRef}
-          className="modal"
+          className={cx('modal', className)}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}

@@ -39,7 +39,7 @@ export type AnalyticsCardId =
  * saved layout, there only once added (like an Analytics card on Home), and
  * listed in the editors under "More cards".
  */
-export type HomeExtraCardId = 'favourites' | 'safeSpend';
+export type HomeExtraCardId = 'favourites' | 'safeSpend' | 'dueSoon';
 
 export type CatalogCardId = HomeCardId | HomeExtraCardId | AnalyticsCardId;
 
@@ -113,6 +113,8 @@ export const HOME_EXTRA_CATALOG: readonly CatalogCardDef<HomeExtraCardId>[] = [
   { id: 'favourites', titleKey: 'favourites.title', widths: [3, 4, 6, 8, 12], minPx: 200, defaultW: 4, minW: 3, minH: 3, maxH: 14, defaultH: 5, addable: true, extra: true },
   /* Safe to spend: the number and a per-day figure fit 3 columns and 3 rows; 6+ rows add the bar and the next bills. */
   { id: 'safeSpend', titleKey: 'safeSpend.title', widths: [3, 4, 6, 8, 12], minPx: 200, defaultW: 4, minW: 3, minH: 3, maxH: 10, defaultH: 5, addable: true, extra: true },
+  /* Due soon (Planning cards): 4 rows of 40px hold the header, one row and "+N more" (3 rows overflow by 40px); 6 by default fit four rows at 1280px. 3 columns keep a title and a date tag. */
+  { id: 'dueSoon', titleKey: 'planDueSoon.title', widths: [3, 4, 6, 8, 12], minPx: 220, defaultW: 4, minW: 3, minH: 4, maxH: 14, defaultH: 6, addable: true, extra: true },
 ];
 
 export function isHomeExtraCardId(id: string): id is HomeExtraCardId {
